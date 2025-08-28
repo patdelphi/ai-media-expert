@@ -211,3 +211,20 @@ __marimo__/
 .ref/
 .backup/
 .prototype/
+
+# Frontend Node.js dependencies
+node_modules/
+.next/
+out/
+dist/
+.nuxt/
+.vuepress/dist/
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
