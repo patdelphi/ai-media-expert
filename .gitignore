@@ -209,3 +209,5 @@ __marimo__/
 
 # Others
 .ref/
+.backup/
+.prototype/
