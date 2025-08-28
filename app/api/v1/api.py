@@ -6,6 +6,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import auth, users, videos, download, analysis
+from app.api.v1 import upload, ai_config
 
 # 创建API路由器
 api_router = APIRouter()
@@ -27,6 +28,19 @@ api_router.include_router(
     videos.router, 
     prefix="/videos", 
     tags=["视频管理"]
+)
+
+# 新增的路由
+api_router.include_router(
+    upload.router,
+    prefix="/upload",
+    tags=["文件上传"]
+)
+
+api_router.include_router(
+    ai_config.router,
+    prefix="/ai-config",
+    tags=["AI配置"]
 )
 
 api_router.include_router(

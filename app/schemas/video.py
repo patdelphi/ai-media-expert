@@ -1,7 +1,6 @@
 """视频相关数据模式
 
-定义视频、下载任务、分析任务等相关的数据结构。
-"""
+定义视频、下载任务、分析任务等相关的数据结构。"""
 
 from datetime import datetime, date
 from typing import Any, Dict, List, Optional
@@ -20,11 +19,15 @@ class VideoBase(BaseModel):
 
 class VideoCreate(VideoBase):
     """视频创建模型"""
+    original_filename: Optional[str] = Field(default=None, description="原始文件名")
     file_path: str = Field(description="文件路径")
     file_size: Optional[int] = Field(default=None, description="文件大小")
     duration: Optional[int] = Field(default=None, description="视频时长（秒）")
     resolution: Optional[str] = Field(default=None, description="分辨率")
     format: Optional[str] = Field(default=None, description="视频格式")
+    extra_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="额外元数据")
+    status: Optional[str] = Field(default="active", description="状态")
+    is_analyzed: Optional[bool] = Field(default=False, description="是否已分析")
 
 
 class VideoUpdate(BaseModel):
@@ -80,12 +83,47 @@ class VideoResponse(BaseModel):
     share_count: Optional[int]
     status: str
     is_analyzed: bool
-    metadata: Optional[Dict[str, Any]]
+    extra_metadata: Optional[Dict[str, Any]] = Field(alias="metadata")
     created_at: datetime
     updated_at: datetime
     
     class Config:
         from_attributes = True
+        populate_by_name = True
+    
+    @classmethod
+    def from_orm(cls, obj):
+        """自定义ORM转换，处理metadata字段"""
+        data = {
+            'id': obj.id,
+            'title': obj.title,
+            'description': obj.description,
+            'file_path': obj.file_path,
+            'file_size': obj.file_size,
+            'duration': obj.duration,
+            'resolution': obj.resolution,
+            'format': obj.format,
+            'fps': obj.fps,
+            'bitrate': obj.bitrate,
+            'codec': obj.codec,
+            'platform': obj.platform,
+            'original_url': obj.original_url,
+            'video_id': obj.video_id,
+            'author': obj.author,
+            'author_id': obj.author_id,
+            'channel_name': obj.channel_name,
+            'upload_date': obj.upload_date,
+            'view_count': obj.view_count,
+            'like_count': obj.like_count,
+            'comment_count': obj.comment_count,
+            'share_count': obj.share_count,
+            'status': obj.status,
+            'is_analyzed': obj.is_analyzed,
+            'metadata': obj.extra_metadata if obj.extra_metadata is not None else {},
+            'created_at': obj.created_at,
+            'updated_at': obj.updated_at
+        }
+        return cls(**data)
 
 
 class DownloadTaskCreate(BaseModel):
@@ -246,3 +284,84 @@ class BatchTagOperation(BaseModel):
         if v not in allowed_operations:
             raise ValueError(f'Operation must be one of: {", ".join(allowed_operations)}')
         return v
+
+
+# AI配置schemas
+class AIConfigBase(BaseModel):
+    """AI配置基础模型"""
+    name: str = Field(description="配置名称")
+    provider: str = Field(description="AI提供商")
+    api_key: str = Field(description="API密钥")
+    api_base: Optional[str] = Field(default=None, description="API基础URL")
+    model: str = Field(description="模型名称")
+    max_tokens: Optional[int] = Field(default=4000, description="最大令牌数")
+    temperature: Optional[float] = Field(default=0.7, description="温度参数")
+    is_active: Optional[bool] = Field(default=True, description="是否激活")
+
+
+class AIConfigCreate(AIConfigBase):
+    """AI配置创建模型"""
+    pass
+
+
+class AIConfigUpdate(BaseModel):
+    """AI配置更新模型"""
+    name: Optional[str] = Field(default=None, description="配置名称")
+    provider: Optional[str] = Field(default=None, description="AI提供商")
+    api_key: Optional[str] = Field(default=None, description="API密钥")
+    api_base: Optional[str] = Field(default=None, description="API基础URL")
+    model: Optional[str] = Field(default=None, description="模型名称")
+    max_tokens: Optional[int] = Field(default=None, description="最大令牌数")
+    temperature: Optional[float] = Field(default=None, description="温度参数")
+    is_active: Optional[bool] = Field(default=None, description="是否激活")
+
+
+class AIConfigResponse(AIConfigBase):
+    """AI配置响应模型"""
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class AIConfigPublicResponse(BaseModel):
+    """AI配置公开响应模型（隐藏敏感信息）"""
+    id: int
+    name: str
+    provider: str
+    model: str
+    is_active: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+# 分析请求和响应schemas
+class AnalysisRequest(BaseModel):
+    """分析请求模型"""
+    analysis_types: List[str] = Field(description="分析类型列表")
+    ai_config_id: int = Field(description="AI配置ID")
+    max_frames: Optional[int] = Field(default=10, description="最大帧数")
+    confidence_threshold: Optional[float] = Field(default=0.7, description="置信度阈值")
+    
+    @validator('analysis_types')
+    def validate_analysis_types(cls, v):
+        allowed_types = ['visual', 'audio', 'content', 'quality']
+        for analysis_type in v:
+            if analysis_type not in allowed_types:
+                raise ValueError(f'Analysis type must be one of: {", ".join(allowed_types)}')
+        return v
+
+
+class AnalysisResponse(BaseModel):
+    """分析响应模型"""
+    task_id: int
+    video_id: int
+    status: str
+    progress: int
+    results: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+    message: Optional[str] = None

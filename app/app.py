@@ -11,8 +11,38 @@ from gradio.routes import mount_gradio_app
 
 from app.core.config import settings
 from app.core.logging import setup_logging
-from app.main import app as fastapi_app
+from app.api.v1 import api_router
 from app.ui.gradio_app import create_gradio_app
+
+# 创建FastAPI应用
+fastapi_app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    description="AI新媒体专家系统API"
+)
+
+# 添加CORS中间件
+fastapi_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 包含API路由
+fastapi_app.include_router(api_router, prefix="/api/v1")
+
+# 健康检查端点
+@fastapi_app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
+# 根路径重定向
+@fastapi_app.get("/")
+async def root():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/ui")
 
 # 设置日志
 setup_logging()
@@ -24,8 +54,7 @@ gradio_app = create_gradio_app()
 app = mount_gradio_app(
     blocks=gradio_app,
     app=fastapi_app,
-    path="/ui",
-    gradio_api_url="http://localhost:7860/api/"
+    path="/ui"
 )
 
 # 添加根路径重定向

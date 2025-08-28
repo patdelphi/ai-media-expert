@@ -6,7 +6,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
 
 from app.core.database import BaseModel
@@ -67,7 +67,7 @@ class UserSession(BaseModel):
     """用户会话模型"""
     __tablename__ = "user_sessions"
     
-    user_id = Column(Integer, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     session_token = Column(String(255), unique=True, index=True, nullable=False)
     refresh_token = Column(String(255), unique=True, index=True, nullable=True)
     

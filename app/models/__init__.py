@@ -5,7 +5,7 @@
 
 from app.models.user import User, UserSession
 from app.models.video import (
-    Video, DownloadTask, AnalysisTask, Tag, VideoTag
+    Video, DownloadTask, AnalysisTask, Tag, VideoTag, AIConfig
 )
 
 # 导出所有模型
@@ -17,4 +17,5 @@ __all__ = [
     "AnalysisTask",
     "Tag",
     "VideoTag",
+    "AIConfig",
 ]

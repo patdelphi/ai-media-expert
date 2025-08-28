@@ -111,6 +111,8 @@ async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
 
 def create_tables():
     """创建数据库表"""
+    # 导入所有模型以确保它们被注册到Base.metadata中
+    from app.models import user, video  # noqa: F401
     Base.metadata.create_all(bind=engine)
 
 
@@ -123,6 +125,9 @@ async def create_tables_async():
     """异步创建数据库表"""
     if not async_engine:
         raise RuntimeError("Async engine not configured")
+    
+    # 导入所有模型以确保它们被注册到Base.metadata中
+    from app.models import user, video  # noqa: F401
     
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

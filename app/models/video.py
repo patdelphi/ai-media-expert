@@ -22,6 +22,7 @@ class Video(BaseModel):
     # 基础信息
     title = Column(Text, nullable=False)
     description = Column(Text, nullable=True)
+    original_filename = Column(String(500), nullable=True)  # 原始文件名
     file_path = Column(Text, nullable=False)
     file_size = Column(BigInteger, nullable=True)  # 字节
     
@@ -51,11 +52,11 @@ class Video(BaseModel):
     share_count = Column(Integer, default=0)
     
     # 状态信息
-    status = Column(String(20), default="active", nullable=False)  # active, deleted, processing
+    status = Column(String(20), default="active", nullable=False)  # active, deleted, processing, uploaded, analyzed
     is_analyzed = Column(Boolean, default=False, nullable=False)
     
     # 元数据
-    extra_metadata = Column(JSON, nullable=True)  # 额外的元数据信息
+    extra_metadata = Column(JSON, nullable=True, default=dict)  # 额外的元数据信息
     
     # 关联关系
     download_tasks = relationship("DownloadTask", back_populates="video")
@@ -289,6 +290,39 @@ class VideoTag(BaseModel):
             "tag_id": self.tag_id,
             "confidence": self.confidence,
             "created_by": self.created_by,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+class AIConfig(BaseModel):
+    """AI配置模型"""
+    __tablename__ = "ai_configs"
+    
+    name = Column(String(100), nullable=False)  # 配置名称
+    provider = Column(String(50), nullable=False)  # 提供商：openai, claude, gemini等
+    api_key = Column(String(500), nullable=False)  # API密钥
+    api_base = Column(String(500))  # API基础URL
+    model = Column(String(100), nullable=False)  # 模型名称
+    max_tokens = Column(Integer, default=4000)  # 最大token数
+    temperature = Column(Float, default=0.7)  # 温度参数
+    is_active = Column(Boolean, default=True)  # 是否启用
+    
+    def __repr__(self):
+        return f"<AIConfig(id={self.id}, name={self.name}, provider={self.provider})>"
+    
+    def to_dict(self):
+        """转换为字典"""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "provider": self.provider,
+            "api_key": self.api_key,
+            "api_base": self.api_base,
+            "model": self.model,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "is_active": self.is_active,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
