@@ -1,16 +1,26 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const Register: React.FC = () => {
+  const { register, isAuthenticated, isLoading, error, clearError } = useAuth();
+  const navigate = useNavigate();
+  
   const [formData, setFormData] = useState({
     username: '',
     email: '',
     password: '',
     confirmPassword: '',
-    agreeToTerms: false
+    agreeToTerms: true
   });
-  const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<{[key: string]: string}>({});
+  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
+
+  // 如果已登录，重定向到dashboard
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -20,9 +30,10 @@ const Register: React.FC = () => {
     }));
     
     // 清除对应字段的错误信息
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
+    if (validationErrors[name]) {
+      setValidationErrors(prev => ({ ...prev, [name]: '' }));
     }
+    clearError();
   };
 
   const validateForm = () => {
@@ -61,37 +72,29 @@ const Register: React.FC = () => {
       newErrors.agreeToTerms = '请同意服务条款和隐私政策';
     }
 
-    setErrors(newErrors);
+    setValidationErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    clearError();
     
     if (!validateForm()) {
       return;
     }
 
-    setIsLoading(true);
-
     try {
-      // 模拟注册API调用
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // 这里应该调用实际的注册API
-      console.log('注册数据:', {
-        username: formData.username,
-        email: formData.email,
-        password: formData.password
-      });
-      
-      // 注册成功后的处理
-      alert('注册成功！请查收邮箱验证邮件。');
-      
-    } catch (err) {
-      setErrors({ general: '注册失败，请稍后重试' });
-    } finally {
-      setIsLoading(false);
+      await register(
+        formData.email,
+        formData.username,
+        formData.password,
+        undefined
+      );
+      // 注册成功后会自动登录并重定向
+    } catch (err: any) {
+      // 错误已经在AuthContext中处理
+      console.error('Register error:', err);
     }
   };
 
@@ -117,6 +120,8 @@ const Register: React.FC = () => {
         {/* 注册表单 */}
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
+
+
             {/* 用户名 */}
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-gray-700">
@@ -130,11 +135,11 @@ const Register: React.FC = () => {
                 required
                 value={formData.username}
                 onChange={handleInputChange}
-                className={`mt-1 input-field ${errors.username ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}`}
+                className={`mt-1 input-field ${validationErrors.username ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}`}
                 placeholder="请输入用户名"
               />
-              {errors.username && (
-                <p className="mt-1 text-sm text-red-600">{errors.username}</p>
+              {validationErrors.username && (
+                <p className="mt-1 text-sm text-red-600">{validationErrors.username}</p>
               )}
             </div>
 
@@ -151,11 +156,11 @@ const Register: React.FC = () => {
                 required
                 value={formData.email}
                 onChange={handleInputChange}
-                className={`mt-1 input-field ${errors.email ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}`}
+                className={`mt-1 input-field ${validationErrors.email ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}`}
                 placeholder="请输入邮箱地址"
               />
-              {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+              {validationErrors.email && (
+                <p className="mt-1 text-sm text-red-600">{validationErrors.email}</p>
               )}
             </div>
             
@@ -172,11 +177,11 @@ const Register: React.FC = () => {
                 required
                 value={formData.password}
                 onChange={handleInputChange}
-                className={`mt-1 input-field ${errors.password ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}`}
+                className={`mt-1 input-field ${validationErrors.password ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}`}
                 placeholder="请输入密码（至少6位）"
               />
-              {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password}</p>
+              {validationErrors.password && (
+                <p className="mt-1 text-sm text-red-600">{validationErrors.password}</p>
               )}
             </div>
 
@@ -193,49 +198,36 @@ const Register: React.FC = () => {
                 required
                 value={formData.confirmPassword}
                 onChange={handleInputChange}
-                className={`mt-1 input-field ${errors.confirmPassword ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}`}
+                className={`mt-1 input-field ${validationErrors.confirmPassword ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}`}
                 placeholder="请再次输入密码"
               />
-              {errors.confirmPassword && (
-                <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
+              {validationErrors.confirmPassword && (
+                <p className="mt-1 text-sm text-red-600">{validationErrors.confirmPassword}</p>
               )}
             </div>
           </div>
 
           {/* 通用错误信息 */}
-          {errors.general && (
+          {error && (
             <div className="bg-red-50 border border-red-200 rounded-md p-3">
               <div className="flex">
                 <i className="fas fa-exclamation-circle text-red-400 mr-2 mt-0.5"></i>
-                <span className="text-sm text-red-700">{errors.general}</span>
+                <span className="text-sm text-red-700">{error}</span>
               </div>
             </div>
           )}
 
-          {/* 同意条款 */}
-          <div className="flex items-start">
-            <input
-              id="agreeToTerms"
-              name="agreeToTerms"
-              type="checkbox"
-              checked={formData.agreeToTerms}
-              onChange={handleInputChange}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mt-1"
-            />
-            <label htmlFor="agreeToTerms" className="ml-2 block text-sm text-gray-700">
-              我同意{' '}
-              <a href="#" className="text-blue-600 hover:text-blue-500">
-                服务条款
-              </a>
-              {' '}和{' '}
-              <a href="#" className="text-blue-600 hover:text-blue-500">
-                隐私政策
-              </a>
-            </label>
+          {/* 同意条款 - 默认同意，隐藏复选框 */}
+          <div className="text-sm text-gray-600 text-center">
+            注册即表示您同意我们的{' '}
+            <a href="#" className="text-blue-600 hover:text-blue-500">
+              服务条款
+            </a>
+            {' '}和{' '}
+            <a href="#" className="text-blue-600 hover:text-blue-500">
+              隐私政策
+            </a>
           </div>
-          {errors.agreeToTerms && (
-            <p className="text-sm text-red-600">{errors.agreeToTerms}</p>
-          )}
 
           {/* 注册按钮 */}
           <div>

@@ -8,6 +8,8 @@ from typing import Any, Dict, Optional, Union
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from cryptography.fernet import Fernet
+import base64
 
 from app.core.config import settings
 
@@ -48,6 +50,42 @@ def create_access_token(
     )
     
     return encoded_jwt
+
+
+def encrypt_value(value: str) -> str:
+    """加密敏感配置值
+    
+    Args:
+        value: 需要加密的值
+    
+    Returns:
+        加密后的字符串
+    """
+    # 使用应用密钥生成加密密钥
+    key = base64.urlsafe_b64encode(settings.secret_key[:32].ljust(32, '0').encode())
+    f = Fernet(key)
+    encrypted_value = f.encrypt(value.encode())
+    return base64.urlsafe_b64encode(encrypted_value).decode()
+
+
+def decrypt_value(encrypted_value: str) -> str:
+    """解密敏感配置值
+    
+    Args:
+        encrypted_value: 加密的值
+    
+    Returns:
+        解密后的字符串
+    """
+    try:
+        # 使用应用密钥生成解密密钥
+        key = base64.urlsafe_b64encode(settings.secret_key[:32].ljust(32, '0').encode())
+        f = Fernet(key)
+        encrypted_bytes = base64.urlsafe_b64decode(encrypted_value.encode())
+        decrypted_value = f.decrypt(encrypted_bytes)
+        return decrypted_value.decode()
+    except Exception as e:
+        raise ValueError(f"Failed to decrypt value: {str(e)}")
 
 
 def create_refresh_token(

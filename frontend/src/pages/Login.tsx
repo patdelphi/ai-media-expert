@@ -1,14 +1,25 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const Login: React.FC = () => {
+  const { login, isAuthenticated, isLoading, error, clearError } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  
   const [formData, setFormData] = useState({
-    email: '',
+    username: '', // 改为username，支持邮箱或用户名登录
     password: '',
     rememberMe: false
   });
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+
+  // 如果已登录，重定向到目标页面
+  useEffect(() => {
+    if (isAuthenticated) {
+      const from = (location.state as any)?.from || '/dashboard';
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, navigate, location]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -20,23 +31,18 @@ const Login: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setIsLoading(true);
+    clearError();
+
+    if (!formData.username.trim() || !formData.password.trim()) {
+      return;
+    }
 
     try {
-      // 模拟登录API调用
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // 这里应该调用实际的登录API
-      console.log('登录数据:', formData);
-      
-      // 登录成功后的处理
-      alert('登录成功！');
-      
-    } catch (err) {
-      setError('登录失败，请检查用户名和密码');
-    } finally {
-      setIsLoading(false);
+      await login(formData.username, formData.password);
+      // 登录成功后会通过useEffect重定向
+    } catch (err: any) {
+      // 错误已经在AuthContext中处理
+      console.error('Login error:', err);
     }
   };
 
@@ -63,19 +69,19 @@ const Login: React.FC = () => {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                邮箱地址
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                邮箱或用户名
               </label>
               <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
+                id="username"
+                name="username"
+                type="text"
+                autoComplete="username"
                 required
-                value={formData.email}
+                value={formData.username}
                 onChange={handleInputChange}
                 className="mt-1 input-field"
-                placeholder="请输入邮箱地址"
+                placeholder="请输入邮箱或用户名"
               />
             </div>
             

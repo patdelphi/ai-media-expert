@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import UserMenu from './components/UserMenu';
 import { MENU_CONFIG } from './config';
 import { BreadcrumbItem } from './types';
 
@@ -56,58 +59,46 @@ const App: React.FC = () => {
   // 如果是认证页面，只显示页面内容
   if (isAuthPage) {
     return (
+    <AuthProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
       </Routes>
-    );
+    </AuthProvider>
+  );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      {/* 顶部导航栏 */}
-      <header className="bg-white shadow-sm">
-        {/* 第一行导航 */}
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          {/* Logo 和网站名称 */}
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">
-              <i className="fas fa-video text-white"></i>
-            </div>
-            <h1 className="text-xl font-bold text-gray-800">AI媒体专家</h1>
-          </div>
-
-          {/* 搜索框 */}
-          <div className="flex-1 max-w-xl mx-4">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="搜索功能、文档..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-button focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-            </div>
-          </div>
-
-          {/* 右侧功能区 */}
-          <div className="flex items-center space-x-4">
-            <a
-              href="https://github.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-gray-600 hover:text-gray-900"
-            >
-              <i className="fab fa-github text-xl"></i>
-            </a>
-            <div className="flex items-center space-x-2 cursor-pointer">
-              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                <i className="fas fa-user text-white text-sm"></i>
+    <AuthProvider>
+      <div className="min-h-screen flex flex-col bg-gray-50">
+        {/* 顶部导航栏 */}
+        <header className="bg-white shadow-sm">
+          {/* 第一行导航 */}
+          <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+            {/* Logo 和网站名称 */}
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">
+                <i className="fas fa-video text-white"></i>
               </div>
-              <span className="text-sm font-medium text-gray-700">管理员</span>
+              <h1 className="text-xl font-bold text-gray-800">AI媒体专家</h1>
             </div>
+
+            {/* 搜索框 */}
+            <div className="flex-1 max-w-xl mx-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="搜索功能、文档..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-button focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+              </div>
+            </div>
+
+            {/* 右侧功能区 */}
+            <UserMenu />
           </div>
-        </div>
-      </header>
+        </header>
 
       {/* 主体内容 */}
       <main className="flex-1 container mx-auto px-4 py-6 flex">
@@ -163,12 +154,36 @@ const App: React.FC = () => {
           {/* 路由内容 */}
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/video/upload" element={<VideoUpload />} />
-            <Route path="/video/download" element={<VideoDownload />} />
-            <Route path="/video/list" element={<VideoList />} />
-            <Route path="/video/analysis" element={<VideoAnalysis />} />
-            <Route path="/system/config" element={<SystemConfig />} />
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/video/upload" element={
+              <ProtectedRoute>
+                <VideoUpload />
+              </ProtectedRoute>
+            } />
+            <Route path="/video/download" element={
+              <ProtectedRoute>
+                <VideoDownload />
+              </ProtectedRoute>
+            } />
+            <Route path="/video/list" element={
+              <ProtectedRoute>
+                <VideoList />
+              </ProtectedRoute>
+            } />
+            <Route path="/video/analysis" element={
+              <ProtectedRoute>
+                <VideoAnalysis />
+              </ProtectedRoute>
+            } />
+            <Route path="/system/config" element={
+              <ProtectedRoute requireRoles={['admin']}>
+                <SystemConfig />
+              </ProtectedRoute>
+            } />
           </Routes>
         </div>
       </main>
@@ -234,7 +249,8 @@ const App: React.FC = () => {
           </div>
         </div>
       </footer>
-    </div>
+      </div>
+    </AuthProvider>
   );
 };
 
