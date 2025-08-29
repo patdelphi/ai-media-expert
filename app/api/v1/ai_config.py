@@ -29,7 +29,7 @@ async def create_ai_config(
     return ResponseModel(
         code=200,
         message="AI配置创建成功",
-        data=db_config
+        data=AIConfigResponse.from_orm(db_config)
     )
 
 @router.get("/", response_model=ResponseModel[List[AIConfigPublicResponse]])
@@ -47,7 +47,7 @@ async def get_ai_configs(
     return ResponseModel(
         code=200,
         message="AI配置列表获取成功",
-        data=configs
+        data=[AIConfigPublicResponse.from_orm(config) for config in configs]
     )
 
 @router.get("/full", response_model=ResponseModel[List[AIConfigResponse]])
@@ -65,7 +65,7 @@ async def get_ai_configs_full(
     return ResponseModel(
         code=200,
         message="AI配置完整信息获取成功",
-        data=configs
+        data=[AIConfigResponse.from_orm(config) for config in configs]
     )
 
 @router.get("/{config_id}", response_model=ResponseModel[AIConfigResponse])
@@ -82,7 +82,7 @@ async def get_ai_config(
     return ResponseModel(
         code=200,
         message="AI配置获取成功",
-        data=config
+        data=AIConfigResponse.from_orm(config)
     )
 
 @router.put("/{config_id}", response_model=ResponseModel[AIConfigResponse])
@@ -116,7 +116,7 @@ async def update_ai_config(
     return ResponseModel(
         code=200,
         message="AI配置更新成功",
-        data=config
+        data=AIConfigResponse.from_orm(config)
     )
 
 @router.delete("/{config_id}", response_model=ResponseModel)
@@ -271,7 +271,7 @@ async def activate_ai_config(
     return ResponseModel(
         code=200,
         message="AI配置已激活",
-        data=config
+        data=None
     )
 
 @router.post("/{config_id}/deactivate", response_model=ResponseModel)
@@ -292,5 +292,5 @@ async def deactivate_ai_config(
     return ResponseModel(
         code=200,
         message="AI配置已停用",
-        data=config
+        data=None
     )

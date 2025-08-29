@@ -17,6 +17,9 @@ from app.schemas.video import (
     AnalysisTaskCreate, AnalysisTaskResponse,
     TagCreate, TagResponse, VideoTagCreate, VideoTagResponse
 )
+from app.schemas.prompt_template import (
+    PromptTemplateCreate, PromptTemplateUpdate, PromptTemplateResponse
+)
 
 __all__ = [
     # Auth schemas
@@ -32,4 +35,7 @@ __all__ = [
     "DownloadTaskCreate", "DownloadTaskResponse",
     "AnalysisTaskCreate", "AnalysisTaskResponse",
     "TagCreate", "TagResponse", "VideoTagCreate", "VideoTagResponse",
+    
+    # Prompt Template schemas
+    "PromptTemplateCreate", "PromptTemplateUpdate", "PromptTemplateResponse",
 ]

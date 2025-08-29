@@ -7,6 +7,7 @@ from app.models.user import User, UserSession
 from app.models.video import (
     Video, DownloadTask, AnalysisTask, Tag, VideoTag, AIConfig
 )
+from app.models.prompt_template import PromptTemplate
 
 # 导出所有模型
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "Tag",
     "VideoTag",
     "AIConfig",
+    "PromptTemplate",
 ]

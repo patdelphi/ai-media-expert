@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { systemConfigService, SystemConfig, ConfigCategory } from '../services/systemConfig';
 import { aiConfigService, AIConfig, CreateAIConfigRequest } from '../services/aiConfig';
+import { promptTemplateService, PromptTemplate, CreatePromptTemplateRequest } from '../services/promptTemplate';
 import { SystemConfig as SystemConfigType } from '../types';
+import { marked } from 'marked';
 
 const SystemConfigPage: React.FC = () => {
   const { user } = useAuth();
@@ -43,20 +45,9 @@ const SystemConfigPage: React.FC = () => {
   const [loadingAiConfigs, setLoadingAiConfigs] = useState(false);
 
   // 提示词模板
-  const [templates, setTemplates] = useState([
-    { 
-      id: 1, 
-      title: '视频内容分析模板', 
-      category: '内容分析',
-      content: '请分析这段视频的主要内容，包括：\n1. 核心主题\n2. 关键信息点\n3. 目标受众\n4. 内容质量评估' 
-    },
-    { 
-      id: 2, 
-      title: '技术评测模板', 
-      category: '技术分析',
-      content: '请从技术角度分析这段视频：\n1. 技术要点\n2. 实现难度\n3. 适用场景\n4. 最佳实践建议' 
-    }
-  ]);
+  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<PromptTemplate | null>(null);
 
   // 标签组
   const [tagGroups, setTagGroups] = useState([
@@ -85,7 +76,8 @@ const SystemConfigPage: React.FC = () => {
   
   const [editingApi, setEditingApi] = useState<AIConfig | null>(null);
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
-  const [newTemplate, setNewTemplate] = useState({ title: '', category: '内容分析', content: '' });
+  const [newTemplate, setNewTemplate] = useState({ title: '', content: '' });
+  const [templateValidationErrors, setTemplateValidationErrors] = useState<{[key: string]: string}>({});
   const [newTagGroup, setNewTagGroup] = useState({ name: '', tags: [] });
   const [newUser, setNewUser] = useState({ username: '', email: '', password: '', role: '查看者' });
   const [editingTag, setEditingTag] = useState({ groupId: null as number | null, tag: '' });
@@ -95,6 +87,7 @@ const SystemConfigPage: React.FC = () => {
     loadConfigs();
     loadCategories();
     loadAiConfigs();
+    loadTemplates();
   }, []);
 
   // 根据当前标签页筛选配置
@@ -278,7 +271,7 @@ const SystemConfigPage: React.FC = () => {
     
     setLoadingAiConfigs(true);
     try {
-      const response = await aiConfigService.getFullConfigs();
+      const response = await aiConfigService.getFullConfigs(true); // 包含非活跃配置
       if (response.code === 200) {
         setAiConfigs(response.data);
       } else {
@@ -288,6 +281,168 @@ const SystemConfigPage: React.FC = () => {
       setError(err.message || '加载AI配置失败');
     } finally {
       setLoadingAiConfigs(false);
+    }
+  };
+
+  // 加载提示词模板
+  const loadTemplates = async () => {
+    if (user?.role !== 'admin') return;
+    
+    setLoadingTemplates(true);
+    try {
+      const response = await promptTemplateService.getTemplates();
+      if (response.code === 200) {
+        setTemplates(response.data);
+      } else {
+        setError(response.message || '加载提示词模板失败');
+      }
+    } catch (err: any) {
+      setError(err.message || '加载提示词模板失败');
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
+
+  // 验证模板表单
+  const validateTemplateForm = (data: any) => {
+    const errors: {[key: string]: string} = {};
+    
+    if (!data.title?.trim()) {
+      errors.title = '模板标题是必填项';
+    }
+    
+    if (!data.content?.trim()) {
+      errors.content = '模板内容是必填项';
+    }
+    
+    return errors;
+  };
+
+  // 添加提示词模板
+  const handleAddTemplate = async () => {
+    const errors = validateTemplateForm(newTemplate);
+    setTemplateValidationErrors(errors);
+    
+    if (Object.keys(errors).length > 0) {
+      setError('请修正表单中的错误');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const templateData: CreatePromptTemplateRequest = {
+        title: newTemplate.title,
+        content: newTemplate.content,
+        is_active: true
+      };
+
+      const response = await promptTemplateService.createTemplate(templateData);
+      if (response.code === 200) {
+        setTemplates([response.data, ...templates]);
+        setNewTemplate({ title: '', content: '' });
+        setTemplateValidationErrors({});
+        setError(null);
+      } else {
+        setError(response.message || '添加提示词模板失败');
+      }
+    } catch (err: any) {
+      if (err.response?.status === 400 && err.response?.data?.detail) {
+        setError(err.response.data.detail);
+      } else if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError(err.message || '添加提示词模板失败');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 编辑提示词模板
+  const handleEditTemplate = (template: PromptTemplate) => {
+    setEditingTemplate(template);
+  };
+
+  // 更新提示词模板
+  const handleUpdateTemplate = async () => {
+    if (!editingTemplate) return;
+
+    const errors = validateTemplateForm(editingTemplate);
+    setTemplateValidationErrors(errors);
+    
+    if (Object.keys(errors).length > 0) {
+      setError('请修正表单中的错误');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await promptTemplateService.updateTemplate(editingTemplate.id, {
+        title: editingTemplate.title,
+        content: editingTemplate.content,
+        is_active: editingTemplate.is_active
+      });
+      
+      if (response.code === 200) {
+        setTemplates(templates.map(t => t.id === editingTemplate.id ? response.data : t));
+        setEditingTemplate(null);
+        setTemplateValidationErrors({});
+        setError(null);
+      } else {
+        setError(response.message || '更新提示词模板失败');
+      }
+    } catch (err: any) {
+      if (err.response?.status === 400 && err.response?.data?.detail) {
+        setError(err.response.data.detail);
+      } else if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError(err.message || '更新提示词模板失败');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 取消编辑
+  const handleCancelEditTemplate = () => {
+    setEditingTemplate(null);
+    setTemplateValidationErrors({});
+  };
+
+  // 删除提示词模板
+  const handleDeleteTemplate = async (templateId: number) => {
+    if (!confirm('确定要删除这个提示词模板吗？')) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await promptTemplateService.deleteTemplate(templateId);
+      if (response.code === 200) {
+        setTemplates(templates.filter(t => t.id !== templateId));
+      } else {
+        setError(response.message || '删除提示词模板失败');
+      }
+    } catch (err: any) {
+      setError(err.message || '删除提示词模板失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 使用提示词模板
+  const handleUseTemplate = async (templateId: number) => {
+    try {
+      await promptTemplateService.useTemplate(templateId);
+      // 重新加载模板列表以更新使用次数
+      loadTemplates();
+    } catch (err: any) {
+      console.error('更新模板使用次数失败:', err);
     }
   };
 
@@ -324,6 +479,8 @@ const SystemConfigPage: React.FC = () => {
   };
 
   const handleAddApi = async () => {
+    console.log('🆕 调用新增配置功能 - handleAddApi', { configName: newApi.name });
+    
     const errors = validateApiForm({
       name: newApi.name,
       apiKey: newApi.apiKey,
@@ -343,6 +500,7 @@ const SystemConfigPage: React.FC = () => {
     setError(null);
 
     try {
+      console.log('📡 发送POST请求创建配置', { url: '/api/v1/ai-config/' });
       const configData: CreateAIConfigRequest = {
         name: newApi.name,
         provider: 'custom',
@@ -396,7 +554,10 @@ const SystemConfigPage: React.FC = () => {
   const handleUpdateApi = async () => {
     if (!editingApi) return;
     
+    console.log('🔄 调用编辑保存功能 - handleUpdateApi', { configId: editingApi.id, configName: editingApi.name });
+    
     const errors = validateApiForm({
+      name: editingApi.name,
       apiKey: editingApi.api_key,
       baseUrl: editingApi.api_base,
       model: editingApi.model,
@@ -414,6 +575,7 @@ const SystemConfigPage: React.FC = () => {
     setError(null);
 
     try {
+      console.log('📡 发送PUT请求更新配置', { url: `/api/v1/ai-config/${editingApi.id}` });
       const response = await aiConfigService.updateConfig(editingApi.id, {
         name: editingApi.name,
         provider: editingApi.provider,
@@ -505,20 +667,7 @@ const SystemConfigPage: React.FC = () => {
     }
   };
 
-  const handleAddTemplate = () => {
-    if (!newTemplate.title || !newTemplate.content) {
-      alert('请填写完整的模板信息');
-      return;
-    }
-    setTemplates([...templates, { ...newTemplate, id: Date.now() }]);
-    setNewTemplate({ title: '', category: '内容分析', content: '' });
-  };
 
-  const handleDeleteTemplate = (id: number) => {
-    if (confirm('确定要删除这个模板吗？')) {
-      setTemplates(templates.filter(template => template.id !== id));
-    }
-  };
 
   const handleAddTagGroup = () => {
     if (!newTagGroup.name) {
@@ -914,7 +1063,7 @@ const SystemConfigPage: React.FC = () => {
               
               {/* 添加新API */}
               <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-md font-medium text-gray-800 mb-4">添加新API</h3>
+                <h3 className="text-md font-medium text-gray-800 mb-4">🆕 添加新的AI API配置</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
                     <input
@@ -997,13 +1146,14 @@ const SystemConfigPage: React.FC = () => {
                 <div className="mt-4">
                   <button onClick={handleAddApi} className="btn-primary" disabled={loading}>
                     <i className={`fas ${loading ? 'fa-spinner fa-spin' : 'fa-plus'} mr-2`}></i>
-                    添加API
+                    {loading ? '创建中...' : '创建新配置'}
                   </button>
                 </div>
               </div>
 
-              {/* API列表 */}
+              {/* 已有配置列表 */}
               <div className="space-y-4">
+                <h3 className="text-md font-medium text-gray-800">📋 已有AI API配置</h3>
                 {loadingAiConfigs ? (
                   <div className="text-center py-8">
                     <i className="fas fa-spinner fa-spin text-2xl text-gray-400 mb-2"></i>
@@ -1194,66 +1344,187 @@ const SystemConfigPage: React.FC = () => {
               <div className="bg-gray-50 rounded-lg p-4">
                 <h3 className="text-md font-medium text-gray-800 mb-4">添加新模板</h3>
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="mb-4">
                     <input
                       type="text"
-                      placeholder="模板标题"
+                      placeholder="模板标题 *"
                       value={newTemplate.title}
                       onChange={(e) => setNewTemplate({...newTemplate, title: e.target.value})}
-                      className="input-field"
+                      className={`input-field w-full ${templateValidationErrors.title ? 'border-red-500' : ''}`}
                     />
-                    <select
-                      value={newTemplate.category}
-                      onChange={(e) => setNewTemplate({...newTemplate, category: e.target.value})}
-                      className="input-field"
-                    >
-                      <option value="内容分析">内容分析</option>
-                      <option value="技术分析">技术分析</option>
-                      <option value="营销分析">营销分析</option>
-                      <option value="教育分析">教育分析</option>
-                    </select>
+                    {templateValidationErrors.title && (
+                      <p className="text-red-500 text-xs mt-1">{templateValidationErrors.title}</p>
+                    )}
                   </div>
-                  <textarea
-                    placeholder="模板内容"
-                    value={newTemplate.content}
-                    onChange={(e) => setNewTemplate({...newTemplate, content: e.target.value})}
-                    rows={4}
-                    className="input-field w-full"
-                  />
-                  <button onClick={handleAddTemplate} className="btn-primary">
-                    添加模板
-                  </button>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                     <div className="flex flex-col">
+                       <label className="text-sm font-medium text-gray-700 mb-2">模板内容</label>
+                       <textarea
+                         placeholder="请输入提示词模板内容，支持Markdown格式 *"
+                         value={newTemplate.content}
+                         onChange={(e) => setNewTemplate({...newTemplate, content: e.target.value})}
+                         className={`input-field resize-y font-mono text-sm ${templateValidationErrors.content ? 'border-red-500' : ''}`}
+                         style={{ minHeight: '300px', maxHeight: '600px' }}
+                         rows={Math.max(10, newTemplate.content.split('\n').length + 2)}
+                       />
+                       {templateValidationErrors.content && (
+                         <p className="text-red-500 text-xs mt-1">{templateValidationErrors.content}</p>
+                       )}
+                     </div>
+                     <div className="flex flex-col">
+                       <label className="text-sm font-medium text-gray-700 mb-2">预览效果</label>
+                       <div 
+                         className="border border-gray-300 rounded-md p-3 bg-gray-50 overflow-auto"
+                         style={{ minHeight: '300px', maxHeight: '600px', height: `${Math.max(300, Math.min(600, newTemplate.content.split('\n').length * 24 + 100))}px` }}
+                       >
+                         <div className="prose prose-sm max-w-none">
+                           {newTemplate.content ? (
+                             <div dangerouslySetInnerHTML={{ __html: marked(newTemplate.content) }} />
+                           ) : (
+                             <p className="text-gray-400 italic">在左侧输入内容，这里将显示预览效果</p>
+                           )}
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+                  <button 
+                     onClick={handleAddTemplate} 
+                     className="btn-primary"
+                     disabled={loading}
+                   >
+                     {loading ? '添加中...' : '添加模板'}
+                   </button>
                 </div>
               </div>
 
               {/* 模板列表 */}
               <div className="space-y-4">
-                {templates.map((template) => (
-                  <div key={template.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                          <h3 className="text-md font-medium text-gray-800">{template.title}</h3>
-                          <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                            {template.category}
-                          </span>
+                {loadingTemplates ? (
+                  <div className="text-center py-8">
+                    <i className="fas fa-spinner fa-spin text-2xl text-gray-400 mb-2"></i>
+                    <p className="text-gray-500">加载提示词模板中...</p>
+                  </div>
+                ) : templates.length === 0 ? (
+                  <div className="text-center py-8">
+                    <i className="fas fa-file-alt text-4xl text-gray-300 mb-4"></i>
+                    <p className="text-gray-500">暂无提示词模板</p>
+                  </div>
+                ) : (
+                  templates.map((template) => (
+                    <div key={template.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          {editingTemplate?.id === template.id ? (
+                            <div className="space-y-4">
+                              <div>
+                                <input
+                                  type="text"
+                                  placeholder="模板标题 *"
+                                  value={editingTemplate.title}
+                                  onChange={(e) => setEditingTemplate({...editingTemplate, title: e.target.value})}
+                                  className={`input-field w-full ${templateValidationErrors.title ? 'border-red-500' : ''}`}
+                                />
+                                {templateValidationErrors.title && (
+                                  <p className="text-red-500 text-xs mt-1">{templateValidationErrors.title}</p>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div className="flex flex-col">
+                                  <label className="text-sm font-medium text-gray-700 mb-2">模板内容</label>
+                                  <textarea
+                                    placeholder="请输入提示词模板内容，支持Markdown格式 *"
+                                    value={editingTemplate.content}
+                                    onChange={(e) => setEditingTemplate({...editingTemplate, content: e.target.value})}
+                                    className={`input-field resize-y font-mono text-sm ${templateValidationErrors.content ? 'border-red-500' : ''}`}
+                                    style={{ minHeight: '300px', maxHeight: '600px' }}
+                                    rows={Math.max(10, editingTemplate.content.split('\n').length + 2)}
+                                  />
+                                  {templateValidationErrors.content && (
+                                    <p className="text-red-500 text-xs mt-1">{templateValidationErrors.content}</p>
+                                  )}
+                                </div>
+                                <div className="flex flex-col">
+                                  <label className="text-sm font-medium text-gray-700 mb-2">预览效果</label>
+                                  <div 
+                                    className="border border-gray-300 rounded-md p-3 bg-gray-50 overflow-auto"
+                                    style={{ minHeight: '300px', maxHeight: '600px', height: `${Math.max(300, Math.min(600, editingTemplate.content.split('\n').length * 24 + 100))}px` }}
+                                  >
+                                    <div className="prose prose-sm max-w-none">
+                                      {editingTemplate.content ? (
+                                        <div dangerouslySetInnerHTML={{ __html: marked(editingTemplate.content) }} />
+                                      ) : (
+                                        <p className="text-gray-400 italic">在左侧输入内容，这里将显示预览效果</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="flex items-center space-x-3 mb-2">
+                                <h3 className="text-md font-medium text-gray-800">{template.title}</h3>
+                                <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
+                                  使用次数: {template.usage_count}
+                                </span>
+                                {template.created_at && (
+                                  <span className="text-xs text-gray-400">
+                                    创建时间: {new Date(template.created_at).toLocaleString()}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="prose prose-sm max-w-none">
+                                <div dangerouslySetInnerHTML={{ __html: marked(template.content) }} />
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{template.content}</p>
-                      </div>
-                      <div className="flex space-x-2">
-                        <button className="px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded hover:bg-blue-200">
-                          编辑
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTemplate(template.id)}
-                          className="px-3 py-1 text-sm bg-red-100 text-red-800 rounded hover:bg-red-200"
-                        >
-                          删除
-                        </button>
+                        <div className="flex space-x-2 ml-4">
+                          {editingTemplate?.id === template.id ? (
+                            <>
+                              <button
+                                onClick={handleUpdateTemplate}
+                                className="px-3 py-1 text-sm bg-green-100 text-green-800 rounded hover:bg-green-200"
+                                disabled={loading}
+                              >
+                                {loading ? '保存中...' : '保存'}
+                              </button>
+                              <button
+                                onClick={handleCancelEditTemplate}
+                                className="px-3 py-1 text-sm bg-gray-100 text-gray-800 rounded hover:bg-gray-200"
+                                disabled={loading}
+                              >
+                                取消
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleUseTemplate(template.id)}
+                                className="px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded hover:bg-blue-200"
+                              >
+                                使用
+                              </button>
+                              <button
+                                onClick={() => handleEditTemplate(template)}
+                                className="px-3 py-1 text-sm bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200"
+                              >
+                                编辑
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTemplate(template.id)}
+                                className="px-3 py-1 text-sm bg-red-100 text-red-800 rounded hover:bg-red-200"
+                                disabled={loading}
+                              >
+                                删除
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           )}
