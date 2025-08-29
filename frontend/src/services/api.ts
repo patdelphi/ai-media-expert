@@ -100,7 +100,7 @@ class ApiService {
 
   // 刷新token
   private async refreshToken(refreshToken: string) {
-    return this.api.post('/api/v1/auth/refresh', {
+    return this.api.post('/auth/refresh', {
       refresh_token: refreshToken,
     });
   }

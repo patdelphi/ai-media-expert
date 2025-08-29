@@ -54,7 +54,7 @@ export interface UserUpdateRequest {
 class AuthService {
   // 用户注册
   async register(data: RegisterRequest): Promise<ApiResponse<User>> {
-    return apiService.post('/api/v1/auth/register', data);
+    return apiService.post('/auth/register', data);
   }
 
   // 用户登录
@@ -64,7 +64,7 @@ class AuthService {
     formData.append('username', data.username);
     formData.append('password', data.password);
 
-    const response = await fetch(`${apiService['api'].defaults.baseURL}/api/v1/auth/login`, {
+    const response = await fetch(`${apiService['api'].defaults.baseURL}/auth/login`, {
       method: 'POST',
       body: formData,
     });
@@ -90,7 +90,7 @@ class AuthService {
   // 用户登出
   async logout(): Promise<void> {
     try {
-      await apiService.post('/api/v1/auth/logout');
+      await apiService.post('/auth/logout');
     } catch (error) {
       // 即使后端登出失败，也要清除本地tokens
       console.error('Logout error:', error);
@@ -101,7 +101,7 @@ class AuthService {
 
   // 刷新token
   async refreshToken(refreshToken: string): Promise<ApiResponse<TokenResponse>> {
-    const response = await apiService.post('/api/v1/auth/refresh', {
+    const response = await apiService.post('/auth/refresh', {
       refresh_token: refreshToken,
     });
 
@@ -117,17 +117,17 @@ class AuthService {
 
   // 获取当前用户信息
   async getCurrentUser(): Promise<ApiResponse<User>> {
-    return apiService.get('/api/v1/auth/me');
+    return apiService.get('/auth/me');
   }
 
   // 更新用户信息
   async updateUser(data: UserUpdateRequest): Promise<ApiResponse<User>> {
-    return apiService.put('/api/v1/users/me', data);
+    return apiService.put('/users/me', data);
   }
 
   // 修改密码
   async changePassword(data: PasswordChangeRequest): Promise<ApiResponse<any>> {
-    return apiService.put('/api/v1/users/me/password', data);
+    return apiService.put('/users/me/password', data);
   }
 
   // 上传头像
@@ -135,7 +135,7 @@ class AuthService {
     file: File,
     onProgress?: (progress: number) => void
   ): Promise<ApiResponse<{ avatar_url: string }>> {
-    return apiService.upload('/api/v1/users/me/avatar', file, onProgress);
+    return apiService.upload('/users/me/avatar', file, onProgress);
   }
 
   // 检查是否已登录

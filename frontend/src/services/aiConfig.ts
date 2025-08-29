@@ -67,7 +67,7 @@ class AIConfigService {
     const params: any = {};
     if (includeInactive) params.include_inactive = includeInactive;
     
-    return apiService.get('/api/v1/ai-config', params);
+    return apiService.get('/ai-config', params);
   }
 
   // 获取AI配置完整信息（包含API密钥，仅管理员使用）
@@ -75,17 +75,17 @@ class AIConfigService {
     const params: any = {};
     if (includeInactive) params.include_inactive = includeInactive;
     
-    return apiService.get('/api/v1/ai-config/full', params);
+    return apiService.get('/ai-config/full', params);
   }
 
   // 获取单个AI配置详情
   async getConfig(configId: number): Promise<ApiResponse<AIConfig>> {
-    return apiService.get(`/api/v1/ai-config/${configId}`);
+    return apiService.get(`/ai-config/${configId}`);
   }
 
   // 创建AI配置
   async createConfig(data: CreateAIConfigRequest): Promise<ApiResponse<AIConfig>> {
-    return apiService.post('/api/v1/ai-config', data);
+    return apiService.post('/ai-config', data);
   }
 
   // 更新AI配置
@@ -93,27 +93,27 @@ class AIConfigService {
     configId: number,
     data: UpdateAIConfigRequest
   ): Promise<ApiResponse<AIConfig>> {
-    return apiService.put(`/api/v1/ai-config/${configId}`, data);
+    return apiService.put(`/ai-config/${configId}`, data);
   }
 
   // 删除AI配置
   async deleteConfig(configId: number): Promise<ApiResponse<any>> {
-    return apiService.delete(`/api/v1/ai-config/${configId}`);
+    return apiService.delete(`/ai-config/${configId}`);
   }
 
   // 测试AI配置连接
   async testConfig(configId: number): Promise<ApiResponse<AIConfigTestResult>> {
-    return apiService.post(`/api/v1/ai-config/${configId}/test`);
+    return apiService.post(`/ai-config/${configId}/test`);
   }
 
   // 激活AI配置
   async activateConfig(configId: number): Promise<ApiResponse<any>> {
-    return apiService.post(`/api/v1/ai-config/${configId}/activate`);
+    return apiService.post(`/ai-config/${configId}/activate`);
   }
 
   // 停用AI配置
   async deactivateConfig(configId: number): Promise<ApiResponse<any>> {
-    return apiService.post(`/api/v1/ai-config/${configId}/deactivate`);
+    return apiService.post(`/ai-config/${configId}/deactivate`);
   }
 
   // 获取支持的AI提供商列表

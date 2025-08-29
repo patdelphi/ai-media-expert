@@ -34,7 +34,7 @@ def get_user_profile(
     return ResponseModel(
         code=200,
         message="User profile retrieved successfully",
-        data=UserResponse.from_attributes(current_user)
+        data=UserResponse.model_validate(current_user)
     )
 
 
@@ -77,7 +77,7 @@ def update_user_profile(
     return ResponseModel(
         code=200,
         message="User profile updated successfully",
-        data=UserResponse.from_attributes(current_user)
+        data=UserResponse.model_validate(current_user)
     )
 
 
@@ -196,7 +196,7 @@ def get_users_list(
     users = query.offset(offset).limit(size).all()
     
     # 转换为响应模型
-    user_items = [UserListItem.from_attributes(user) for user in users]
+    user_items = [UserListItem.model_validate(user) for user in users]
     
     api_logger.info(
         "Users list retrieved",
@@ -282,7 +282,7 @@ def create_user(
     return ResponseModel(
         code=200,
         message="User created successfully",
-        data=UserResponse.from_attributes(new_user)
+        data=UserResponse.model_validate(new_user)
     )
 
 
@@ -306,7 +306,7 @@ def get_user_by_id(
     return ResponseModel(
         code=200,
         message="User retrieved successfully",
-        data=UserResponse.from_attributes(user)
+        data=UserResponse.model_validate(user)
     )
 
 
@@ -370,7 +370,7 @@ def update_user(
     return ResponseModel(
         code=200,
         message="User updated successfully",
-        data=UserResponse.from_attributes(user)
+        data=UserResponse.model_validate(user)
     )
 
 
@@ -414,7 +414,7 @@ def update_user_status(
     return ResponseModel(
         code=200,
         message=f"User {'activated' if status_update.is_active else 'deactivated'} successfully",
-        data=UserResponse.from_attributes(user)
+        data=UserResponse.model_validate(user)
     )
 
 

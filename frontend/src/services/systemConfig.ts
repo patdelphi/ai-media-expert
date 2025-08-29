@@ -96,7 +96,7 @@ class SystemConfigService {
     if (isPublic !== undefined) params.is_public = isPublic;
     if (includeInactive) params.include_inactive = includeInactive;
 
-    return apiService.get('/api/v1/system/config', params);
+    return apiService.get('/system/config', params);
   }
 
   // 获取公开配置（不需要认证）
@@ -106,22 +106,22 @@ class SystemConfigService {
     const params: any = {};
     if (category) params.category = category;
 
-    return apiService.get('/api/v1/system/config/public', params);
+    return apiService.get('/system/config/public', params);
   }
 
   // 获取配置分类列表
   async getCategories(): Promise<ApiResponse<ConfigCategory[]>> {
-    return apiService.get('/api/v1/system/config/categories');
+    return apiService.get('/system/config/categories');
   }
 
   // 获取单个配置
   async getConfig(key: string): Promise<ApiResponse<SystemConfig>> {
-    return apiService.get(`/api/v1/system/config/${key}`);
+    return apiService.get(`/system/config/${key}`);
   }
 
   // 创建配置
   async createConfig(data: CreateConfigRequest): Promise<ApiResponse<SystemConfig>> {
-    return apiService.post('/api/v1/system/config', data);
+    return apiService.post('/system/config', data);
   }
 
   // 更新配置
@@ -129,33 +129,33 @@ class SystemConfigService {
     key: string,
     data: UpdateConfigRequest
   ): Promise<ApiResponse<SystemConfig>> {
-    return apiService.put(`/api/v1/system/config/${key}`, data);
+    return apiService.put(`/system/config/${key}`, data);
   }
 
   // 删除配置
   async deleteConfig(key: string): Promise<ApiResponse<any>> {
-    return apiService.delete(`/api/v1/system/config/${key}`);
+    return apiService.delete(`/system/config/${key}`);
   }
 
   // 批量更新配置
   async batchUpdateConfigs(
     data: BatchUpdateRequest
   ): Promise<ApiResponse<{ updated: string[]; errors: string[] }>> {
-    return apiService.post('/api/v1/system/config/batch-update', data);
+    return apiService.post('/system/config/batch-update', data);
   }
 
   // 导出配置
   async exportConfigs(
     data: ExportRequest
   ): Promise<ApiResponse<{ format: string; count: number; data: string }>> {
-    return apiService.post('/api/v1/system/config/export', data);
+    return apiService.post('/system/config/export', data);
   }
 
   // 导入配置
   async importConfigs(
     data: ImportRequest
   ): Promise<ApiResponse<{ imported: string[]; errors: string[] }>> {
-    return apiService.post('/api/v1/system/config/import', data);
+    return apiService.post('/system/config/import', data);
   }
 
   // 获取特定分类的配置（辅助方法）
