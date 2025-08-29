@@ -1,12 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import * as echarts from 'echarts';
 
 const Dashboard: React.FC = () => {
+  const chartRef = useRef<HTMLDivElement>(null);
+
   // 初始化图表
   useEffect(() => {
-    const chartDom = document.getElementById('main-chart');
-    if (chartDom) {
-      const myChart = echarts.init(chartDom);
+    if (chartRef.current) {
+      const myChart = echarts.init(chartRef.current);
       const option = {
         animation: false,
         tooltip: {
@@ -16,7 +17,7 @@ const Dashboard: React.FC = () => {
           }
         },
         legend: {
-          data: ['视频上传', '视频下载', '视频解析', '用户访问', '系统处理']
+          data: ['视频上传', '视频下载', '视频解析', '用户访问', '系统调用']
         },
         grid: {
           left: '3%',
@@ -81,7 +82,7 @@ const Dashboard: React.FC = () => {
             data: [320, 332, 301, 334, 390, 330, 320]
           },
           {
-            name: '系统处理',
+            name: '系统调用',
             type: 'bar',
             stack: 'total',
             label: {
@@ -95,7 +96,7 @@ const Dashboard: React.FC = () => {
         ]
       };
       myChart.setOption(option);
-      
+
       return () => {
         myChart.dispose();
       };
@@ -105,27 +106,26 @@ const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* 欢迎卡片 */}
-      <div className="bg-white shadow-sm rounded-lg p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-gray-800">欢迎回来，管理员</h2>
-          <div className="flex space-x-2">
-            <button className="btn-primary">
-              新建任务
-            </button>
-            <button className="btn-secondary">
-              导入数据
-            </button>
+        <div className="bg-white shadow-sm rounded-lg p-6">
+          <div className="flex justify-end mb-6">
+            <div className="flex space-x-2">
+              <button className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-button hover:bg-blue-700 whitespace-nowrap">
+                新建任务
+              </button>
+              <button className="px-4 py-2 border border-gray-300 bg-white text-gray-700 text-sm font-medium rounded-button hover:bg-gray-50 whitespace-nowrap">
+                导入数据
+              </button>
+            </div>
           </div>
-        </div>
         <p className="text-gray-600 mb-4">
           您有 3 个待处理的任务，5 个新消息，2 个数据更新通知。
         </p>
         <div className="grid grid-cols-4 gap-4">
           {[
-            { title: '总视频数', value: '1,248', change: '+12%', icon: 'fa-video' },
-            { title: '活跃用户', value: '8,742', change: '+5%', icon: 'fa-user-check' },
-            { title: '处理成功率', value: '98.2%', change: '+0.5%', icon: 'fa-percentage' },
-            { title: '存储使用', value: '245GB', change: '+18%', icon: 'fa-hdd' }
+            { title: '总视频数', value: '1,258', change: '+12%', icon: 'fa-video' },
+            { title: '今日上传', value: '42', change: '+5%', icon: 'fa-cloud-upload-alt' },
+            { title: '解析完成', value: '1,156', change: '+8%', icon: 'fa-check-circle' },
+            { title: '存储使用', value: '2.4TB', change: '+18%', icon: 'fa-hdd' }
           ].map((item) => (
             <div
               key={item.title}
@@ -160,21 +160,21 @@ const Dashboard: React.FC = () => {
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-gray-800">系统使用分析</h2>
           <div className="flex space-x-2">
-            <button className="px-3 py-1 bg-white border border-gray-300 text-gray-700 text-sm rounded-button hover:bg-gray-50">
+            <button className="px-3 py-1 bg-white border border-gray-300 text-gray-700 text-sm rounded-button hover:bg-gray-50 whitespace-nowrap">
               日
             </button>
-            <button className="px-3 py-1 bg-white border border-gray-300 text-gray-700 text-sm rounded-button hover:bg-gray-50">
+            <button className="px-3 py-1 bg-white border border-gray-300 text-gray-700 text-sm rounded-button hover:bg-gray-50 whitespace-nowrap">
               周
             </button>
-            <button className="px-3 py-1 bg-blue-600 text-white text-sm rounded-button hover:bg-blue-700">
+            <button className="px-3 py-1 bg-blue-600 text-white text-sm rounded-button hover:bg-blue-700 whitespace-nowrap">
               月
             </button>
-            <button className="px-3 py-1 bg-white border border-gray-300 text-gray-700 text-sm rounded-button hover:bg-gray-50">
+            <button className="px-3 py-1 bg-white border border-gray-300 text-gray-700 text-sm rounded-button hover:bg-gray-50 whitespace-nowrap">
               年
             </button>
           </div>
         </div>
-        <div id="main-chart" className="w-full h-80"></div>
+        <div ref={chartRef} className="w-full h-80"></div>
       </div>
 
       {/* 最近活动和项目进度 */}
@@ -184,40 +184,44 @@ const Dashboard: React.FC = () => {
           <div className="space-y-4">
             {[
               {
-                user: '张三',
+                user: '李娜',
                 action: '上传了新视频',
                 time: '10分钟前',
-                avatar: 'male'
-              },
-              {
-                user: '李四',
-                action: '完成了视频解析',
-                time: '25分钟前',
                 avatar: 'female'
               },
               {
-                user: '王五',
+                user: '王强',
+                action: '完成视频解析',
+                time: '25分钟前',
+                avatar: 'male'
+              },
+              {
+                user: '陈明',
                 action: '下载了视频文件',
                 time: '1小时前',
                 avatar: 'male'
               },
               {
-                user: '赵六',
+                user: '赵静',
                 action: '更新了系统配置',
                 time: '2小时前',
                 avatar: 'female'
               },
               {
-                user: '钱七',
-                action: '创建了新任务',
+                user: '张伟',
+                action: '创建了新的模板',
                 time: '3小时前',
                 avatar: 'male'
               }
             ].map((item, index) => (
               <div key={index} className="flex items-start">
-                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center mr-3">
-                  <i className="fas fa-user text-white text-sm"></i>
-                </div>
+                <img
+                  src={`https://mastergo.com/ai/api/search-image?query=a professional portrait of a ${
+                    item.avatar
+                  } asian business person with neutral expression on a light gray background&width=40&height=40&orientation=squarish`}
+                  alt={item.user}
+                  className="w-8 h-8 rounded-full mr-3"
+                />
                 <div>
                   <p className="text-sm font-medium text-gray-800">
                     {item.user} <span className="font-normal text-gray-600">{item.action}</span>
@@ -236,40 +240,42 @@ const Dashboard: React.FC = () => {
             {[
               {
                 name: 'CPU使用率',
-                progress: 65,
-                status: 'normal',
-                value: '65%'
-              },
-              {
-                name: '内存使用率',
                 progress: 45,
                 status: 'normal',
                 value: '45%'
               },
               {
-                name: '磁盘使用率',
-                progress: 80,
+                name: '内存使用',
+                progress: 68,
                 status: 'warning',
-                value: '80%'
+                value: '6.8GB / 10GB'
+              },
+              {
+                name: '磁盘空间',
+                progress: 30,
+                status: 'normal',
+                value: '300GB / 1TB'
               },
               {
                 name: '网络带宽',
-                progress: 30,
-                status: 'normal',
-                value: '30%'
+                progress: 85,
+                status: 'high',
+                value: '850Mbps / 1Gbps'
               }
             ].map((item, index) => (
               <div key={index}>
                 <div className="flex justify-between items-center mb-1">
                   <h3 className="text-sm font-medium text-gray-800">{item.name}</h3>
-                  <span className="text-xs text-gray-500">
-                    {item.value}
-                  </span>
+                  <span className="text-xs text-gray-500">{item.value}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
                     className={`h-2 rounded-full ${
-                      item.status === 'warning' ? 'bg-yellow-500' : 'bg-blue-600'
+                      item.status === 'normal'
+                        ? 'bg-green-500'
+                        : item.status === 'warning'
+                        ? 'bg-yellow-500'
+                        : 'bg-red-500'
                     }`}
                     style={{ width: `${item.progress}%` }}
                   ></div>

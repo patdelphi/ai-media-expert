@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FileItem } from '../types';
-import { formatFileSize, generateId } from '../utils';
+import { FileItem } from '@/types';
 
 const VideoUpload: React.FC = () => {
   const [files, setFiles] = useState<FileItem[]>([]);
@@ -69,7 +68,7 @@ const VideoUpload: React.FC = () => {
 
   const addFiles = (newFiles: File[]) => {
     const newItems = newFiles.map(file => ({
-      id: generateId(),
+      id: `${file.name}-${file.size}-${Date.now()}`,
       name: file.name,
       size: formatFileSize(file.size),
       progress: 0,
@@ -79,6 +78,14 @@ const VideoUpload: React.FC = () => {
     }));
 
     setFiles(prev => [...prev, ...newItems]);
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -111,6 +118,10 @@ const VideoUpload: React.FC = () => {
     fileInputRef.current?.click();
   };
 
+  const clearCompleted = () => {
+    setFiles(prevFiles => prevFiles.filter(file => file.status !== 'completed'));
+  };
+
   useEffect(() => {
     // 计算上传速度和剩余时间
     if (isUploading) {
@@ -131,50 +142,44 @@ const VideoUpload: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-800">视频上传中心</h1>
-        <div className="text-sm text-gray-500">
-          支持格式：MP4, AVI, MOV, WMV, FLV, WebM, MKV
-        </div>
-      </div>
-      
-      {/* 上传区域 */}
-      <div
-        className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
-          isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-white'
-        }`}
-        onDragEnter={handleDragEnter}
-        onDragOver={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        <i className="fas fa-cloud-upload-alt text-5xl text-blue-500 mb-4"></i>
-        <p className="text-lg text-gray-600 mb-4">
-          拖拽文件到此处或点击选择文件
-        </p>
-        <p className="text-sm text-gray-500 mb-6">
-          最大文件大小：500MB，支持批量上传
-        </p>
-        <button
-          className="btn-primary"
-          onClick={triggerFileInput}
+      <div className="bg-white shadow-sm rounded-lg p-6">
+        <h1 className="text-2xl font-bold text-gray-800 mb-6">视频上传中心</h1>
+        
+        {/* 上传区域 */}
+        <div
+          className={`border-2 border-dashed rounded-lg p-12 mb-8 text-center transition-colors ${
+            isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+          }`}
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         >
-          <i className="fas fa-plus mr-2"></i>
-          选择文件
-        </button>
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          className="hidden"
-          multiple
-          accept="video/*"
-        />
-      </div>
-      
-      {/* 上传控制区域 */}
-      {files.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm p-6">
+          <i className="fas fa-cloud-upload-alt text-5xl text-blue-500 mb-4"></i>
+          <p className="text-lg text-gray-600 mb-4">
+            拖拽文件到此处或点击选择文件
+          </p>
+          <button
+            className="rounded-button whitespace-nowrap bg-blue-600 text-white px-6 py-2 hover:bg-blue-700 transition-colors"
+            onClick={triggerFileInput}
+          >
+            选择文件
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            className="hidden"
+            multiple
+            accept="video/*"
+          />
+          <p className="text-sm text-gray-500 mt-2">
+            支持 MP4, AVI, MOV, WMV 等视频格式，单个文件最大 2GB
+          </p>
+        </div>
+        
+        {/* 上传控制区域 */}
+        <div className="bg-gray-50 rounded-lg p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
             <div className="flex items-center space-x-6">
               <span className="text-gray-700">总进度: {totalProgress}%</span>
@@ -183,13 +188,13 @@ const VideoUpload: React.FC = () => {
             </div>
             <div className="flex space-x-2">
               <button
-                className="btn-primary"
+                className="rounded-button whitespace-nowrap bg-green-600 text-white px-4 py-2 hover:bg-green-700 transition-colors disabled:opacity-50"
                 onClick={handleUpload}
                 disabled={isUploading || files.length === 0}
               >
                 {isUploading ? (
                   <>
-                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                    <i className="fas fa-spinner animate-spin mr-2"></i>
                     上传中...
                   </>
                 ) : (
@@ -200,19 +205,18 @@ const VideoUpload: React.FC = () => {
                 )}
               </button>
               <button
-                className="btn-secondary"
+                className="rounded-button whitespace-nowrap bg-gray-600 text-white px-4 py-2 hover:bg-gray-700 transition-colors disabled:opacity-50"
                 disabled={!isUploading}
               >
                 <i className="fas fa-pause mr-2"></i>
                 暂停上传
               </button>
               <button
-                className="px-4 py-2 text-red-600 border border-red-300 rounded-button hover:bg-red-50"
-                onClick={() => setFiles([])}
-                disabled={isUploading}
+                className="rounded-button whitespace-nowrap bg-red-600 text-white px-4 py-2 hover:bg-red-700 transition-colors"
+                onClick={clearCompleted}
               >
                 <i className="fas fa-trash mr-2"></i>
-                清空列表
+                清空已完成
               </button>
             </div>
           </div>
@@ -223,57 +227,59 @@ const VideoUpload: React.FC = () => {
             ></div>
           </div>
         </div>
-      )}
-      
-      {/* 文件列表 */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        {files.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            <i className="fas fa-folder-open text-4xl mb-4"></i>
-            <p className="text-lg">暂无待上传文件</p>
-            <p className="text-sm mt-2">请选择或拖拽视频文件到上方区域</p>
-          </div>
-        ) : (
-          <>
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-medium text-gray-800">
-                文件列表 ({files.length} 个文件)
-              </h3>
+        
+        {/* 文件列表 */}
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          {files.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <i className="fas fa-folder-open text-4xl mb-4"></i>
+              <p>暂无待上传文件</p>
             </div>
-            <ul className="divide-y divide-gray-200">
-              {files.map(file => (
-                <li key={file.id} className="p-6 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center">
-                    {/* 缩略图 */}
-                    <div className="relative w-24 h-16 bg-gray-200 rounded overflow-hidden mr-4 flex-shrink-0">
-                      <video className="w-full h-full object-cover">
-                        <source src={file.previewUrl} type="video/mp4" />
-                      </video>
-                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-                        <i className="fas fa-play text-white text-xl"></i>
-                      </div>
-                    </div>
-                    
-                    {/* 文件信息 */}
-                    <div className="flex-1 min-w-0 mr-4">
-                      <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
-                      <p className="text-sm text-gray-500">{file.size}</p>
-                      <div className="mt-2">
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full transition-all duration-300 ${
-                              file.status === 'completed'
-                                ? 'bg-green-500'
-                                : file.status === 'failed'
-                                ? 'bg-red-500'
-                                : 'bg-blue-500'
-                            }`}
-                            style={{ width: `${file.progress}%` }}
-                          ></div>
+          ) : (
+            <>
+              <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
+                <h3 className="text-sm font-medium text-gray-700">
+                  文件列表 ({files.length} 个文件)
+                </h3>
+              </div>
+              <ul className="divide-y divide-gray-200">
+                {files.map(file => (
+                  <li key={file.id} className="p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center">
+                      {/* 缩略图 */}
+                      <div className="relative w-24 h-16 bg-gray-200 rounded overflow-hidden mr-4 flex-shrink-0">
+                        <video className="w-full h-full object-cover">
+                          <source src={file.previewUrl} type="video/mp4" />
+                        </video>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <i className="fas fa-play text-white text-xl"></i>
                         </div>
-                        <div className="text-xs text-gray-500 mt-1 flex justify-between">
-                          <span>{file.progress}%</span>
-                          <span>
+                      </div>
+                      
+                      {/* 文件信息 */}
+                      <div className="flex-1 min-w-0 mr-4">
+                        <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                        <p className="text-sm text-gray-500">{file.size}</p>
+                        <div className="mt-2">
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all duration-300 ${
+                                file.status === 'completed'
+                                  ? 'bg-green-500'
+                                  : file.status === 'failed'
+                                  ? 'bg-red-500'
+                                  : 'bg-blue-500'
+                              }`}
+                              style={{ width: `${file.progress}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* 状态和操作 */}
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                          <div className="text-xs text-gray-500 mb-1">
                             {file.status === 'completed' ? (
                               <span className="text-green-600">
                                 <i className="fas fa-check-circle mr-1"></i> 上传完成
@@ -284,49 +290,34 @@ const VideoUpload: React.FC = () => {
                               </span>
                             ) : file.status === 'uploading' ? (
                               <span className="text-blue-600">
-                                <i className="fas fa-spinner fa-spin mr-1"></i> 上传中...
+                                <i className="fas fa-spinner animate-spin mr-1"></i> 上传中...
                               </span>
                             ) : (
-                              <span className="text-gray-500">
+                              <span className="text-gray-600">
                                 <i className="fas fa-clock mr-1"></i> 等待上传
                               </span>
                             )}
-                          </span>
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {file.progress}%
+                          </div>
                         </div>
+                        
+                        <button
+                          className="text-red-500 hover:text-red-700 transition-colors p-2"
+                          onClick={() => removeFile(file.id)}
+                          title="删除文件"
+                        >
+                          <i className="fas fa-trash"></i>
+                        </button>
                       </div>
                     </div>
-                    
-                    {/* 操作按钮 */}
-                    <div className="flex items-center space-x-2">
-                      {file.status === 'failed' && (
-                        <button
-                          className="text-blue-600 hover:text-blue-800 text-sm"
-                          onClick={() => {
-                            setFiles(prevFiles =>
-                              prevFiles.map(item =>
-                                item.id === file.id ? { ...item, status: 'waiting', progress: 0 } : item
-                              )
-                            );
-                          }}
-                        >
-                          <i className="fas fa-redo mr-1"></i>
-                          重试
-                        </button>
-                      )}
-                      <button
-                        className="text-red-500 hover:text-red-700 transition-colors"
-                        onClick={() => removeFile(file.id)}
-                        disabled={file.status === 'uploading'}
-                      >
-                        <i className="fas fa-trash"></i>
-                      </button>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

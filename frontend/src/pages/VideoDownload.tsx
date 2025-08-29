@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { VideoInfo, DownloadOptions, DownloadTask, SystemSettings } from '@/types';
+import React, { useState, useEffect } from 'react';
+import { DownloadTask } from '../types';
+import { detectPlatform, isValidUrl, generateId } from '../utils';
+import { SUPPORTED_PLATFORMS } from '../config';
 
 const VideoDownload: React.FC = () => {
   const [videoUrl, setVideoUrl] = useState('');
   const [platform, setPlatform] = useState('');
-  const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
-  const [downloadOptions, setDownloadOptions] = useState<DownloadOptions>({
+  const [videoInfo, setVideoInfo] = useState<any>(null);
+  const [downloadOptions, setDownloadOptions] = useState({
     format: 'MP4',
     quality: '1080p',
     content: ['video'],
@@ -18,39 +20,12 @@ const VideoDownload: React.FC = () => {
   const [downloadSpeed, setDownloadSpeed] = useState('0 KB/s');
   const [remainingTime, setRemainingTime] = useState('--');
   const [history, setHistory] = useState<any[]>([]);
-  const [settings, setSettings] = useState<SystemSettings>({
-    downloadPath: '~/Downloads',
-    maxConcurrent: 3,
-    notifications: true,
-    retryCount: 3
-  });
   const [activeTab, setActiveTab] = useState('info');
   const [notification, setNotification] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  const platforms = [
-    { name: '抖音', icon: 'fab fa-tiktok', color: 'text-red-500' },
-    { name: '快手', icon: 'fas fa-play', color: 'text-yellow-500' },
-    { name: '小红书', icon: 'fas fa-book', color: 'text-pink-500' },
-    { name: '视频号', icon: 'fab fa-weixin', color: 'text-green-500' },
-    { name: 'B站', icon: 'fas fa-b', color: 'text-blue-500' },
-    { name: 'Tiktok', icon: 'fab fa-tiktok', color: 'text-black' },
-    { name: '其他', icon: 'fas fa-globe', color: 'text-gray-500' }
-  ];
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const formats = ['MP4', 'WebM', 'MKV', 'AVI', 'MOV'];
   const qualities = ['144p', '240p', '360p', '480p', '720p', '1080p', '2K', '4K'];
-
-  const detectPlatform = (url: string) => {
-    if (url.includes('douyin.com')) return '抖音';
-    if (url.includes('kuaishou.com')) return '快手';
-    if (url.includes('xiaohongshu.com')) return '小红书';
-    if (url.includes('weixin.qq.com')) return '视频号';
-    if (url.includes('bilibili.com')) return 'B站';
-    if (url.includes('tiktok.com')) return 'Tiktok';
-    return '其他';
-  };
 
   const parseVideo = async () => {
     if (!videoUrl) {
@@ -58,52 +33,51 @@ const VideoDownload: React.FC = () => {
       return;
     }
 
+    if (!isValidUrl(videoUrl)) {
+      setNotification('请输入有效的视频链接');
+      return;
+    }
+
     const detectedPlatform = detectPlatform(videoUrl);
     setPlatform(detectedPlatform);
-    setIsLoading(true);
+    setIsAnalyzing(true);
     setNotification(`正在解析 ${detectedPlatform} 视频...`);
 
     // 模拟API请求
     setTimeout(() => {
       setVideoInfo({
-        id: 'V' + Date.now(),
-        title: '如何快速学会React开发',
-        subtitle: '前端工程师必学框架',
+        title: '如何快速学会React开发 - 前端工程师必学框架',
+        subtitle: '详细讲解React核心概念和实战技巧',
         author: {
           name: '前端开发指南',
-          avatar: 'https://ai-public.mastergo.com/ai/img_res/78c9becbcdb331677f04bb7e7372d347.jpg',
+          avatar: 'https://via.placeholder.com/40x40',
           followers: '12.8万'
         },
         publishTime: '2023-05-15 14:30',
         duration: '12:45',
         views: '256.3万',
         keywords: ['React', '前端开发', 'JavaScript', '教程'],
-        thumbnail: 'https://ai-public.mastergo.com/ai/img_res/e31c3756f3c91e1450581cb1a64ca3fb.jpg',
-        videoUrl: 'https://example.com/video.mp4',
-        platform: detectedPlatform,
-        tags: ['React', '前端开发', 'JavaScript', '教程'],
-        size: '156.8MB',
-        createTime: '2023-05-15 14:30:00',
-        uploadTime: '2023-05-15 15:45:00',
-        status: '已解析'
+        thumbnail: 'https://via.placeholder.com/320x180',
+        videoUrl: videoUrl
       });
       setNotification('视频解析成功');
       setActiveTab('info');
-      setIsLoading(false);
-    }, 1500);
+      setIsAnalyzing(false);
+    }, 2000);
   };
 
   const startDownload = () => {
     if (!videoInfo) return;
 
     const newDownload: DownloadTask = {
-      id: Date.now(),
+      id: generateId(),
+      url: videoUrl,
       title: videoInfo.title,
-      platform,
-      thumbnail: videoInfo.thumbnail,
-      status: 'waiting',
+      platform: platform as any,
+      status: 'pending',
       progress: 0,
-      options: downloadOptions
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
 
     setDownloadQueue([...downloadQueue, newDownload]);
@@ -116,20 +90,24 @@ const VideoDownload: React.FC = () => {
   };
 
   const processDownloadQueue = (queue: DownloadTask[]) => {
-    const waitingTasks = queue.filter(task => task.status === 'waiting');
+    const waitingTasks = queue.filter(task => task.status === 'pending');
     if (waitingTasks.length === 0) return;
 
     const task = waitingTasks[0];
-    setCurrentDownload({ ...task, status: 'downloading' });
+    const updatedTask = { ...task, status: 'downloading' as const };
+    setCurrentDownload(updatedTask);
+    setDownloadQueue(queue.map(t => t.id === task.id ? updatedTask : t));
+
     let progress = 0;
     const interval = setInterval(() => {
       progress += Math.random() * 5;
       if (progress >= 100) {
         progress = 100;
         clearInterval(interval);
-        const updatedQueue = queue.map(t =>
-          t.id === task.id ? { ...t, status: 'completed' as const, progress: 100 } : t
-        );
+        
+        const completedTask = { ...updatedTask, status: 'completed' as const, progress: 100 };
+        const updatedQueue = queue.map(t => t.id === task.id ? completedTask : t);
+        
         setDownloadQueue(updatedQueue);
         setCurrentDownload(null);
         setDownloadProgress(0);
@@ -140,9 +118,9 @@ const VideoDownload: React.FC = () => {
           id: task.id,
           title: task.title,
           platform: task.platform,
-          thumbnail: task.thumbnail,
+          thumbnail: videoInfo?.thumbnail,
           downloadTime: new Date().toLocaleString(),
-          path: `${settings.downloadPath}/${task.title}.${task.options.format.toLowerCase()}`
+          path: `~/Downloads/${task.title}.${downloadOptions.format.toLowerCase()}`
         }, ...history]);
         
         // 处理下一个任务
@@ -151,13 +129,17 @@ const VideoDownload: React.FC = () => {
         setDownloadProgress(progress);
         setDownloadSpeed(`${Math.floor(Math.random() * 2000) + 500} KB/s`);
         setRemainingTime(`${Math.floor((100 - progress) / 5)}秒`);
+        
+        setDownloadQueue(queue.map(t => 
+          t.id === task.id ? { ...t, progress } : t
+        ));
       }
     }, 500);
   };
 
-  const handlePause = (id: number) => {
+  const handlePause = (id: string) => {
     setDownloadQueue(downloadQueue.map(task =>
-      task.id === id ? { ...task, status: 'paused' } : task
+      task.id === id ? { ...task, status: 'pending' } : task
     ));
     if (currentDownload && currentDownload.id === id) {
       setCurrentDownload(null);
@@ -166,15 +148,7 @@ const VideoDownload: React.FC = () => {
     setNotification('下载已暂停');
   };
 
-  const handleResume = (id: number) => {
-    setDownloadQueue(downloadQueue.map(task =>
-      task.id === id ? { ...task, status: 'waiting' } : task
-    ));
-    processDownloadQueue(downloadQueue);
-    setNotification('下载已恢复');
-  };
-
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: string) => {
     const newQueue = downloadQueue.filter(task => task.id !== id);
     setDownloadQueue(newQueue);
     if (currentDownload && currentDownload.id === id) {
@@ -184,9 +158,9 @@ const VideoDownload: React.FC = () => {
     setNotification('任务已删除');
   };
 
-  const handleRetry = (id: number) => {
+  const handleRetry = (id: string) => {
     setDownloadQueue(downloadQueue.map(task =>
-      task.id === id ? { ...task, status: 'waiting', progress: 0 } : task
+      task.id === id ? { ...task, status: 'pending', progress: 0 } : task
     ));
     processDownloadQueue(downloadQueue);
     setNotification('任务已重新开始');
@@ -210,11 +184,18 @@ const VideoDownload: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-gray-800">视频下载助手</h1>
+        <div className="text-sm text-gray-500">
+          支持平台：抖音、快手、B站、小红书、视频号、TikTok等
+        </div>
+      </div>
+
       {/* 通知栏 */}
       {notification && (
-        <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded flex justify-between items-center">
+        <div className="p-3 bg-blue-100 text-blue-800 rounded-lg flex justify-between items-center">
           <span>{notification}</span>
-          <button onClick={() => setNotification('')} className="text-blue-700 hover:text-blue-900">
+          <button onClick={() => setNotification('')} className="text-blue-800 hover:text-blue-900">
             <i className="fas fa-times"></i>
           </button>
         </div>
@@ -224,7 +205,7 @@ const VideoDownload: React.FC = () => {
       <div className="bg-white rounded-lg shadow-sm p-6">
         <div className="flex items-center space-x-2 mb-4">
           <i className="fas fa-link text-blue-600"></i>
-          <h2 className="text-lg font-semibold">视频链接解析</h2>
+          <h2 className="text-lg font-semibold">视频链接</h2>
         </div>
         <div className="flex space-x-2 mb-4">
           <div className="flex-1 relative">
@@ -232,8 +213,8 @@ const VideoDownload: React.FC = () => {
               type="text"
               value={videoUrl}
               onChange={(e) => setVideoUrl(e.target.value)}
-              placeholder="粘贴视频链接 (抖音/快手/B站/小红书/视频号/Tiktok等)"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="粘贴视频链接 (抖音/快手/B站/小红书/视频号/TikTok等)"
+              className="input-field pr-20"
             />
             {videoUrl && (
               <button
@@ -252,357 +233,246 @@ const VideoDownload: React.FC = () => {
           </div>
           <button
             onClick={parseVideo}
-            disabled={isLoading}
-            className="rounded-button whitespace-nowrap px-6 py-3 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            disabled={isAnalyzing}
+            className="btn-primary"
           >
-            {isLoading ? (
+            {isAnalyzing ? (
               <>
-                <i className="fas fa-spinner animate-spin mr-2"></i>解析中...
+                <i className="fas fa-spinner fa-spin mr-2"></i>
+                解析中...
               </>
             ) : (
               <>
-                <i className="fas fa-search mr-2"></i>开始解析
+                <i className="fas fa-search mr-2"></i>
+                开始解析
               </>
             )}
           </button>
         </div>
+        
+        {/* 平台图标 */}
         <div className="flex justify-center space-x-4">
-          {platforms.map((p) => (
+          {SUPPORTED_PLATFORMS.map((p) => (
             <div
-              key={p.name}
-              className={`flex flex-col items-center p-2 rounded-lg cursor-pointer transition-colors ${
+              key={p.key}
+              className={`flex flex-col items-center p-2 rounded-lg transition-colors ${
                 platform === p.name ? 'bg-blue-100' : 'hover:bg-gray-100'
               }`}
             >
-              <i className={`${p.icon} ${p.color} text-2xl mb-1`}></i>
+              <i className={`${p.icon} text-2xl mb-1`} style={{ color: p.color }}></i>
               <span className="text-xs">{p.name}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {videoInfo ? (
+      {/* 视频信息和下载选项 */}
+      {videoInfo && (
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           {/* 标签页导航 */}
           <div className="border-b border-gray-200">
             <nav className="flex -mb-px">
-              {[
-                { id: 'info', label: '视频信息', icon: 'fa-info-circle' },
-                { id: 'download', label: '下载选项', icon: 'fa-download' },
-                { id: 'queue', label: '下载队列', icon: 'fa-tasks' }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
-                    activeTab === tab.id
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  <i className={`fas ${tab.icon} mr-2`}></i>{tab.label}
-                </button>
-              ))}
+              <button
+                onClick={() => setActiveTab('info')}
+                className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
+                  activeTab === 'info'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <i className="fas fa-info-circle mr-2"></i>视频信息
+              </button>
+              <button
+                onClick={() => setActiveTab('options')}
+                className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
+                  activeTab === 'options'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <i className="fas fa-cog mr-2"></i>下载选项
+              </button>
             </nav>
           </div>
 
-          {/* 标签页内容 */}
           <div className="p-6">
             {activeTab === 'info' && (
-              <div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                  {/* 视频信息 */}
-                  <div className="md:col-span-2">
-                    <h2 className="text-2xl font-bold mb-2">{videoInfo.title}</h2>
-                    {typeof videoInfo.author === 'object' && (
-                      <div className="flex items-center space-x-4 mb-6">
-                        <img
-                          src={videoInfo.author.avatar}
-                          alt={videoInfo.author.name}
-                          className="w-12 h-12 rounded-full object-cover"
-                        />
-                        <div>
-                          <p className="font-medium">{videoInfo.author.name}</p>
-                          <p className="text-sm text-gray-500">{videoInfo.author.followers} 粉丝</p>
-                        </div>
-                      </div>
-                    )}
-                    <div className="grid grid-cols-3 gap-4 mb-6">
-                      <div>
-                        <p className="text-sm text-gray-500">发布时间</p>
-                        <p className="font-medium">{videoInfo.publishTime}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">视频时长</p>
-                        <p className="font-medium">{videoInfo.duration}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">播放量</p>
-                        <p className="font-medium">{videoInfo.views}</p>
-                      </div>
-                    </div>
-                    <div className="mb-6">
-                      <p className="text-sm text-gray-500 mb-2">关键词</p>
-                      <div className="flex flex-wrap gap-2">
-                        {videoInfo.keywords?.map((keyword, index) => (
-                          <span key={index} className="px-3 py-1 bg-gray-100 rounded-full text-sm">
-                            #{keyword}
-                          </span>
-                        ))}
-                      </div>
+              <div className="flex space-x-6">
+                <img
+                  src={videoInfo.thumbnail}
+                  alt={videoInfo.title}
+                  className="w-48 h-32 object-cover rounded-lg"
+                />
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold mb-2">{videoInfo.title}</h3>
+                  <p className="text-gray-600 mb-3">{videoInfo.subtitle}</p>
+                  <div className="grid grid-cols-2 gap-4 text-sm text-gray-500">
+                    <div>作者：{videoInfo.author.name}</div>
+                    <div>时长：{videoInfo.duration}</div>
+                    <div>发布时间：{videoInfo.publishTime}</div>
+                    <div>播放量：{videoInfo.views}</div>
+                  </div>
+                  <div className="mt-4">
+                    <div className="flex flex-wrap gap-2">
+                      {videoInfo.keywords.map((keyword: string, index: number) => (
+                        <span key={index} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
+                          {keyword}
+                        </span>
+                      ))}
                     </div>
                   </div>
-                  
-                  {/* 视频播放器 */}
-                  <div className="md:col-span-1">
-                    <div className="relative pt-[56.25%] bg-black rounded-lg overflow-hidden">
-                      <img
-                        src={videoInfo.thumbnail}
-                        alt="视频缩略图"
-                        className="absolute inset-0 w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <button className="w-16 h-16 bg-black bg-opacity-50 rounded-full flex items-center justify-center hover:bg-opacity-70 transition-all">
-                          <i className="fas fa-play text-white text-xl ml-1"></i>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <button
-                    onClick={() => setActiveTab('download')}
-                    className="rounded-button whitespace-nowrap px-6 py-2 bg-blue-600 text-white hover:bg-blue-700"
-                  >
-                    下一步 <i className="fas fa-arrow-right ml-2"></i>
-                  </button>
                 </div>
               </div>
             )}
 
-            {activeTab === 'download' && (
-              <div>
-                <h3 className="text-lg font-semibold mb-4">下载选项配置</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {activeTab === 'options' && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">格式选择</label>
-                    <div className="flex flex-wrap gap-2">
-                      {formats.map((format) => (
-                        <button
-                          key={format}
-                          onClick={() => setDownloadOptions({...downloadOptions, format})}
-                          className={`rounded-button whitespace-nowrap px-4 py-2 ${
-                            downloadOptions.format === format
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 hover:bg-gray-200'
-                          }`}
-                        >
-                          {format}
-                        </button>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">视频格式</label>
+                    <select
+                      value={downloadOptions.format}
+                      onChange={(e) => setDownloadOptions({...downloadOptions, format: e.target.value})}
+                      className="input-field"
+                    >
+                      {formats.map(format => (
+                        <option key={format} value={format}>{format}</option>
                       ))}
-                    </div>
+                    </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">画质选择</label>
-                    <div className="flex flex-wrap gap-2">
-                      {qualities.map((quality) => (
-                        <button
-                          key={quality}
-                          onClick={() => setDownloadOptions({...downloadOptions, quality})}
-                          className={`rounded-button whitespace-nowrap px-4 py-2 ${
-                            downloadOptions.quality === quality
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 hover:bg-gray-200'
-                          }`}
-                        >
-                          {quality}
-                        </button>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">视频质量</label>
+                    <select
+                      value={downloadOptions.quality}
+                      onChange={(e) => setDownloadOptions({...downloadOptions, quality: e.target.value})}
+                      className="input-field"
+                    >
+                      {qualities.map(quality => (
+                        <option key={quality} value={quality}>{quality}</option>
                       ))}
-                    </div>
+                    </select>
                   </div>
                 </div>
-                <div className="mb-6">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">下载内容</label>
                   <div className="space-y-2">
-                    {[
-                      { key: 'video', label: '仅视频' },
-                      { key: 'audio', label: '仅音频' },
-                      { key: 'videoAndAudio', label: '视频+音频' }
-                    ].map((item) => (
-                      <label key={item.key} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={downloadOptions.content.includes(item.key)}
-                          onChange={(e) => {
-                            const content = e.target.checked
-                              ? [...downloadOptions.content, item.key]
-                              : downloadOptions.content.filter((c) => c !== item.key);
-                            setDownloadOptions({...downloadOptions, content});
-                          }}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        />
-                        <span>{item.label}</span>
-                      </label>
-                    ))}
-                    <label className="flex items-center space-x-2">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={downloadOptions.content.includes('video')}
+                        onChange={(e) => {
+                          const content = e.target.checked
+                            ? [...downloadOptions.content, 'video']
+                            : downloadOptions.content.filter(c => c !== 'video');
+                          setDownloadOptions({...downloadOptions, content});
+                        }}
+                        className="mr-2"
+                      />
+                      视频
+                    </label>
+                    <label className="flex items-center">
                       <input
                         type="checkbox"
                         checked={downloadOptions.subtitles}
                         onChange={(e) => setDownloadOptions({...downloadOptions, subtitles: e.target.checked})}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        className="mr-2"
                       />
-                      <span>字幕文件</span>
+                      字幕
                     </label>
-                    <label className="flex items-center space-x-2">
+                    <label className="flex items-center">
                       <input
                         type="checkbox"
                         checked={downloadOptions.danmaku}
                         onChange={(e) => setDownloadOptions({...downloadOptions, danmaku: e.target.checked})}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        className="mr-2"
                       />
-                      <span>弹幕文件</span>
+                      弹幕
                     </label>
                   </div>
-                </div>
-                <div className="flex justify-between">
-                  <button
-                    onClick={() => setActiveTab('info')}
-                    className="rounded-button whitespace-nowrap px-6 py-2 bg-gray-200 hover:bg-gray-300"
-                  >
-                    <i className="fas fa-arrow-left mr-2"></i>上一步
-                  </button>
-                  <button
-                    onClick={startDownload}
-                    className="rounded-button whitespace-nowrap px-6 py-2 bg-blue-600 text-white hover:bg-blue-700"
-                  >
-                    <i className="fas fa-download mr-2"></i>开始下载
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'queue' && (
-              <div>
-                {currentDownload && (
-                  <div className="mb-6 bg-blue-50 p-4 rounded-lg">
-                    <div className="flex justify-between items-center mb-2">
-                      <h4 className="font-medium">正在下载: {currentDownload.title}</h4>
-                      <span className="text-sm text-gray-600">{downloadSpeed} • 剩余 {remainingTime}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2.5">
-                      <div
-                        className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
-                        style={{ width: `${downloadProgress}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                )}
-                
-                <div className="mb-4 flex justify-between items-center">
-                  <h3 className="text-lg font-semibold">下载队列</h3>
-                  <div className="flex space-x-2">
-                    <button className="rounded-button whitespace-nowrap px-3 py-1 bg-gray-100 hover:bg-gray-200">
-                      <i className="fas fa-pause mr-1"></i>全部暂停
-                    </button>
-                    <button className="rounded-button whitespace-nowrap px-3 py-1 bg-gray-100 hover:bg-gray-200">
-                      <i className="fas fa-play mr-1"></i>全部开始
-                    </button>
-                    <button className="rounded-button whitespace-nowrap px-3 py-1 bg-gray-100 hover:bg-gray-200">
-                      <i className="fas fa-trash mr-1"></i>清空已完成
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  {downloadQueue.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <i className="fas fa-inbox text-4xl mb-2"></i>
-                      <p>暂无下载任务</p>
-                    </div>
-                  ) : (
-                    downloadQueue.map((task) => (
-                      <div
-                        key={task.id}
-                        className="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100"
-                      >
-                        <img
-                          src={task.thumbnail}
-                          alt={task.title}
-                          className="w-16 h-9 object-cover rounded mr-3"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{task.title}</p>
-                          <div className="flex items-center text-xs text-gray-500 space-x-3">
-                            <span>
-                              <i className={`fas ${
-                                task.platform === '抖音' ? 'fa-tiktok' :
-                                task.platform === 'B站' ? 'fa-b' : 'fa-video'
-                              } mr-1`}></i>
-                              {task.platform}
-                            </span>
-                            <span>
-                              <i className="fas fa-file-alt mr-1"></i>
-                              {task.options.format} • {task.options.quality}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <span className={`text-xs px-2 py-1 rounded-full ${
-                            task.status === 'waiting' ? 'bg-yellow-100 text-yellow-800' :
-                            task.status === 'downloading' ? 'bg-blue-100 text-blue-800' :
-                            task.status === 'completed' ? 'bg-green-100 text-green-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {task.status === 'waiting' ? '等待中' :
-                             task.status === 'downloading' ? '下载中' :
-                             task.status === 'completed' ? '已完成' : '已暂停'}
-                          </span>
-                          {task.status === 'paused' ? (
-                            <button
-                              onClick={() => handleResume(task.id)}
-                              className="rounded-button whitespace-nowrap px-2 py-1 text-green-600 hover:text-green-800"
-                              title="继续"
-                            >
-                              <i className="fas fa-play"></i>
-                            </button>
-                          ) : task.status === 'downloading' ? (
-                            <button
-                              onClick={() => handlePause(task.id)}
-                              className="rounded-button whitespace-nowrap px-2 py-1 text-yellow-600 hover:text-yellow-800"
-                              title="暂停"
-                            >
-                              <i className="fas fa-pause"></i>
-                            </button>
-                          ) : task.status === 'completed' ? (
-                            <button
-                              onClick={() => handleRetry(task.id)}
-                              className="rounded-button whitespace-nowrap px-2 py-1 text-blue-600 hover:text-blue-800"
-                              title="重新下载"
-                            >
-                              <i className="fas fa-redo"></i>
-                            </button>
-                          ) : null}
-                          <button
-                            onClick={() => handleDelete(task.id)}
-                            className="rounded-button whitespace-nowrap px-2 py-1 text-red-600 hover:text-red-800"
-                            title="删除"
-                          >
-                            <i className="fas fa-trash"></i>
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
                 </div>
               </div>
             )}
           </div>
+
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+            <button
+              onClick={startDownload}
+              className="btn-primary"
+            >
+              <i className="fas fa-download mr-2"></i>
+              开始下载
+            </button>
+          </div>
         </div>
-      ) : (
-        <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-          <i className="fas fa-film text-5xl text-gray-300 mb-4"></i>
-          <h3 className="text-xl font-medium text-gray-700 mb-2">请输入视频链接并解析</h3>
-          <p className="text-gray-500 mb-6">支持抖音、快手、B站、小红书、视频号、Tiktok等平台</p>
+      )}
+
+      {/* 下载队列 */}
+      {downloadQueue.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-medium text-gray-800">
+              下载队列 ({downloadQueue.length} 个任务)
+            </h3>
+          </div>
+          <div className="divide-y divide-gray-200">
+            {downloadQueue.map(task => (
+              <div key={task.id} className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-800 truncate">{task.title}</h4>
+                    <p className="text-sm text-gray-500">{task.platform} • {task.created_at}</p>
+                    <div className="mt-2">
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full transition-all duration-300 ${
+                            task.status === 'completed'
+                              ? 'bg-green-500'
+                              : task.status === 'failed'
+                              ? 'bg-red-500'
+                              : 'bg-blue-500'
+                          }`}
+                          style={{ width: `${task.progress}%` }}
+                        ></div>
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>{task.progress}%</span>
+                        <span>
+                          {task.status === 'completed' && '下载完成'}
+                          {task.status === 'downloading' && `${downloadSpeed} • ${remainingTime}`}
+                          {task.status === 'pending' && '等待中'}
+                          {task.status === 'failed' && '下载失败'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2 ml-4">
+                    {task.status === 'downloading' && (
+                      <button
+                        onClick={() => handlePause(task.id)}
+                        className="text-yellow-600 hover:text-yellow-800"
+                      >
+                        <i className="fas fa-pause"></i>
+                      </button>
+                    )}
+                    {task.status === 'failed' && (
+                      <button
+                        onClick={() => handleRetry(task.id)}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        <i className="fas fa-redo"></i>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDelete(task.id)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      <i className="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
