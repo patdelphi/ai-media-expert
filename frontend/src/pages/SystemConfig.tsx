@@ -1,8 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { systemConfigService, SystemConfig, ConfigCategory } from '../services/systemConfig';
 import { aiConfigService, AIConfig, CreateAIConfigRequest } from '../services/aiConfig';
 import { promptTemplateService, PromptTemplate, CreatePromptTemplateRequest } from '../services/promptTemplate';
+import userManagementService, {
+  UserListItem,
+  UserSearchParams,
+  AdminUserCreateRequest,
+  AdminUserUpdateRequest
+} from '../services/userManagement';
 import { SystemConfig as SystemConfigType } from '../types';
 import { marked } from 'marked';
 
@@ -57,11 +64,30 @@ const SystemConfigPage: React.FC = () => {
   ]);
 
   // 用户管理
-  const [users, setUsers] = useState([
-    { id: 1, username: 'admin', email: 'admin@example.com', role: '管理员', active: true, lastLogin: '2024-01-15 10:30:00' },
-    { id: 2, username: 'editor', email: 'editor@example.com', role: '编辑', active: true, lastLogin: '2024-01-14 16:45:00' },
-    { id: 3, username: 'viewer', email: 'viewer@example.com', role: '查看者', active: false, lastLogin: '2024-01-10 09:15:00' }
-  ]);
+  const [users, setUsers] = useState<UserListItem[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [userTotal, setUserTotal] = useState(0);
+  const [userCurrentPage, setUserCurrentPage] = useState(1);
+  const [userPageSize] = useState(10);
+  const [userSearchParams, setUserSearchParams] = useState<UserSearchParams>({});
+  const [showUserCreateForm, setShowUserCreateForm] = useState(false);
+  const [showUserEditForm, setShowUserEditForm] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserListItem | null>(null);
+  const [userFormData, setUserFormData] = useState({
+    email: '',
+    username: '',
+    full_name: '',
+    password: '',
+    role: 'user',
+    is_active: true,
+    is_verified: false
+  });
+  const [userSearchForm, setUserSearchForm] = useState({
+    search: '',
+    role: '',
+    is_active: '',
+    is_verified: ''
+  });
 
   // 表单状态
   const [newApi, setNewApi] = useState({
@@ -79,7 +105,6 @@ const SystemConfigPage: React.FC = () => {
   const [newTemplate, setNewTemplate] = useState({ title: '', content: '' });
   const [templateValidationErrors, setTemplateValidationErrors] = useState<{[key: string]: string}>({});
   const [newTagGroup, setNewTagGroup] = useState({ name: '', tags: [] });
-  const [newUser, setNewUser] = useState({ username: '', email: '', password: '', role: '查看者' });
   const [editingTag, setEditingTag] = useState({ groupId: null as number | null, tag: '' });
 
   // 加载系统配置数据
@@ -88,7 +113,15 @@ const SystemConfigPage: React.FC = () => {
     loadCategories();
     loadAiConfigs();
     loadTemplates();
+    loadUsers();
   }, []);
+
+  // 当用户搜索参数或分页改变时重新加载用户
+  useEffect(() => {
+    if (activeTab === 'users') {
+      loadUsers();
+    }
+  }, [userCurrentPage, userSearchParams, activeTab]);
 
   // 根据当前标签页筛选配置
   useEffect(() => {
@@ -707,25 +740,217 @@ const SystemConfigPage: React.FC = () => {
     setTagGroups(updatedGroups);
   };
 
-  const handleAddUser = () => {
-    if (!newUser.username || !newUser.email || !newUser.password) {
-      alert('请填写完整的用户信息');
+  // 加载用户列表
+  const loadUsers = async (params: UserSearchParams = {}) => {
+    setLoadingUsers(true);
+    try {
+      const response = await userManagementService.getUsersList({
+        page: userCurrentPage,
+        size: userPageSize,
+        ...params
+      });
+      
+      if (response.code === 200 && response.data) {
+        setUsers(response.data.items);
+        setUserTotal(response.data.total);
+      } else {
+        toast.error('获取用户列表失败');
+      }
+    } catch (error) {
+      console.error('Load users error:', error);
+      toast.error('获取用户列表失败');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  // 搜索用户
+  const handleUserSearch = () => {
+    const params: UserSearchParams = {};
+    if (userSearchForm.search) params.search = userSearchForm.search;
+    if (userSearchForm.role) params.role = userSearchForm.role;
+    if (userSearchForm.is_active !== '') params.is_active = userSearchForm.is_active === 'true';
+    if (userSearchForm.is_verified !== '') params.is_verified = userSearchForm.is_verified === 'true';
+    
+    setUserSearchParams(params);
+    setUserCurrentPage(1);
+  };
+
+  // 重置用户搜索
+  const handleResetUserSearch = () => {
+    setUserSearchForm({
+      search: '',
+      role: '',
+      is_active: '',
+      is_verified: ''
+    });
+    setUserSearchParams({});
+    setUserCurrentPage(1);
+  };
+
+  // 创建用户
+  const handleCreateUser = async () => {
+    try {
+      const createData: AdminUserCreateRequest = {
+        email: userFormData.email || undefined,
+        username: userFormData.username || undefined,
+        full_name: userFormData.full_name || undefined,
+        password: userFormData.password || undefined,
+        role: userFormData.role,
+        is_active: userFormData.is_active,
+        is_verified: userFormData.is_verified
+      };
+      
+      const response = await userManagementService.createUser(createData);
+      
+      if (response.code === 200) {
+        toast.success('用户创建成功');
+        setShowUserCreateForm(false);
+        resetUserForm();
+        loadUsers(userSearchParams);
+      } else {
+        toast.error(response.message || '创建用户失败');
+      }
+    } catch (error) {
+      console.error('Create user error:', error);
+      toast.error('创建用户失败');
+    }
+  };
+
+  // 编辑用户
+  const handleEditUser = (user: UserListItem) => {
+    setEditingUser(user);
+    setUserFormData({
+      email: user.email,
+      username: user.username || '',
+      full_name: user.full_name || '',
+      password: '',
+      role: user.role,
+      is_active: user.is_active,
+      is_verified: user.is_verified
+    });
+    setShowUserEditForm(true);
+  };
+
+  // 更新用户
+  const handleUpdateUser = async () => {
+    if (!editingUser) return;
+    
+    try {
+      const updateData: AdminUserUpdateRequest = {
+        email: userFormData.email || undefined,
+        username: userFormData.username || undefined,
+        full_name: userFormData.full_name || undefined,
+        role: userFormData.role,
+        is_active: userFormData.is_active,
+        is_verified: userFormData.is_verified
+      };
+      
+      const response = await userManagementService.updateUser(editingUser.id, updateData);
+      
+      if (response.code === 200) {
+        toast.success('用户更新成功');
+        setShowUserEditForm(false);
+        setEditingUser(null);
+        resetUserForm();
+        loadUsers(userSearchParams);
+      } else {
+        toast.error(response.message || '更新用户失败');
+      }
+    } catch (error) {
+      console.error('Update user error:', error);
+      toast.error('更新用户失败');
+    }
+  };
+
+  // 切换用户状态
+  const handleToggleUserStatus = async (user: UserListItem) => {
+    try {
+      const response = await userManagementService.updateUserStatus(user.id, {
+        is_active: !user.is_active,
+        reason: !user.is_active ? '管理员启用' : '管理员禁用'
+      });
+      
+      if (response.code === 200) {
+        toast.success(`用户已${!user.is_active ? '启用' : '禁用'}`);
+        loadUsers(userSearchParams);
+      } else {
+        toast.error(response.message || '操作失败');
+      }
+    } catch (error) {
+      console.error('Toggle user status error:', error);
+      toast.error('操作失败');
+    }
+  };
+
+  // 删除用户
+  const handleDeleteUser = async (user: UserListItem) => {
+    if (!confirm(`确定要删除用户 ${user.username || user.email} 吗？`)) {
       return;
     }
-    setUsers([...users, { ...newUser, id: Date.now(), active: true, lastLogin: '' }]);
-    setNewUser({ username: '', email: '', password: '', role: '查看者' });
-  };
-
-  const handleToggleUser = (id: number) => {
-    setUsers(users.map(user => 
-      user.id === id ? { ...user, active: !user.active } : user
-    ));
-  };
-
-  const handleDeleteUser = (id: number) => {
-    if (confirm('确定要删除这个用户吗？')) {
-      setUsers(users.filter(user => user.id !== id));
+    
+    try {
+      const response = await userManagementService.deleteUser(user.id);
+      
+      if (response.code === 200) {
+        toast.success('用户删除成功');
+        loadUsers(userSearchParams);
+      } else {
+        toast.error(response.message || '删除用户失败');
+      }
+    } catch (error) {
+      console.error('Delete user error:', error);
+      toast.error('删除用户失败');
     }
+  };
+
+  // 重置用户表单
+  const resetUserForm = () => {
+    setUserFormData({
+      email: '',
+      username: '',
+      full_name: '',
+      password: '',
+      role: 'user',
+      is_active: true,
+      is_verified: false
+    });
+  };
+
+  // 角色显示名称
+  const getRoleDisplayName = (role: string) => {
+    const roleMap: { [key: string]: string } = {
+      'user': '普通用户',
+      'premium': 'VIP用户',
+      'admin': '管理员'
+    };
+    return roleMap[role] || role;
+  };
+
+  // 状态显示
+  const getStatusBadge = (isActive: boolean) => {
+    return (
+      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+        isActive 
+          ? 'bg-green-100 text-green-800' 
+          : 'bg-red-100 text-red-800'
+      }`}>
+        {isActive ? '正常' : '禁用'}
+      </span>
+    );
+  };
+
+  // 验证状态显示
+  const getVerifiedBadge = (isVerified: boolean) => {
+    return (
+      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+        isVerified 
+          ? 'bg-blue-100 text-blue-800' 
+          : 'bg-gray-100 text-gray-800'
+      }`}>
+        {isVerified ? '已验证' : '未验证'}
+      </span>
+    );
   };
 
   const handleSaveBasicSettings = () => {
@@ -1610,132 +1835,404 @@ const SystemConfigPage: React.FC = () => {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-lg font-medium text-gray-900">用户管理</h2>
+                <button
+                  onClick={() => setShowUserCreateForm(true)}
+                  className="btn-primary"
+                >
+                  <i className="fas fa-plus mr-2"></i>
+                  新增用户
+                </button>
               </div>
               
-              {/* 添加新用户 */}
+              {/* 搜索和筛选 */}
               <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-md font-medium text-gray-800 mb-4">添加新用户</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <input
-                    type="text"
-                    placeholder="用户名"
-                    value={newUser.username}
-                    onChange={(e) => setNewUser({...newUser, username: e.target.value})}
-                    className="input-field"
-                  />
-                  <input
-                    type="email"
-                    placeholder="邮箱"
-                    value={newUser.email}
-                    onChange={(e) => setNewUser({...newUser, email: e.target.value})}
-                    className="input-field"
-                  />
-                  <input
-                    type="password"
-                    placeholder="密码"
-                    value={newUser.password}
-                    onChange={(e) => setNewUser({...newUser, password: e.target.value})}
-                    className="input-field"
-                  />
-                  <select
-                    value={newUser.role}
-                    onChange={(e) => setNewUser({...newUser, role: e.target.value})}
-                    className="input-field"
-                  >
-                    <option value="查看者">查看者</option>
-                    <option value="编辑">编辑</option>
-                    <option value="管理员">管理员</option>
-                  </select>
-                </div>
-                <div className="mt-4">
-                  <button onClick={handleAddUser} className="btn-primary">
-                    添加用户
-                  </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+                  <div>
+                    <input
+                      type="text"
+                      value={userSearchForm.search}
+                      onChange={(e) => setUserSearchForm({ ...userSearchForm, search: e.target.value })}
+                      className="input-field"
+                      placeholder="搜索用户名、邮箱或姓名"
+                    />
+                  </div>
+                  <div>
+                    <select
+                      value={userSearchForm.role}
+                      onChange={(e) => setUserSearchForm({ ...userSearchForm, role: e.target.value })}
+                      className="input-field"
+                    >
+                      <option value="">全部角色</option>
+                      <option value="user">普通用户</option>
+                      <option value="premium">VIP用户</option>
+                      <option value="admin">管理员</option>
+                    </select>
+                  </div>
+                  <div>
+                    <select
+                      value={userSearchForm.is_active}
+                      onChange={(e) => setUserSearchForm({ ...userSearchForm, is_active: e.target.value })}
+                      className="input-field"
+                    >
+                      <option value="">全部状态</option>
+                      <option value="true">正常</option>
+                      <option value="false">禁用</option>
+                    </select>
+                  </div>
+                  <div>
+                    <select
+                      value={userSearchForm.is_verified}
+                      onChange={(e) => setUserSearchForm({ ...userSearchForm, is_verified: e.target.value })}
+                      className="input-field"
+                    >
+                      <option value="">全部验证状态</option>
+                      <option value="true">已验证</option>
+                      <option value="false">未验证</option>
+                    </select>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={handleUserSearch}
+                      className="btn-primary flex-1"
+                    >
+                      搜索
+                    </button>
+                    <button
+                      onClick={handleResetUserSearch}
+                      className="btn-secondary flex-1"
+                    >
+                      重置
+                    </button>
+                  </div>
                 </div>
               </div>
 
               {/* 用户列表 */}
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        用户名
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        邮箱
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        角色
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        状态
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        最后登录
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        操作
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {users.map((user) => (
-                      <tr key={user.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {user.username}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {user.email}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            user.role === '管理员' ? 'bg-red-100 text-red-800' :
-                            user.role === '编辑' ? 'bg-blue-100 text-blue-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {user.role}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            user.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {user.active ? '活跃' : '禁用'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {user.lastLogin || '从未登录'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex space-x-2">
+              {loadingUsers ? (
+                <div className="text-center py-8">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <p className="mt-2 text-gray-600">加载中...</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          用户信息
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          角色
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          状态
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          验证状态
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          创建时间
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          操作
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {users.map((user) => (
+                        <tr key={user.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-10 w-10">
+                                {user.avatar_url ? (
+                                  <img className="h-10 w-10 rounded-full" src={user.avatar_url} alt="" />
+                                ) : (
+                                  <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
+                                    <i className="fas fa-user text-gray-600"></i>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {user.username || '未设置用户名'}
+                                </div>
+                                <div className="text-sm text-gray-500">{user.email}</div>
+                                {user.full_name && (
+                                  <div className="text-sm text-gray-500">{user.full_name}</div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                              user.role === 'premium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {getRoleDisplayName(user.role)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {getStatusBadge(user.is_active)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {getVerifiedBadge(user.is_verified)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {new Date(user.created_at).toLocaleDateString('zh-CN')}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                             <button
-                              onClick={() => handleToggleUser(user.id)}
-                              className={`px-3 py-1 text-xs rounded ${
-                                user.active
-                                  ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
-                                  : 'bg-green-100 text-green-800 hover:bg-green-200'
-                              }`}
+                              onClick={() => handleEditUser(user)}
+                              className="text-blue-600 hover:text-blue-900"
                             >
-                              {user.active ? '禁用' : '启用'}
+                              编辑
                             </button>
                             <button
-                              onClick={() => handleDeleteUser(user.id)}
-                              className="px-3 py-1 text-xs bg-red-100 text-red-800 rounded hover:bg-red-200"
+                              onClick={() => handleToggleUserStatus(user)}
+                              className={`${
+                                user.is_active ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'
+                              }`}
+                            >
+                              {user.is_active ? '禁用' : '启用'}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(user)}
+                              className="text-red-600 hover:text-red-900"
                             >
                               删除
                             </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              
+              {/* 分页 */}
+              {userTotal > userPageSize && (
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-700">
+                    显示第 {(userCurrentPage - 1) * userPageSize + 1} 到 {Math.min(userCurrentPage * userPageSize, userTotal)} 条，共 {userTotal} 条
+                  </div>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => setUserCurrentPage(Math.max(1, userCurrentPage - 1))}
+                      disabled={userCurrentPage === 1}
+                      className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      上一页
+                    </button>
+                    <span className="px-3 py-1 text-sm text-gray-700">
+                      第 {userCurrentPage} 页，共 {Math.ceil(userTotal / userPageSize)} 页
+                    </span>
+                    <button
+                      onClick={() => setUserCurrentPage(Math.min(Math.ceil(userTotal / userPageSize), userCurrentPage + 1))}
+                      disabled={userCurrentPage >= Math.ceil(userTotal / userPageSize)}
+                      className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      下一页
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      {/* 创建用户表单模态框 */}
+      {showUserCreateForm && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">新增用户</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
+                  <input
+                    type="email"
+                    value={userFormData.email}
+                    onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="留空则自动生成临时邮箱"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+                  <input
+                    type="text"
+                    value={userFormData.username}
+                    onChange={(e) => setUserFormData({ ...userFormData, username: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="可选"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">姓名</label>
+                  <input
+                    type="text"
+                    value={userFormData.full_name}
+                    onChange={(e) => setUserFormData({ ...userFormData, full_name: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="可选"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                  <input
+                    type="password"
+                    value={userFormData.password}
+                    onChange={(e) => setUserFormData({ ...userFormData, password: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="留空则自动生成随机密码"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">角色</label>
+                  <select
+                    value={userFormData.role}
+                    onChange={(e) => setUserFormData({ ...userFormData, role: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  >
+                    <option value="user">普通用户</option>
+                    <option value="premium">VIP用户</option>
+                    <option value="admin">管理员</option>
+                  </select>
+                </div>
+                <div className="flex items-center space-x-4">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={userFormData.is_active}
+                      onChange={(e) => setUserFormData({ ...userFormData, is_active: e.target.checked })}
+                      className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">启用账户</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={userFormData.is_verified}
+                      onChange={(e) => setUserFormData({ ...userFormData, is_verified: e.target.checked })}
+                      className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">已验证</span>
+                  </label>
+                </div>
+              </div>
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowUserCreateForm(false);
+                    resetUserForm();
+                  }}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleCreateUser}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  创建
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 编辑用户表单模态框 */}
+      {showUserEditForm && editingUser && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">编辑用户</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
+                  <input
+                    type="email"
+                    value={userFormData.email}
+                    onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+                  <input
+                    type="text"
+                    value={userFormData.username}
+                    onChange={(e) => setUserFormData({ ...userFormData, username: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">姓名</label>
+                  <input
+                    type="text"
+                    value={userFormData.full_name}
+                    onChange={(e) => setUserFormData({ ...userFormData, full_name: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">角色</label>
+                  <select
+                    value={userFormData.role}
+                    onChange={(e) => setUserFormData({ ...userFormData, role: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  >
+                    <option value="user">普通用户</option>
+                    <option value="premium">VIP用户</option>
+                    <option value="admin">管理员</option>
+                  </select>
+                </div>
+                <div className="flex items-center space-x-4">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={userFormData.is_active}
+                      onChange={(e) => setUserFormData({ ...userFormData, is_active: e.target.checked })}
+                      className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">启用账户</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={userFormData.is_verified}
+                      onChange={(e) => setUserFormData({ ...userFormData, is_verified: e.target.checked })}
+                      className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">已验证</span>
+                  </label>
+                </div>
+              </div>
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowUserEditForm(false);
+                    setEditingUser(null);
+                    resetUserForm();
+                  }}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleUpdateUser}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  更新
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

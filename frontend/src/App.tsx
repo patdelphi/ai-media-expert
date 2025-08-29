@@ -13,7 +13,6 @@ import VideoDownload from './pages/VideoDownload';
 import VideoList from './pages/VideoList';
 import VideoAnalysis from './pages/VideoAnalysis';
 import SystemConfig from './pages/SystemConfig';
-import UserManagement from './pages/UserManagement';
 import Login from './pages/Login';
 import Register from './pages/Register';
 
@@ -132,7 +131,6 @@ const App: React.FC = () => {
               { name: '视频列表', icon: 'fa-list', path: '/video/list' },
               { name: '视频解析', icon: 'fa-search', path: '/video/analysis' },
               { name: '系统配置', icon: 'fa-cog', path: '/system/config' },
-              { name: '用户管理', icon: 'fa-users', path: '/user/management' },
             ].map((item) => (
               <a
                 key={item.name}
@@ -184,11 +182,6 @@ const App: React.FC = () => {
             <Route path="/system/config" element={
               <ProtectedRoute requireRoles={['admin']}>
                 <SystemConfig />
-              </ProtectedRoute>
-            } />
-            <Route path="/user/management" element={
-              <ProtectedRoute requireRoles={['admin']}>
-                <UserManagement />
               </ProtectedRoute>
             } />
           </Routes>
