@@ -10,8 +10,29 @@ import userManagementService, {
   AdminUserCreateRequest,
   AdminUserUpdateRequest
 } from '../services/userManagement';
+import tagGroupService, {
+  TagGroup,
+  Tag,
+  CreateTagGroupRequest,
+  UpdateTagGroupRequest,
+  CreateTagRequest
+} from '../services/tagGroup';
 import { SystemConfig as SystemConfigType } from '../types';
 import { marked } from 'marked';
+
+// 预设标签颜色
+const PRESET_TAG_COLORS = [
+  { name: '蓝色', value: '#3B82F6' },
+  { name: '绿色', value: '#10B981' },
+  { name: '红色', value: '#EF4444' },
+  { name: '黄色', value: '#F59E0B' },
+  { name: '紫色', value: '#8B5CF6' },
+  { name: '粉色', value: '#EC4899' },
+  { name: '青色', value: '#06B6D4' },
+  { name: '橙色', value: '#F97316' },
+  { name: '灰色', value: '#6B7280' },
+  { name: '深蓝', value: '#1E40AF' }
+];
 
 const SystemConfigPage: React.FC = () => {
   const { user } = useAuth();
@@ -57,11 +78,24 @@ const SystemConfigPage: React.FC = () => {
   const [editingTemplate, setEditingTemplate] = useState<PromptTemplate | null>(null);
 
   // 标签组
-  const [tagGroups, setTagGroups] = useState([
-    { id: 1, name: '内容类型', tags: ['教程', '演示', '评测', '讲解', '实战'] },
-    { id: 2, name: '技术栈', tags: ['React', 'Vue', 'Angular', 'Node.js', 'Python'] },
-    { id: 3, name: '难度等级', tags: ['初级', '中级', '高级', '专家级'] }
-  ]);
+  const [tagGroups, setTagGroups] = useState<TagGroup[]>([]);
+  const [loadingTagGroups, setLoadingTagGroups] = useState(false);
+  const [showTagGroupCreateForm, setShowTagGroupCreateForm] = useState(false);
+  const [showTagGroupEditForm, setShowTagGroupEditForm] = useState(false);
+  const [editingTagGroup, setEditingTagGroup] = useState<TagGroup | null>(null);
+  const [tagGroupFormData, setTagGroupFormData] = useState({
+    name: '',
+    description: '',
+    is_active: true
+  });
+  const [showTagCreateForm, setShowTagCreateForm] = useState<{ groupId: number | null }>({ groupId: null });
+  const [tagFormData, setTagFormData] = useState({
+    name: '',
+    color: PRESET_TAG_COLORS[0].value,
+    is_active: true
+  });
+  const [batchTagInput, setBatchTagInput] = useState('');
+  const [showBatchTagForm, setShowBatchTagForm] = useState<{ groupId: number | null }>({ groupId: null });
 
   // 用户管理
   const [users, setUsers] = useState<UserListItem[]>([]);
@@ -104,8 +138,6 @@ const SystemConfigPage: React.FC = () => {
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
   const [newTemplate, setNewTemplate] = useState({ title: '', content: '' });
   const [templateValidationErrors, setTemplateValidationErrors] = useState<{[key: string]: string}>({});
-  const [newTagGroup, setNewTagGroup] = useState({ name: '', tags: [] });
-  const [editingTag, setEditingTag] = useState({ groupId: null as number | null, tag: '' });
 
   // 加载系统配置数据
   useEffect(() => {
@@ -114,7 +146,15 @@ const SystemConfigPage: React.FC = () => {
     loadAiConfigs();
     loadTemplates();
     loadUsers();
+    loadTagGroups();
   }, []);
+
+  // 当标签组标签页激活时重新加载数据
+  useEffect(() => {
+    if (activeTab === 'tags') {
+      loadTagGroups();
+    }
+  }, [activeTab]);
 
   // 当用户搜索参数或分页改变时重新加载用户
   useEffect(() => {
@@ -702,42 +742,216 @@ const SystemConfigPage: React.FC = () => {
 
 
 
-  const handleAddTagGroup = () => {
-    if (!newTagGroup.name) {
-      alert('请输入标签组名称');
+  // 加载标签组列表
+  const loadTagGroups = async () => {
+    setLoadingTagGroups(true);
+    try {
+      const response = await tagGroupService.getTagGroups({ include_tags: true });
+      
+      if (response.code === 200 && response.data) {
+        setTagGroups(response.data);
+      } else {
+        toast.error('获取标签组列表失败');
+      }
+    } catch (error) {
+      console.error('Load tag groups error:', error);
+      toast.error('获取标签组列表失败');
+    } finally {
+      setLoadingTagGroups(false);
+    }
+  };
+
+  // 创建标签组
+  const handleCreateTagGroup = async () => {
+    if (!tagGroupFormData.name.trim()) {
+      toast.error('请输入标签组名称');
       return;
     }
-    setTagGroups([...tagGroups, { ...newTagGroup, id: Date.now() }]);
-    setNewTagGroup({ name: '', tags: [] });
-  };
-
-  const handleDeleteTagGroup = (id: number) => {
-    if (confirm('确定要删除这个标签组吗？')) {
-      setTagGroups(tagGroups.filter(group => group.id !== id));
+    
+    try {
+      const createData: CreateTagGroupRequest = {
+        name: tagGroupFormData.name.trim(),
+        description: tagGroupFormData.description.trim() || undefined,
+        is_active: tagGroupFormData.is_active,
+        tags: []
+      };
+      
+      const response = await tagGroupService.createTagGroup(createData);
+      
+      if (response.code === 200) {
+        toast.success('标签组创建成功');
+        setShowTagGroupCreateForm(false);
+        resetTagGroupForm();
+        loadTagGroups();
+      } else {
+        toast.error(response.message || '创建标签组失败');
+      }
+    } catch (error) {
+      console.error('Create tag group error:', error);
+      toast.error('创建标签组失败');
     }
   };
 
-  const handleAddTag = (groupId: number) => {
-    if (!editingTag.tag.trim()) return;
-    
-    const updatedGroups = tagGroups.map(group => {
-      if (group.id === groupId) {
-        return { ...group, tags: [...group.tags, editingTag.tag.trim()] };
-      }
-      return group;
+  // 编辑标签组
+  const handleEditTagGroup = (tagGroup: TagGroup) => {
+    setEditingTagGroup(tagGroup);
+    setTagGroupFormData({
+      name: tagGroup.name,
+      description: tagGroup.description || '',
+      is_active: tagGroup.is_active
     });
-    setTagGroups(updatedGroups);
-    setEditingTag({ groupId: null, tag: '' });
+    setShowTagGroupEditForm(true);
   };
 
-  const handleRemoveTag = (groupId: number, tagToRemove: string) => {
-    const updatedGroups = tagGroups.map(group => {
-      if (group.id === groupId) {
-        return { ...group, tags: group.tags.filter(tag => tag !== tagToRemove) };
+  // 更新标签组
+  const handleUpdateTagGroup = async () => {
+    if (!editingTagGroup) return;
+    
+    try {
+      const updateData: UpdateTagGroupRequest = {
+        name: tagGroupFormData.name.trim() || undefined,
+        description: tagGroupFormData.description.trim() || undefined,
+        is_active: tagGroupFormData.is_active
+      };
+      
+      const response = await tagGroupService.updateTagGroup(editingTagGroup.id, updateData);
+      
+      if (response.code === 200) {
+        toast.success('标签组更新成功');
+        setShowTagGroupEditForm(false);
+        setEditingTagGroup(null);
+        resetTagGroupForm();
+        loadTagGroups();
+      } else {
+        toast.error(response.message || '更新标签组失败');
       }
-      return group;
+    } catch (error) {
+      console.error('Update tag group error:', error);
+      toast.error('更新标签组失败');
+    }
+  };
+
+  // 删除标签组
+  const handleDeleteTagGroup = async (tagGroup: TagGroup) => {
+    if (!confirm(`确定要删除标签组 "${tagGroup.name}" 吗？这将同时删除该组下的所有标签。`)) {
+      return;
+    }
+    
+    try {
+      const response = await tagGroupService.deleteTagGroup(tagGroup.id);
+      
+      if (response.code === 200) {
+        toast.success('标签组删除成功');
+        loadTagGroups();
+      } else {
+        toast.error(response.message || '删除标签组失败');
+      }
+    } catch (error) {
+      console.error('Delete tag group error:', error);
+      toast.error('删除标签组失败');
+    }
+  };
+
+  // 创建标签
+  const handleCreateTag = async (groupId: number) => {
+    if (!tagFormData.name.trim()) {
+      toast.error('请输入标签名称');
+      return;
+    }
+    
+    try {
+      const createData: CreateTagRequest = {
+        name: tagFormData.name.trim(),
+        color: tagFormData.color || undefined,
+        is_active: tagFormData.is_active
+      };
+      
+      const response = await tagGroupService.createTag(groupId, createData);
+      
+      if (response.code === 200) {
+        toast.success('标签创建成功');
+        setShowTagCreateForm({ groupId: null });
+        resetTagForm();
+        loadTagGroups();
+      } else {
+        toast.error(response.message || '创建标签失败');
+      }
+    } catch (error: any) {
+      console.error('Create tag error:', error);
+      const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || '创建标签失败';
+      toast.error(errorMessage);
+    }
+  };
+
+  // 删除标签
+  const handleDeleteTag = async (tag: Tag) => {
+    if (!confirm(`确定要删除标签 "${tag.name}" 吗？`)) {
+      return;
+    }
+    
+    try {
+      const response = await tagGroupService.deleteTag(tag.id);
+      
+      if (response.code === 200) {
+        toast.success('标签删除成功');
+        loadTagGroups();
+      } else {
+        toast.error(response.message || '删除标签失败');
+      }
+    } catch (error: any) {
+      console.error('Delete tag error:', error);
+      const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || '删除标签失败';
+      toast.error(errorMessage);
+    }
+  };
+
+  // 批量创建标签
+  const handleBatchCreateTags = async (groupId: number) => {
+    if (!batchTagInput.trim()) {
+      toast.error('请输入标签名称');
+      return;
+    }
+    
+    const tagNames = batchTagInput.split(',').map(name => name.trim()).filter(name => name);
+    if (tagNames.length === 0) {
+      toast.error('请输入有效的标签名称');
+      return;
+    }
+    
+    try {
+      const response = await tagGroupService.batchCreateTags(groupId, tagNames);
+      
+      if (response.code === 200) {
+        toast.success(response.message || '标签批量创建成功');
+        setShowBatchTagForm({ groupId: null });
+        setBatchTagInput('');
+        loadTagGroups();
+      } else {
+        toast.error(response.message || '批量创建标签失败');
+      }
+    } catch (error: any) {
+      console.error('Batch create tags error:', error);
+      const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || '批量创建标签失败';
+      toast.error(errorMessage);
+    }
+  };
+
+  // 重置标签组表单
+  const resetTagGroupForm = () => {
+    setTagGroupFormData({
+      name: '',
+      description: '',
+      is_active: true
     });
-    setTagGroups(updatedGroups);
+  };
+
+  // 重置标签表单
+  const resetTagForm = () => {
+    setTagFormData({
+      name: '',
+      color: PRESET_TAG_COLORS[0].value,
+      is_active: true
+    });
   };
 
   // 加载用户列表
@@ -1130,7 +1344,7 @@ const SystemConfigPage: React.FC = () => {
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div className="flex items-center space-x-3">
-                          <h3 className="text-md font-medium text-gray-800">{config.key}</h3>
+                          <h3 className="text-lg font-bold text-gray-900">{config.key}</h3>
                           <span className={`px-2 py-1 text-xs rounded-full ${
                             config.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                           }`}>
@@ -1395,7 +1609,7 @@ const SystemConfigPage: React.FC = () => {
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="flex items-center space-x-3">
-                            <h3 className="text-md font-medium text-gray-800">{config.name}</h3>
+                            <h3 className="text-lg font-bold text-gray-900">{config.name}</h3>
                             <span className={`px-2 py-1 text-xs rounded-full ${
                               config.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                             }`}>
@@ -1688,7 +1902,7 @@ const SystemConfigPage: React.FC = () => {
                           ) : (
                             <div>
                               <div className="flex items-center space-x-3 mb-2">
-                                <h3 className="text-md font-medium text-gray-800">{template.title}</h3>
+                                <h3 className="text-lg font-bold text-gray-900">{template.title}</h3>
                                 <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
                                   使用次数: {template.usage_count}
                                 </span>
@@ -1759,74 +1973,111 @@ const SystemConfigPage: React.FC = () => {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-lg font-medium text-gray-900">预设标签组</h2>
+                <button
+                  onClick={() => setShowTagGroupCreateForm(true)}
+                  className="btn-primary"
+                >
+                  <i className="fas fa-plus mr-2"></i>
+                  新增标签组
+                </button>
               </div>
               
-              {/* 添加新标签组 */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-md font-medium text-gray-800 mb-4">添加新标签组</h3>
-                <div className="flex space-x-4">
-                  <input
-                    type="text"
-                    placeholder="标签组名称"
-                    value={newTagGroup.name}
-                    onChange={(e) => setNewTagGroup({...newTagGroup, name: e.target.value})}
-                    className="input-field flex-1"
-                  />
-                  <button onClick={handleAddTagGroup} className="btn-primary">
-                    添加标签组
-                  </button>
-                </div>
-              </div>
-
               {/* 标签组列表 */}
-              <div className="space-y-4">
-                {tagGroups.map((group) => (
-                  <div key={group.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-4">
-                      <h3 className="text-md font-medium text-gray-800">{group.name}</h3>
-                      <button
-                        onClick={() => handleDeleteTagGroup(group.id)}
-                        className="px-3 py-1 text-sm bg-red-100 text-red-800 rounded hover:bg-red-200"
-                      >
-                        删除组
-                      </button>
-                    </div>
-                    
-                    {/* 标签列表 */}
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      {group.tags.map((tag, index) => (
-                        <span key={index} className="px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded flex items-center">
-                          {tag}
+              {loadingTagGroups ? (
+                <div className="text-center py-8">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <p className="mt-2 text-gray-600">加载中...</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {tagGroups.map((group) => (
+                    <div key={group.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="text-lg font-bold text-gray-900">{group.name}</h3>
+                          {group.description && (
+                            <p className="text-sm text-gray-600 mt-1">{group.description}</p>
+                          )}
+                          <div className="flex items-center mt-2">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              group.is_active 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {group.is_active ? '启用' : '禁用'}
+                            </span>
+                            <span className="ml-2 text-xs text-gray-500">
+                              {group.tags.length} 个标签
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex space-x-2">
                           <button
-                            onClick={() => handleRemoveTag(group.id, tag)}
-                            className="ml-2 text-blue-600 hover:text-blue-800"
+                            onClick={() => handleEditTagGroup(group)}
+                            className="px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded hover:bg-blue-200"
                           >
-                            <i className="fas fa-times text-xs"></i>
+                            编辑
                           </button>
-                        </span>
-                      ))}
+                          <button
+                            onClick={() => handleDeleteTagGroup(group)}
+                            className="px-3 py-1 text-sm bg-red-100 text-red-800 rounded hover:bg-red-200"
+                          >
+                            删除
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* 标签列表 */}
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {group.tags.map((tag) => (
+                          <span 
+                            key={tag.id} 
+                            className="px-2 py-1 text-sm rounded flex items-center"
+                            style={{
+                              backgroundColor: tag.color ? `${tag.color}20` : '#EBF8FF',
+                              color: tag.color || '#2B6CB0',
+                              border: `1px solid ${tag.color || '#2B6CB0'}30`
+                            }}
+                          >
+                            {tag.name}
+                            <button
+                              onClick={() => handleDeleteTag(tag)}
+                              className="ml-2 hover:opacity-70"
+                            >
+                              <i className="fas fa-times text-xs"></i>
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                      
+                      {/* 标签操作按钮 */}
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => setShowTagCreateForm({ groupId: group.id })}
+                          className="btn-secondary text-sm"
+                        >
+                          <i className="fas fa-plus mr-1"></i>
+                          添加标签
+                        </button>
+                        <button
+                          onClick={() => setShowBatchTagForm({ groupId: group.id })}
+                          className="btn-secondary text-sm"
+                        >
+                          <i className="fas fa-layer-group mr-1"></i>
+                          批量添加
+                        </button>
+                      </div>
                     </div>
-                    
-                    {/* 添加标签 */}
-                    <div className="flex space-x-2">
-                      <input
-                        type="text"
-                        placeholder="添加新标签"
-                        value={editingTag.groupId === group.id ? editingTag.tag : ''}
-                        onChange={(e) => setEditingTag({groupId: group.id, tag: e.target.value})}
-                        onKeyPress={(e) => e.key === 'Enter' && handleAddTag(group.id)}
-                        className="input-field flex-1"
-                      />
-                      <button
-                        onClick={() => handleAddTag(group.id)}
-                        className="btn-secondary"
-                      >
-                        添加
-                      </button>
+                  ))}
+                  
+                  {tagGroups.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <i className="fas fa-tags text-4xl mb-4"></i>
+                      <p>暂无标签组，点击上方按钮创建第一个标签组</p>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -2227,6 +2478,235 @@ const SystemConfigPage: React.FC = () => {
                   className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 >
                   更新
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 创建标签组表单模态框 */}
+      {showTagGroupCreateForm && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">新增标签组</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">标签组名称</label>
+                  <input
+                    type="text"
+                    value={tagGroupFormData.name}
+                    onChange={(e) => setTagGroupFormData({ ...tagGroupFormData, name: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="请输入标签组名称"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
+                  <textarea
+                    value={tagGroupFormData.description}
+                    onChange={(e) => setTagGroupFormData({ ...tagGroupFormData, description: e.target.value })}
+                    rows={3}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="请输入标签组描述（可选）"
+                  />
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={tagGroupFormData.is_active}
+                    onChange={(e) => setTagGroupFormData({ ...tagGroupFormData, is_active: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">启用标签组</span>
+                </div>
+              </div>
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowTagGroupCreateForm(false);
+                    resetTagGroupForm();
+                  }}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleCreateTagGroup}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  创建
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 编辑标签组表单模态框 */}
+      {showTagGroupEditForm && editingTagGroup && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">编辑标签组</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">标签组名称</label>
+                  <input
+                    type="text"
+                    value={tagGroupFormData.name}
+                    onChange={(e) => setTagGroupFormData({ ...tagGroupFormData, name: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
+                  <textarea
+                    value={tagGroupFormData.description}
+                    onChange={(e) => setTagGroupFormData({ ...tagGroupFormData, description: e.target.value })}
+                    rows={3}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  />
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={tagGroupFormData.is_active}
+                    onChange={(e) => setTagGroupFormData({ ...tagGroupFormData, is_active: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">启用标签组</span>
+                </div>
+              </div>
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowTagGroupEditForm(false);
+                    setEditingTagGroup(null);
+                    resetTagGroupForm();
+                  }}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleUpdateTagGroup}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  更新
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 创建标签表单模态框 */}
+      {showTagCreateForm.groupId && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">添加标签</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">标签名称</label>
+                  <input
+                    type="text"
+                    value={tagFormData.name}
+                    onChange={(e) => setTagFormData({ ...tagFormData, name: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="请输入标签名称"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">标签颜色</label>
+                  <div className="grid grid-cols-5 gap-2">
+                    {PRESET_TAG_COLORS.map((color) => (
+                      <button
+                        key={color.value}
+                        type="button"
+                        onClick={() => setTagFormData({ ...tagFormData, color: color.value })}
+                        className={`w-8 h-8 rounded-full border-2 ${
+                          tagFormData.color === color.value 
+                            ? 'border-gray-800 ring-2 ring-gray-300' 
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                        style={{ backgroundColor: color.value }}
+                        title={color.name}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={tagFormData.is_active}
+                    onChange={(e) => setTagFormData({ ...tagFormData, is_active: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">启用标签</span>
+                </div>
+              </div>
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowTagCreateForm({ groupId: null });
+                    resetTagForm();
+                  }}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => handleCreateTag(showTagCreateForm.groupId!)}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  创建
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 批量添加标签表单模态框 */}
+      {showBatchTagForm.groupId && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">批量添加标签</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">标签名称</label>
+                  <textarea
+                    value={batchTagInput}
+                    onChange={(e) => setBatchTagInput(e.target.value)}
+                    rows={4}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="请输入标签名称，多个标签用逗号分隔\n例如：前端,后端,全栈,移动端"
+                  />
+                </div>
+                <div className="text-sm text-gray-500">
+                  <p>• 多个标签请用逗号分隔</p>
+                  <p>• 重复的标签名称将被自动跳过</p>
+                </div>
+              </div>
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowBatchTagForm({ groupId: null });
+                    setBatchTagInput('');
+                  }}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => handleBatchCreateTags(showBatchTagForm.groupId!)}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  批量创建
                 </button>
               </div>
             </div>

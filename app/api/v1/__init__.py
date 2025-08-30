@@ -4,7 +4,7 @@
 """
 
 from fastapi import APIRouter
-from .endpoints import auth, users, system_config
+from .endpoints import auth, users, system_config, tag_groups
 from .upload import router as upload_router
 from .videos import router as videos_router
 from .analysis import router as analysis_router
@@ -17,6 +17,7 @@ api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["认证"])
 api_router.include_router(users.router, prefix="/users", tags=["用户管理"])
 api_router.include_router(system_config.router, prefix="/system/config", tags=["系统配置"])
+api_router.include_router(tag_groups.router, prefix="/tag-groups", tags=["标签组管理"])
 
 # 其他功能路由
 api_router.include_router(upload_router, prefix="/upload", tags=["upload"])

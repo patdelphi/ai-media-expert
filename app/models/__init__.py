@@ -8,6 +8,7 @@ from app.models.video import (
     Video, DownloadTask, AnalysisTask, Tag, VideoTag, AIConfig
 )
 from app.models.prompt_template import PromptTemplate
+from .tag_group import TagGroup, TagGroupTag
 
 # 导出所有模型
 __all__ = [
@@ -20,4 +21,6 @@ __all__ = [
     "VideoTag",
     "AIConfig",
     "PromptTemplate",
+    "TagGroup",
+    "TagGroupTag",
 ]
