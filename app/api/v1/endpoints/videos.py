@@ -14,7 +14,7 @@ from app.models.user import User
 from app.models.video import Video, VideoTag, Tag
 from app.schemas.common import PaginatedResponse, PaginationParams, ResponseModel
 from app.schemas.video import VideoResponse, VideoListResponse
-from app.core.logging import api_logger
+from app.core.app_logging import api_logger
 
 router = APIRouter()
 

@@ -10,7 +10,7 @@ from celery import current_task
 from sqlalchemy.orm import sessionmaker
 
 from app.core.database import engine
-from app.core.logging import analysis_logger
+from app.core.app_logging import analysis_logger
 from app.models.video import AnalysisTask, Video
 from app.services.analysis_service import AnalysisService
 from app.tasks.celery_app import celery_app

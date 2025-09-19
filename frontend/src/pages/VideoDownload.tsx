@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DownloadTask } from '../types';
 import { detectPlatform, isValidUrl, generateId } from '../utils';
 import { SUPPORTED_PLATFORMS } from '../config';
+import { videoDownloadApi, VideoInfo, SupportedPlatform } from '../services/videoDownloadApi';
+import { websocketService, TaskUpdateData, DownloadCompleteData, DownloadFailedData } from '../services/websocketService';
 
 const VideoDownload: React.FC = () => {
   const [videoUrl, setVideoUrl] = useState('');
@@ -23,10 +25,179 @@ const VideoDownload: React.FC = () => {
   const [activeTab, setActiveTab] = useState('info');
   const [notification, setNotification] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [settings, setSettings] = useState({
+    downloadPath: '~/Downloads',
+    maxConcurrent: 3,
+    notifications: true,
+    retryCount: 3
+  });
+  const [supportedPlatforms, setSupportedPlatforms] = useState<SupportedPlatform[]>([]);
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const formats = ['MP4', 'WebM', 'MKV', 'AVI', 'MOV'];
   const qualities = ['144p', '240p', '360p', '480p', '720p', '1080p', '2K', '4K'];
-
+  
+  // 加载支持的平台列表
+  useEffect(() => {
+    const loadSupportedPlatforms = async () => {
+      try {
+        const response = await videoDownloadApi.getSupportedPlatforms();
+        setSupportedPlatforms(response.platforms);
+      } catch (error) {
+        console.error('Failed to load supported platforms:', error);
+        // 使用默认平台列表作为备选
+        setSupportedPlatforms([
+          { name: 'douyin', display_name: '抖音', icon: 'fab fa-tiktok', color: 'text-red-500', supported_features: ['video', 'image'] },
+          { name: 'tiktok', display_name: 'TikTok', icon: 'fab fa-tiktok', color: 'text-black', supported_features: ['video'] },
+          { name: 'bilibili', display_name: 'B站', icon: 'fas fa-video', color: 'text-blue-500', supported_features: ['video'] },
+          { name: 'xiaohongshu', display_name: '小红书', icon: 'fas fa-book', color: 'text-pink-500', supported_features: ['video', 'image'] },
+          { name: 'kuaishou', display_name: '快手', icon: 'fas fa-play', color: 'text-yellow-500', supported_features: ['video'] },
+          { name: 'weixin', display_name: '微信视频号', icon: 'fab fa-weixin', color: 'text-green-500', supported_features: ['video'] }
+        ]);
+      }
+    };
+    
+    loadSupportedPlatforms();
+  }, []);
+  
+  // 单独的useEffect处理WebSocket连接
+  useEffect(() => {
+    // 初始化WebSocket连接
+    initWebSocket();
+    
+    // 清理函数
+    return () => {
+      websocketService.disconnect();
+    };
+  }, []); // 空依赖数组，只在组件挂载时执行一次
+  
+  // 获取当前用户信息（临时实现）
+  const getCurrentUser = () => {
+    // 临时模拟用户数据，实际应该从认证系统获取
+    // 使用现有的测试用户ID
+    return {
+      id: '2', // 使用现有测试用户的ID
+      username: 'testuser',
+      email: 'test@example.com'
+    };
+  };
+  
+  // 初始化WebSocket连接
+  const initWebSocket = async () => {
+    try {
+      // 获取当前用户信息
+      const user = getCurrentUser();
+      if (!user) {
+        console.warn('用户未登录，跳过WebSocket连接');
+        return;
+      }
+      
+      setCurrentUser(user);
+      
+      // 建立WebSocket连接
+      await websocketService.connect(user.id);
+      setWsConnected(true);
+      
+      // 设置事件监听器
+      setupWebSocketListeners();
+      
+    } catch (error) {
+      console.error('WebSocket连接失败:', error);
+      setWsConnected(false);
+      // WebSocket连接失败不应该阻止页面使用，继续使用轮询模式
+    }
+  };
+  
+  // 设置WebSocket事件监听器
+  const setupWebSocketListeners = () => {
+    // 连接建立
+    websocketService.on('connected', (data) => {
+      console.log('WebSocket连接已建立:', data);
+      setWsConnected(true);
+    });
+    
+    // 连接断开
+    websocketService.on('disconnected', (data) => {
+      console.log('WebSocket连接已断开:', data);
+      setWsConnected(false);
+    });
+    
+    // 任务更新
+    websocketService.on('task_update', (data: TaskUpdateData) => {
+      console.log('收到任务更新:', data);
+      
+      // 更新下载队列中的任务状态
+      setDownloadQueue(prev => prev.map(task => 
+        task.id === data.task_id ? {
+          ...task,
+          status: data.status as any,
+          progress: data.progress,
+          updated_at: data.updated_at
+        } : task
+      ));
+      
+      // 更新当前下载任务
+      if (currentDownload && currentDownload.id === data.task_id) {
+        setCurrentDownload({
+          ...currentDownload,
+          status: data.status as any,
+          progress: data.progress
+        });
+        setDownloadProgress(data.progress);
+      }
+    });
+    
+    // 下载完成
+    websocketService.on('download_complete', (data: DownloadCompleteData) => {
+      console.log('下载完成:', data);
+      
+      setNotification(`${data.title} 下载完成`);
+      
+      // 添加到历史记录
+      setHistory(prev => [{
+        id: data.task_id,
+        title: data.title,
+        platform: data.platform,
+        thumbnail: videoInfo?.thumbnail || '',
+        downloadTime: new Date(data.completed_at).toLocaleString(),
+        path: data.file_path
+      }, ...prev]);
+      
+      // 清除当前下载任务
+      if (currentDownload && currentDownload.id === data.task_id) {
+        setCurrentDownload(null);
+        setDownloadProgress(0);
+      }
+    });
+    
+    // 下载失败
+    websocketService.on('download_failed', (data: DownloadFailedData) => {
+      console.log('下载失败:', data);
+      
+      setNotification(`${data.title} 下载失败: ${data.error_message}`);
+      
+      // 清除当前下载任务
+      if (currentDownload && currentDownload.id === data.task_id) {
+        setCurrentDownload(null);
+        setDownloadProgress(0);
+      }
+    });
+    
+    // 订阅确认
+    websocketService.on('subscription_confirmed', (data) => {
+      console.log('任务订阅确认:', data);
+    });
+    
+    // 错误处理
+    websocketService.on('error', (data) => {
+      console.error('WebSocket错误:', data);
+      setNotification('WebSocket连接出现错误');
+    });
+  };
+  
   const parseVideo = async () => {
     if (!videoUrl) {
       setNotification('请输入视频链接');
@@ -43,50 +214,126 @@ const VideoDownload: React.FC = () => {
     setIsAnalyzing(true);
     setNotification(`正在解析 ${detectedPlatform} 视频...`);
 
-    // 模拟API请求
-    setTimeout(() => {
-      setVideoInfo({
-        title: '如何快速学会React开发 - 前端工程师必学框架',
-        subtitle: '详细讲解React核心概念和实战技巧',
-        author: {
-          name: '前端开发指南',
-          avatar: 'https://via.placeholder.com/40x40',
-          followers: '12.8万'
-        },
-        publishTime: '2023-05-15 14:30',
-        duration: '12:45',
-        views: '256.3万',
-        keywords: ['React', '前端开发', 'JavaScript', '教程'],
-        thumbnail: 'https://via.placeholder.com/320x180',
-        videoUrl: videoUrl
+    try {
+      const videoInfo = await videoDownloadApi.parseVideo({
+        url: videoUrl,
+        minimal: false
       });
+      
+      // 转换API响应为组件所需格式
+      setVideoInfo({
+        title: videoInfo.title,
+        subtitle: videoInfo.type === 'video' ? '视频内容' : '图片内容',
+        author: {
+          name: videoInfo.author.name,
+          avatar: videoInfo.author.avatar || 'https://via.placeholder.com/40x40',
+          followers: videoInfo.author.followers || '未知'
+        },
+        publishTime: videoInfo.create_time || videoInfo.publish_time || new Date().toISOString(),
+        duration: videoInfo.duration ? `${Math.floor(videoInfo.duration / 60)}:${(videoInfo.duration % 60).toString().padStart(2, '0')}` : '未知',
+        views: videoInfo.statistics?.play_count?.toString() || videoInfo.statistics?.views || '未知',
+        keywords: videoInfo.keywords || [videoInfo.platform],
+        thumbnail: videoInfo.thumbnail,
+        videoUrl: videoInfo.video_url || videoUrl,
+        platform: videoInfo.platform,
+        type: videoInfo.type,
+        images: videoInfo.images
+      });
+      
       setNotification('视频解析成功');
       setActiveTab('info');
+    } catch (error: any) {
+      console.error('Video parsing failed:', error);
+      setNotification(`解析失败: ${error.message || '未知错误'}`);
+    } finally {
       setIsAnalyzing(false);
-    }, 2000);
+    }
   };
 
-  const startDownload = () => {
+  const startDownload = async () => {
     if (!videoInfo) return;
 
-    const newDownload: DownloadTask = {
-      id: generateId(),
-      url: videoUrl,
-      title: videoInfo.title,
-      platform: platform as any,
-      status: 'pending',
-      progress: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
+    try {
+      setNotification('正在创建下载任务...');
+      
+      const response = await videoDownloadApi.createDownloadTask({
+        url: videoUrl,
+        format: downloadOptions.format.toLowerCase(),
+        quality: downloadOptions.quality,
+        download_video: downloadOptions.content.includes('video'),
+        download_audio: downloadOptions.content.includes('audio') || downloadOptions.content.includes('videoAndAudio'),
+        download_subtitles: downloadOptions.subtitles,
+        download_thumbnail: true
+      });
+      
+      const newDownload: DownloadTask = {
+        id: response.task_id,
+        url: videoUrl,
+        title: response.title,
+        platform: response.platform as any,
+        status: 'pending',
+        progress: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
 
-    setDownloadQueue([...downloadQueue, newDownload]);
-    setNotification('已添加到下载队列');
-
-    // 模拟下载过程
-    if (!currentDownload) {
-      processDownloadQueue([...downloadQueue, newDownload]);
+      setDownloadQueue([...downloadQueue, newDownload]);
+      setNotification('下载任务创建成功');
+      
+      // 订阅WebSocket任务更新
+      if (wsConnected) {
+        websocketService.subscribeTask(response.task_id);
+      } else {
+        // 如果WebSocket未连接，使用轮询方式监控进度
+        monitorDownloadProgress(response.task_id);
+      }
+      
+    } catch (error: any) {
+      console.error('Failed to create download task:', error);
+      setNotification(`创建下载任务失败: ${error.message || '未知错误'}`);
     }
+  };
+  
+  const monitorDownloadProgress = async (taskId: string) => {
+    const interval = setInterval(async () => {
+      try {
+        const task = await videoDownloadApi.getDownloadTask(taskId);
+        
+        // 更新队列中的任务状态
+        setDownloadQueue(prev => prev.map(t => 
+          t.id === taskId ? {
+            ...t,
+            status: task.status,
+            progress: task.progress,
+            updated_at: task.updated_at
+          } : t
+        ));
+        
+        // 如果任务完成或失败，停止监控
+        if (['completed', 'failed', 'cancelled'].includes(task.status)) {
+          clearInterval(interval);
+          
+          if (task.status === 'completed') {
+            setNotification(`${task.title} 下载完成`);
+            // 添加到历史记录
+            setHistory(prev => [{
+              id: task.id,
+              title: task.title,
+              platform: task.platform,
+              thumbnail: videoInfo?.thumbnail || '',
+              downloadTime: new Date().toLocaleString(),
+              path: task.file_path || ''
+            }, ...prev]);
+          } else if (task.status === 'failed') {
+            setNotification(`${task.title} 下载失败: ${task.error_message || '未知错误'}`);
+          }
+        }
+        
+      } catch (error) {
+        console.error('Failed to get task status:', error);
+        clearInterval(interval);
+      }
+    }, 1000);
   };
 
   const processDownloadQueue = (queue: DownloadTask[]) => {
@@ -137,33 +384,63 @@ const VideoDownload: React.FC = () => {
     }, 500);
   };
 
-  const handlePause = (id: string) => {
-    setDownloadQueue(downloadQueue.map(task =>
-      task.id === id ? { ...task, status: 'pending' } : task
-    ));
-    if (currentDownload && currentDownload.id === id) {
-      setCurrentDownload(null);
-      setDownloadProgress(0);
+  const handlePause = async (id: string) => {
+    try {
+      await videoDownloadApi.cancelDownloadTask(id);
+      setDownloadQueue(downloadQueue.map(task =>
+        task.id === id ? { ...task, status: 'cancelled' } : task
+      ));
+      setNotification('任务已暂停');
+    } catch (error: any) {
+      console.error('Failed to pause task:', error);
+      setNotification(`暂停失败: ${error.message || '未知错误'}`);
     }
-    setNotification('下载已暂停');
   };
 
-  const handleDelete = (id: string) => {
-    const newQueue = downloadQueue.filter(task => task.id !== id);
-    setDownloadQueue(newQueue);
-    if (currentDownload && currentDownload.id === id) {
-      setCurrentDownload(null);
-      setDownloadProgress(0);
+  const handleResume = async (id: string) => {
+    try {
+      await videoDownloadApi.retryDownloadTask(id);
+      setDownloadQueue(downloadQueue.map(task =>
+        task.id === id ? { ...task, status: 'pending', progress: 0 } : task
+      ));
+      // 重新开始监控进度
+      monitorDownloadProgress(id);
+      setNotification('任务已恢复');
+    } catch (error: any) {
+      console.error('Failed to resume task:', error);
+      setNotification(`恢复失败: ${error.message || '未知错误'}`);
     }
-    setNotification('任务已删除');
   };
 
-  const handleRetry = (id: string) => {
-    setDownloadQueue(downloadQueue.map(task =>
-      task.id === id ? { ...task, status: 'pending', progress: 0 } : task
-    ));
-    processDownloadQueue(downloadQueue);
-    setNotification('任务已重新开始');
+  const handleDelete = async (id: string) => {
+    try {
+      await videoDownloadApi.deleteDownloadTask(id);
+      const newQueue = downloadQueue.filter(task => task.id !== id);
+      setDownloadQueue(newQueue);
+      if (currentDownload && currentDownload.id === id) {
+        setCurrentDownload(null);
+        setDownloadProgress(0);
+      }
+      setNotification('任务已删除');
+    } catch (error: any) {
+      console.error('Failed to delete task:', error);
+      setNotification(`删除失败: ${error.message || '未知错误'}`);
+    }
+  };
+
+  const handleRetry = async (id: string) => {
+    try {
+      await videoDownloadApi.retryDownloadTask(id);
+      setDownloadQueue(downloadQueue.map(task =>
+        task.id === id ? { ...task, status: 'pending', progress: 0 } : task
+      ));
+      // 重新开始监控进度
+      monitorDownloadProgress(id);
+      setNotification('任务已重新开始');
+    } catch (error: any) {
+      console.error('Failed to retry task:', error);
+      setNotification(`重试失败: ${error.message || '未知错误'}`);
+    }
   };
 
   const handlePaste = async () => {
@@ -185,7 +462,22 @@ const VideoDownload: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-800">视频下载助手</h1>
+        <div className="flex items-center space-x-4">
+          <h1 className="text-2xl font-bold text-gray-800">视频下载助手</h1>
+          
+          {/* WebSocket连接状态指示器 */}
+          <div className="flex items-center space-x-2">
+            <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            <span className={`text-sm ${wsConnected ? 'text-green-600' : 'text-red-600'}`}>
+              {wsConnected ? '实时连接' : '离线模式'}
+            </span>
+            {currentUser && (
+              <span className="text-sm text-gray-500 ml-2">
+                用户: {currentUser.username}
+              </span>
+            )}
+          </div>
+        </div>
         <div className="text-sm text-gray-500">
           支持平台：抖音、快手、B站、小红书、视频号、TikTok等
         </div>
@@ -252,15 +544,15 @@ const VideoDownload: React.FC = () => {
         
         {/* 平台图标 */}
         <div className="flex justify-center space-x-4">
-          {SUPPORTED_PLATFORMS.map((p) => (
+          {supportedPlatforms.map((p) => (
             <div
-              key={p.key}
+              key={p.name}
               className={`flex flex-col items-center p-2 rounded-lg transition-colors ${
                 platform === p.name ? 'bg-blue-100' : 'hover:bg-gray-100'
               }`}
             >
-              <i className={`${p.icon} text-2xl mb-1`} style={{ color: p.color }}></i>
-              <span className="text-xs">{p.name}</span>
+              <i className={`${p.icon} ${p.color} text-2xl mb-1`}></i>
+              <span className="text-xs">{p.display_name}</span>
             </div>
           ))}
         </div>

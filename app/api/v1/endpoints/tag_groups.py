@@ -17,7 +17,7 @@ from app.schemas.tag_group import (
     TagCreate, TagUpdate, TagResponse, BatchTagOperation, TagGroupSearchParams
 )
 from app.schemas.common import ResponseModel, PaginatedResponse
-from app.core.logging import api_logger
+from app.core.app_logging import api_logger
 
 router = APIRouter()
 

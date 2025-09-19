@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 from app.core.database import engine
-from app.core.logging import app_logger
+from app.core.app_logging import app_logger
 from app.models.video import DownloadTask, AnalysisTask, Video
 from app.tasks.celery_app import celery_app
 

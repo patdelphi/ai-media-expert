@@ -1,0 +1,10 @@
+{
+  "id": "migration_20250919_103313",
+  "name": "add_user_preferences",
+  "description": "添加用户偏好设置表",
+  "version": "2025.09.19.103313",
+  "sql_up": "",
+  "sql_down": "",
+  "created_at": "2025-09-19T10:33:13.351499",
+  "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+}

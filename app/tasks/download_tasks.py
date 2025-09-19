@@ -11,7 +11,7 @@ from celery import current_task
 from sqlalchemy.orm import sessionmaker
 
 from app.core.database import engine
-from app.core.logging import download_logger
+from app.core.app_logging import download_logger
 from app.models.video import DownloadTask, Video
 from app.services.download_service import DownloadService
 from app.tasks.celery_app import celery_app

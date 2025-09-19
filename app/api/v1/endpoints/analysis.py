@@ -14,7 +14,7 @@ from app.models.user import User
 from app.models.video import AnalysisTask, Video
 from app.schemas.common import PaginatedResponse, PaginationParams, ResponseModel
 from app.schemas.video import AnalysisTaskCreate, AnalysisTaskResponse
-from app.core.logging import analysis_logger
+from app.core.app_logging import analysis_logger
 
 router = APIRouter()
 

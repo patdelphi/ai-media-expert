@@ -55,6 +55,25 @@ class Video(BaseModel):
     status = Column(String(20), default="active", nullable=False)  # active, deleted, processing, uploaded, analyzed
     is_analyzed = Column(Boolean, default=False, nullable=False)
     
+    # 上传相关字段
+    upload_status = Column(String(20), default="pending", nullable=False)  # pending, uploading, completed, failed, cancelled
+    upload_progress = Column(Float, default=0.0, nullable=False)  # 上传进度 0-100
+    upload_speed = Column(Float, nullable=True)  # 上传速度 bytes/s
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # 上传用户ID
+    upload_error = Column(Text, nullable=True)  # 上传错误信息
+    chunk_size = Column(Integer, nullable=True)  # 分片大小
+    total_chunks = Column(Integer, nullable=True)  # 总分片数
+    uploaded_chunks = Column(Integer, default=0, nullable=False)  # 已上传分片数
+    upload_session_id = Column(String(255), nullable=True)  # 上传会话ID
+    
+    # 视频技术信息扩展
+    audio_codec = Column(String(20), nullable=True)  # 音频编码格式
+    video_codec = Column(String(20), nullable=True)  # 视频编码格式
+    audio_bitrate = Column(Integer, nullable=True)  # 音频比特率
+    video_bitrate = Column(Integer, nullable=True)  # 视频比特率
+    thumbnail_path = Column(Text, nullable=True)  # 缩略图路径
+    preview_images = Column(JSON, nullable=True, default=list)  # 预览图片列表
+    
     # 元数据
     extra_metadata = Column(JSON, nullable=True, default=dict)  # 额外的元数据信息
     
@@ -62,6 +81,8 @@ class Video(BaseModel):
     download_tasks = relationship("DownloadTask", back_populates="video")
     analysis_tasks = relationship("AnalysisTask", back_populates="video")
     video_tags = relationship("VideoTag", back_populates="video")
+    user = relationship("User", back_populates="videos", foreign_keys=[uploaded_by])
+    uploader = relationship("User", foreign_keys=[uploaded_by])
     
     def __repr__(self):
         return f"<Video(id={self.id}, title='{self.title[:50]}...', platform='{self.platform}')>"
@@ -93,6 +114,21 @@ class Video(BaseModel):
             "share_count": self.share_count,
             "status": self.status,
             "is_analyzed": self.is_analyzed,
+            "upload_status": self.upload_status,
+            "upload_progress": self.upload_progress,
+            "upload_speed": self.upload_speed,
+            "uploaded_by": self.uploaded_by,
+            "upload_error": self.upload_error,
+            "chunk_size": self.chunk_size,
+            "total_chunks": self.total_chunks,
+            "uploaded_chunks": self.uploaded_chunks,
+            "upload_session_id": self.upload_session_id,
+            "audio_codec": self.audio_codec,
+            "video_codec": self.video_codec,
+            "audio_bitrate": self.audio_bitrate,
+            "video_bitrate": self.video_bitrate,
+            "thumbnail_path": self.thumbnail_path,
+            "preview_images": self.preview_images,
             "extra_metadata": self.extra_metadata,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -136,6 +172,7 @@ class DownloadTask(BaseModel):
     
     # 关联关系
     user = relationship("User", back_populates="download_tasks")
+    history_record = relationship("DownloadHistory", back_populates="task", uselist=False)
     video = relationship("Video", back_populates="download_tasks")
     
     def __repr__(self):

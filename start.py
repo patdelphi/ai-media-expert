@@ -1,195 +1,319 @@
 #!/usr/bin/env python3
 """AI新媒体专家系统启动脚本
 
-提供便捷的启动方式和环境检查。
+自动检查环境配置，初始化数据库，并启动应用服务。
 """
 
 import os
 import sys
-import subprocess
 import time
+import signal
+import subprocess
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+import logging
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# 添加项目根目录到Python路径
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
+
+# 导入数据库管理器
+try:
+    from app.core.db_manager import ensure_database_ready
+    from app.core.config import settings
+except ImportError as e:
+    print(f"❌ 导入模块失败: {e}")
+    print("请确保已安装所有依赖: pip install -r requirements.txt")
+    sys.exit(1)
 
 
-def check_python_version():
-    """检查Python版本"""
-    if sys.version_info < (3, 8):
-        print("❌ 错误: 需要Python 3.8或更高版本")
-        print(f"当前版本: {sys.version}")
-        sys.exit(1)
-    else:
-        print(f"✅ Python版本检查通过: {sys.version.split()[0]}")
-
-
-def check_dependencies():
-    """检查依赖包"""
-    required_packages = {
-        'fastapi': 'fastapi',
-        'uvicorn': 'uvicorn', 
-        'gradio': 'gradio', 
-        'sqlalchemy': 'sqlalchemy',
-        'celery': 'celery', 
-        'redis': 'redis', 
-        'yt-dlp': 'yt_dlp', 
-        'opencv-python': 'cv2'
-    }
+class ServiceManager:
+    """服务管理器"""
     
-    missing_packages = []
+    def __init__(self):
+        self.processes = {}
+        self.running = False
     
-    for package_name, import_name in required_packages.items():
-        try:
-            __import__(import_name)
-            print(f"✅ {package_name}")
-        except ImportError:
-            missing_packages.append(package_name)
-            print(f"❌ {package_name} (未安装)")
-    
-    if missing_packages:
-        print(f"\n❌ 缺少依赖包: {', '.join(missing_packages)}")
-        print("请运行以下命令安装依赖:")
-        print("pip install -e .")
-        return False
-    
-    return True
-
-
-def check_environment():
-    """检查环境配置"""
-    env_file = Path(".env")
-    if not env_file.exists():
-        print("❌ 未找到.env配置文件")
-        print("请复制.env.example为.env并配置相关参数")
-        return False
-    
-    print("✅ 环境配置文件存在")
-    return True
-
-
-def create_directories():
-    """创建必要的目录"""
-    directories = [
-        "uploads", "downloads", "models", "logs"
-    ]
-    
-    for directory in directories:
-        Path(directory).mkdir(exist_ok=True)
-        print(f"✅ 目录创建: {directory}")
-
-
-def check_redis():
-    """检查Redis连接"""
-    try:
-        import redis
-        r = redis.Redis(host='localhost', port=6379, db=0)
-        r.ping()
-        print("✅ Redis连接正常")
+    def check_environment(self):
+        """检查环境配置"""
+        print("🔍 检查环境配置...")
+        
+        # 检查.env文件
+        env_file = Path(".env")
+        if not env_file.exists():
+            print("❌ 未找到.env配置文件")
+            print("请复制.env.example为.env并配置相关参数")
+            return False
+        
+        print("✅ 环境配置检查通过")
         return True
-    except Exception as e:
-        print(f"❌ Redis连接失败: {e}")
-        print("请确保Redis服务已启动")
-        return False
-
-
-def start_celery_worker():
-    """启动Celery Worker"""
-    print("🚀 启动Celery Worker...")
     
-    cmd = [
-        sys.executable, "-m", "celery", 
-        "-A", "app.tasks.celery_app", 
-        "worker", 
-        "--loglevel=info",
-        "--pool=solo" if os.name == 'nt' else "--pool=prefork"
-    ]
+    def setup_database(self):
+        """设置数据库"""
+        print("🗄️  检查数据库配置...")
+        
+        try:
+            if ensure_database_ready():
+                print("✅ 数据库配置完成")
+                return True
+            else:
+                print("❌ 数据库配置失败")
+                return False
+        except Exception as e:
+            print(f"❌ 数据库配置错误: {e}")
+            logger.exception("数据库配置失败")
+            return False
     
-    try:
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+    def start_backend(self):
+        """启动后端服务"""
+        print("🚀 启动后端服务...")
         
-        # 等待一下确保启动
-        time.sleep(2)
-        
-        if process.poll() is None:
-            print("✅ Celery Worker启动成功")
-            return process
-        else:
-            stdout, stderr = process.communicate()
-            print(f"❌ Celery Worker启动失败")
-            print(f"错误信息: {stderr}")
-            return None
+        try:
+            cmd = [
+                sys.executable, "-m", "uvicorn", 
+                "app.app:app", 
+                "--host", settings.host,
+                "--port", str(settings.port),
+                "--reload"
+            ]
             
-    except Exception as e:
-        print(f"❌ 启动Celery Worker失败: {e}")
-        return None
-
-
-def start_application():
-    """启动主应用"""
-    print("🚀 启动AI新媒体专家系统...")
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1
+            )
+            
+            self.processes['backend'] = process
+            print(f"✅ 后端服务已启动 (PID: {process.pid})")
+            print(f"   访问地址: http://{settings.host}:{settings.port}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ 启动后端服务失败: {e}")
+            return False
     
-    try:
-        # 导入并启动应用
-        from app.app import start_server
-        start_server()
+    def start_celery(self):
+        """启动Celery工作进程"""
+        print("⚡ 启动Celery工作进程...")
         
-    except KeyboardInterrupt:
-        print("\n👋 应用已停止")
-    except Exception as e:
-        print(f"❌ 应用启动失败: {e}")
-        sys.exit(1)
+        try:
+            cmd = [
+                sys.executable, "-m", "celery",
+                "-A", "app.tasks.celery_app",
+                "worker",
+                "--loglevel=info"
+            ]
+            
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1
+            )
+            
+            self.processes['celery'] = process
+            print(f"✅ Celery工作进程已启动 (PID: {process.pid})")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ 启动Celery工作进程失败: {e}")
+            return False
+    
+    def start_gradio(self):
+        """启动Gradio界面"""
+        print("🎨 启动Gradio界面...")
+        
+        try:
+            gradio_script = project_root / "app" / "ui" / "main_ui.py"
+            if not gradio_script.exists():
+                print("⚠️  Gradio界面脚本不存在，跳过启动")
+                return True
+            
+            cmd = [sys.executable, str(gradio_script)]
+            
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1
+            )
+            
+            self.processes['gradio'] = process
+            print(f"✅ Gradio界面已启动 (PID: {process.pid})")
+            print("   访问地址: http://localhost:7860")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ 启动Gradio界面失败: {e}")
+            return False
+    
+    def monitor_processes(self):
+        """监控进程状态"""
+        while self.running:
+            for name, process in list(self.processes.items()):
+                if process.poll() is not None:
+                    print(f"⚠️  {name} 进程已退出 (退出码: {process.returncode})")
+                    if process.returncode != 0:
+                        print(f"❌ {name} 进程异常退出")
+            
+            time.sleep(5)
+    
+    def stop_all(self):
+        """停止所有服务"""
+        print("\n🛑 正在停止所有服务...")
+        self.running = False
+        
+        for name, process in self.processes.items():
+            try:
+                print(f"停止 {name} 服务...")
+                process.terminate()
+                
+                # 等待进程结束
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    print(f"强制终止 {name} 服务...")
+                    process.kill()
+                    process.wait()
+                
+                print(f"✅ {name} 服务已停止")
+                
+            except Exception as e:
+                print(f"❌ 停止 {name} 服务失败: {e}")
+        
+        print("🎯 所有服务已停止")
+    
+    def start_all(self):
+        """启动所有服务"""
+        print("🎯 AI新媒体专家系统启动中...")
+        
+        # 1. 检查环境
+        if not self.check_environment():
+            return False
+        
+        # 2. 设置数据库
+        if not self.setup_database():
+            return False
+        
+        # 3. 启动服务
+        services_to_start = []
+        
+        # 询问用户要启动哪些服务
+        print("\n请选择要启动的服务:")
+        
+        try:
+            backend_choice = input("启动后端API服务? (Y/n): ").lower()
+        except EOFError:
+            backend_choice = 'y'
+        
+        if backend_choice != 'n':
+            services_to_start.append('backend')
+        
+        try:
+            celery_choice = input("启动Celery工作进程? (Y/n): ").lower()
+        except EOFError:
+            celery_choice = 'y'
+        
+        if celery_choice != 'n':
+            services_to_start.append('celery')
+        
+        try:
+            gradio_choice = input("启动Gradio界面? (y/N): ").lower()
+        except EOFError:
+            gradio_choice = 'n'
+        
+        if gradio_choice == 'y':
+            services_to_start.append('gradio')
+        
+        # 启动选定的服务
+        success_count = 0
+        
+        if 'backend' in services_to_start:
+            if self.start_backend():
+                success_count += 1
+            time.sleep(2)  # 等待后端启动
+        
+        if 'celery' in services_to_start:
+            if self.start_celery():
+                success_count += 1
+            time.sleep(2)
+        
+        if 'gradio' in services_to_start:
+            if self.start_gradio():
+                success_count += 1
+        
+        if success_count == len(services_to_start):
+            print(f"\n🎉 成功启动 {success_count} 个服务!")
+            print("\n📋 服务状态:")
+            for name, process in self.processes.items():
+                print(f"  {name}: 运行中 (PID: {process.pid})")
+            
+            print("\n💡 使用说明:")
+            if 'backend' in services_to_start:
+                print(f"  - API文档: http://{settings.host}:{settings.port}/docs")
+                print(f"  - 管理后台: http://{settings.host}:{settings.port}/admin")
+            if 'gradio' in services_to_start:
+                print("  - Gradio界面: http://localhost:7860")
+            
+            print("\n按 Ctrl+C 停止所有服务")
+            
+            self.running = True
+            
+            # 启动监控线程
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                monitor_future = executor.submit(self.monitor_processes)
+                
+                try:
+                    # 等待用户中断
+                    while self.running:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    pass
+                finally:
+                    self.stop_all()
+            
+            return True
+        else:
+            print(f"\n❌ 部分服务启动失败 ({success_count}/{len(services_to_start)})")
+            self.stop_all()
+            return False
+
+
+def signal_handler(signum, frame):
+    """信号处理器"""
+    print("\n\n收到停止信号，正在关闭服务...")
+    sys.exit(0)
 
 
 def main():
     """主函数"""
-    print("🎬 AI新媒体专家系统启动检查")
-    print("=" * 50)
+    # 注册信号处理器
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     
-    # 环境检查
-    print("\n📋 检查Python版本...")
-    check_python_version()
-    
-    print("\n📦 检查依赖包...")
-    if not check_dependencies():
-        sys.exit(1)
-    
-    print("\n⚙️ 检查环境配置...")
-    if not check_environment():
-        sys.exit(1)
-    
-    print("\n📁 创建必要目录...")
-    create_directories()
-    
-    print("\n🔗 检查Redis连接...")
-    redis_ok = check_redis()
-    
-    if not redis_ok:
-        print("\n⚠️ Redis未连接，某些功能可能无法正常使用")
-        response = input("是否继续启动? (y/N): ")
-        if response.lower() != 'y':
-            sys.exit(1)
-    
-    print("\n" + "=" * 50)
-    print("✅ 环境检查完成，准备启动应用")
-    print("=" * 50)
-    
-    # 启动Celery Worker (如果Redis可用)
-    celery_process = None
-    if redis_ok:
-        celery_process = start_celery_worker()
+    manager = ServiceManager()
     
     try:
-        # 启动主应用
-        start_application()
-    finally:
-        # 清理Celery进程
-        if celery_process:
-            print("\n🛑 停止Celery Worker...")
-            celery_process.terminate()
-            celery_process.wait()
+        success = manager.start_all()
+        sys.exit(0 if success else 1)
+    except Exception as e:
+        print(f"❌ 启动失败: {e}")
+        logger.exception("应用启动失败")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

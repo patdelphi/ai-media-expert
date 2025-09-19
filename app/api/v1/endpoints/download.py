@@ -14,7 +14,7 @@ from app.models.user import User
 from app.models.video import DownloadTask
 from app.schemas.common import PaginatedResponse, PaginationParams, ResponseModel
 from app.schemas.video import DownloadTaskCreate, DownloadTaskResponse
-from app.core.logging import download_logger
+from app.core.app_logging import download_logger
 
 router = APIRouter()
 
