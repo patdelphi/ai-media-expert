@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频上传修复测试 - 最新版本</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: white;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        input[type="file"], input[type="text"] {
+            margin: 10px 0;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .status {
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .timestamp {
+            font-size: 0.8em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎬 视频上传修复测试 - 完整版</h1>
+    <div class="timestamp">测试时间: <span id="timestamp"></span></div>
+    
+    <div class="test-section">
+        <h2>1. 🔗 后端连接测试</h2>
+        <button onclick="testBackendConnection()">测试后端连接</button>
+        <div id="backend-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. 📤 最简上传API测试</h2>
+        <input type="file" id="testFile" accept="*/*">
+        <button onclick="testMinimalUpload()" id="uploadBtn1">测试最简上传</button>
+        <div id="upload-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. 📋 带参数上传测试</h2>
+        <input type="file" id="testFileWithParams" accept="*/*">
+        <input type="text" id="titleInput" placeholder="视频标题" value="测试视频">
+        <input type="text" id="descInput" placeholder="视频描述" value="这是一个测试视频">
+        <button onclick="testUploadWithParams()" id="uploadBtn2">测试带参数上传</button>
+        <div id="params-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. 🎥 视频文件上传测试</h2>
+        <input type="file" id="videoFile" accept="video/*">
+        <button onclick="testVideoUpload()" id="uploadBtn3">测试视频上传</button>
+        <div id="video-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. 📊 系统状态</h2>
+        <div class="status">
+            <div>前端服务: <span id="frontend-status">检测中...</span></div>
+            <div>后端服务: <span id="backend-status">检测中...</span></div>
+            <div>API版本: <span id="api-version">检测中...</span></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/v1';
+        
+        // 更新时间戳
+        document.getElementById('timestamp').textContent = new Date().toLocaleString();
+        
+        function setResult(elementId, className, message) {
+            const element = document.getElementById(elementId);
+            element.className = `result ${className}`;
+            element.textContent = message;
+        }
+        
+        function setStatus(elementId, status, isGood = true) {
+            const element = document.getElementById(elementId);
+            element.textContent = status;
+            element.style.color = isGood ? '#28a745' : '#dc3545';
+        }
+        
+        async function testBackendConnection() {
+            try {
+                const response = await fetch(`${API_BASE}/minimal/health`, {
+                    method: 'GET',
+                    cache: 'no-cache'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    setResult('backend-result', 'success', 
+                        `✅ 后端连接正常\n状态码: ${response.status}\n响应: ${JSON.stringify(data, null, 2)}`);
+                    setStatus('backend-status', '✅ 正常');
+                } else {
+                    setResult('backend-result', 'error', 
+                        `❌ 后端连接失败\n状态码: ${response.status}\n状态文本: ${response.statusText}`);
+                    setStatus('backend-status', '❌ 异常', false);
+                }
+            } catch (error) {
+                setResult('backend-result', 'error', `❌ 连接错误: ${error.message}`);
+                setStatus('backend-status', '❌ 离线', false);
+            }
+        }
+        
+        async function testMinimalUpload() {
+            const fileInput = document.getElementById('testFile');
+            const btn = document.getElementById('uploadBtn1');
+            
+            if (!fileInput.files[0]) {
+                setResult('upload-result', 'error', '❌ 请先选择一个文件');
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.textContent = '上传中...';
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            
+            try {
+                setResult('upload-result', 'info', '⏳ 上传中...');
+                
+                const response = await fetch(`${API_BASE}/minimal/upload`, {
+                    method: 'POST',
+                    body: formData,
+                    cache: 'no-cache'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    setResult('upload-result', 'success', 
+                        `✅ 上传成功\n状态码: ${response.status}\n响应: ${JSON.stringify(data, null, 2)}`);
+                } else {
+                    setResult('upload-result', 'error', 
+                        `❌ 上传失败\n状态码: ${response.status}\n响应: ${JSON.stringify(data, null, 2)}`);
+                }
+            } catch (error) {
+                setResult('upload-result', 'error', `❌ 上传错误: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '测试最简上传';
+            }
+        }
+        
+        async function testUploadWithParams() {
+            const fileInput = document.getElementById('testFileWithParams');
+            const title = document.getElementById('titleInput').value;
+            const description = document.getElementById('descInput').value;
+            const btn = document.getElementById('uploadBtn2');
+            
+            if (!fileInput.files[0]) {
+                setResult('params-result', 'error', '❌ 请先选择一个文件');
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.textContent = '上传中...';
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('title', title);
+            formData.append('description', description);
+            
+            try {
+                setResult('params-result', 'info', '⏳ 带参数上传中...');
+                
+                const response = await fetch(`${API_BASE}/minimal/upload`, {
+                    method: 'POST',
+                    body: formData,
+                    cache: 'no-cache'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    setResult('params-result', 'success', 
+                        `✅ 带参数上传成功\n状态码: ${response.status}\n响应: ${JSON.stringify(data, null, 2)}`);
+                } else {
+                    setResult('params-result', 'error', 
+                        `❌ 带参数上传失败\n状态码: ${response.status}\n响应: ${JSON.stringify(data, null, 2)}`);
+                }
+            } catch (error) {
+                setResult('params-result', 'error', `❌ 上传错误: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '测试带参数上传';
+            }
+        }
+        
+        async function testVideoUpload() {
+            const fileInput = document.getElementById('videoFile');
+            const btn = document.getElementById('uploadBtn3');
+            
+            if (!fileInput.files[0]) {
+                setResult('video-result', 'error', '❌ 请先选择一个视频文件');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            if (!file.type.startsWith('video/')) {
+                setResult('video-result', 'error', '❌ 请选择视频文件');
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.textContent = '上传中...';
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('title', file.name);
+            formData.append('description', '视频上传测试');
+            
+            try {
+                setResult('video-result', 'info', `⏳ 视频上传中...\n文件名: ${file.name}\n文件大小: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+                
+                const response = await fetch(`${API_BASE}/minimal/upload`, {
+                    method: 'POST',
+                    body: formData,
+                    cache: 'no-cache'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    setResult('video-result', 'success', 
+                        `✅ 视频上传成功\n状态码: ${response.status}\n响应: ${JSON.stringify(data, null, 2)}`);
+                } else {
+                    setResult('video-result', 'error', 
+                        `❌ 视频上传失败\n状态码: ${response.status}\n响应: ${JSON.stringify(data, null, 2)}`);
+                }
+            } catch (error) {
+                setResult('video-result', 'error', `❌ 视频上传错误: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '测试视频上传';
+            }
+        }
+        
+        // 页面加载时自动检测系统状态
+        window.onload = async function() {
+            // 检测前端服务
+            setStatus('frontend-status', '✅ 正常 (localhost:3001)');
+            
+            // 检测后端服务
+            await testBackendConnection();
+            
+            // 检测API版本
+            try {
+                const response = await fetch(`${API_BASE}/minimal/health`);
+                if (response.ok) {
+                    setStatus('api-version', 'v1.0 (最新)');
+                } else {
+                    setStatus('api-version', '未知', false);
+                }
+            } catch {
+                setStatus('api-version', '无法检测', false);
+            }
+        };
+        
+        // 添加拖拽上传功能
+        ['testFile', 'testFileWithParams', 'videoFile'].forEach(id => {
+            const element = document.getElementById(id);
+            element.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                element.style.backgroundColor = '#e3f2fd';
+            });
+            element.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                element.style.backgroundColor = '';
+            });
+            element.addEventListener('drop', (e) => {
+                e.preventDefault();
+                element.style.backgroundColor = '';
+                if (e.dataTransfer.files.length > 0) {
+                    element.files = e.dataTransfer.files;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

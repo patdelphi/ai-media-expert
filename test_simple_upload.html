@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>简单上传测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        button { padding: 10px 20px; margin: 5px; }
+        .result { margin: 10px 0; padding: 10px; background: #f5f5f5; }
+        .error { background: #ffebee; color: #c62828; }
+        .success { background: #e8f5e8; color: #2e7d32; }
+        input[type="file"] { margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>简单视频上传测试</h1>
+    
+    <div class="test-section">
+        <h3>1. 认证测试</h3>
+        <button onclick="testAuth()">测试认证状态</button>
+        <div id="auth-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>2. 简单上传测试</h3>
+        <input type="file" id="test-file" accept="video/*">
+        <br>
+        <button onclick="testSimpleUpload()">测试简单上传</button>
+        <div id="upload-result" class="result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/v1';
+        
+        async function testAuth() {
+            const result = document.getElementById('auth-result');
+            try {
+                const token = localStorage.getItem('access_token');
+                if (!token) {
+                    result.className = 'result error';
+                    result.textContent = '❌ 未找到认证令牌，请先登录';
+                    return;
+                }
+                
+                const response = await fetch(`${API_BASE}/auth/me`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    result.className = 'result success';
+                    result.textContent = `✅ 认证成功，用户: ${data.data.username}`;
+                } else {
+                    result.className = 'result error';
+                    result.textContent = `❌ 认证失败: ${response.status}`;
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = `❌ 认证错误: ${error.message}`;
+            }
+        }
+        
+        async function testSimpleUpload() {
+            const result = document.getElementById('upload-result');
+            const fileInput = document.getElementById('test-file');
+            
+            if (!fileInput.files[0]) {
+                result.className = 'result error';
+                result.textContent = '❌ 请选择一个视频文件';
+                return;
+            }
+            
+            try {
+                const token = localStorage.getItem('access_token');
+                if (!token) {
+                    result.className = 'result error';
+                    result.textContent = '❌ 请先登录';
+                    return;
+                }
+                
+                const file = fileInput.files[0];
+                
+                result.className = 'result';
+                result.textContent = '⏳ 正在上传...';
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('title', file.name);
+                formData.append('description', '测试上传');
+                
+                console.log('上传文件:', file.name, '大小:', file.size);
+                
+                const response = await fetch(`${API_BASE}/simple-upload/simple`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+                
+                console.log('响应状态:', response.status);
+                const data = await response.json();
+                console.log('响应数据:', data);
+                
+                if (response.ok && data.code === 200) {
+                    result.className = 'result success';
+                    result.textContent = `✅ 上传成功！视频ID: ${data.data.video_id}, 文件大小: ${data.data.file_size} 字节`;
+                } else {
+                    result.className = 'result error';
+                    result.textContent = `❌ 上传失败: ${data.detail || data.message || response.status}`;
+                }
+            } catch (error) {
+                console.error('上传错误:', error);
+                result.className = 'result error';
+                result.textContent = `❌ 上传错误: ${error.message}`;
+            }
+        }
+        
+        // 页面加载时自动测试认证
+        window.onload = function() {
+            testAuth();
+        };
+    </script>
+</body>
+</html>
