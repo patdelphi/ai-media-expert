@@ -14,7 +14,11 @@ import time
 from pathlib import Path
 from typing import Optional, Tuple
 
+<<<<<<< HEAD
 from app.core.app_logging import api_logger
+=======
+from app.core.logging import api_logger
+>>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
 
 
 class VideoBase64Encoder:

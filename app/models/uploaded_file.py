@@ -3,12 +3,8 @@
 存储上传文件的元数据信息，包括原始文件名和实际存储文件名的映射。
 """
 
-<<<<<<< HEAD
 from sqlalchemy import Column, Integer, String, DateTime, BigInteger, ForeignKey
 from sqlalchemy.orm import relationship
-=======
-from sqlalchemy import Column, Integer, String, DateTime, BigInteger
->>>>>>> ad3f17f (feat: 完善视频上传功能 - 修复时长格式化、上传时间显示、移除时间编辑按钮)
 from sqlalchemy.sql import func
 from app.core.database import Base
 
@@ -18,10 +14,7 @@ class UploadedFile(Base):
     __tablename__ = "uploaded_files"
 
     id = Column(Integer, primary_key=True, index=True)
-<<<<<<< HEAD
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-=======
->>>>>>> ad3f17f (feat: 完善视频上传功能 - 修复时长格式化、上传时间显示、移除时间编辑按钮)
     original_filename = Column(String(255), nullable=False, comment="原始文件名")
     saved_filename = Column(String(255), nullable=False, unique=True, comment="保存的文件名")
     file_size = Column(BigInteger, nullable=False, comment="文件大小（字节）")
@@ -72,12 +65,8 @@ class UploadedFile(Base):
     # 系统时间戳
     file_created_at = Column(DateTime(timezone=True), comment="文件原始生成时间")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="上传时间")
-<<<<<<< HEAD
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), comment="记录更新时间")
     
     # 关联关系
     user = relationship("User", back_populates="uploaded_files")
     video_analyses = relationship("VideoAnalysis", back_populates="video_file", cascade="all, delete-orphan", lazy="dynamic")
-=======
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), comment="记录更新时间")
->>>>>>> ad3f17f (feat: 完善视频上传功能 - 修复时长格式化、上传时间显示、移除时间编辑按钮)

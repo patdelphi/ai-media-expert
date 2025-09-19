@@ -13,7 +13,11 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+<<<<<<< HEAD
 from app.core.app_logging import api_logger
+=======
+from app.core.logging import api_logger
+>>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
 from app.models.video import AIConfig
 from app.models.video_analysis import VideoAnalysis
 from app.utils.video_base64 import video_base64_encoder
@@ -297,7 +301,11 @@ class AIService:
                                     completion_tokens += len(content_chunk) // 4  # 粗略估算
                                     
                                     # 更新分析结果和实时统计
+<<<<<<< HEAD
                                     analysis.analysis_result = self._clean_response_content(full_content)
+=======
+                                    analysis.analysis_result = full_content
+>>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
                                     analysis.completion_tokens = completion_tokens
                                     analysis.total_tokens = analysis.prompt_tokens + completion_tokens
                                     
@@ -341,6 +349,7 @@ class AIService:
                 final_debug_info = {
                     "model": ai_config.model,
                     "provider": ai_config.provider,
+<<<<<<< HEAD
                     "api_config": {
                         "temperature": ai_config.temperature,
                         "max_tokens": ai_config.max_tokens,
@@ -365,6 +374,16 @@ class AIService:
                     },
                     "status": "completed",
                     "completion_reason": "stream_ended"
+=======
+                    "response_info": {
+                        "status_code": response.status_code,
+                        "content_length": len(full_content),
+                        "completion_tokens": completion_tokens
+                    },
+                    "status": "completed",
+                    "api_end_time": api_end_time.isoformat(),
+                    "total_duration": (api_end_time - analysis.api_call_time).total_seconds()
+>>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
                 }
                 
                 # 合并调试信息，保留之前的curl命令、api_url等重要信息
@@ -377,6 +396,7 @@ class AIService:
                         "curl_command": "调试信息在流式处理中丢失"
                     })
                     analysis.debug_info = final_debug_info
+<<<<<<< HEAD
                 
                 # 确保所有调试信息字段都被正确设置
                 analysis.model_name = ai_config.model
@@ -395,6 +415,8 @@ class AIService:
                     "estimated_cost": self._estimate_cost(ai_config.model, analysis.prompt_tokens + completion_tokens)
                 }
                 
+=======
+>>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
                 db.commit()
                 
                 api_logger.info(f"OpenAI API call completed successfully. Tokens: {analysis.total_tokens}")
@@ -471,7 +493,11 @@ class AIService:
                                     completion_tokens += len(content_chunk) // 4
                                     
                                     # 更新分析结果
+<<<<<<< HEAD
                                     analysis.analysis_result = self._clean_response_content(full_content)
+=======
+                                    analysis.analysis_result = full_content
+>>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
                                     analysis.completion_tokens = completion_tokens
                                     analysis.total_tokens = analysis.prompt_tokens + completion_tokens
                                     db.commit()
@@ -508,6 +534,7 @@ class AIService:
                 
                 api_logger.info(f"Anthropic API call completed successfully. Tokens: {analysis.total_tokens}")
     
+<<<<<<< HEAD
     def _clean_response_content(self, content: str) -> str:
         """清理响应内容中的标记符号
         
@@ -568,6 +595,8 @@ class AIService:
         # 计算成本
         return (total_tokens / 1000) * price_per_1k
     
+=======
+>>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
     def _prepare_video_content(self, analysis: VideoAnalysis) -> Optional[Dict[str, Any]]:
         """根据传输方式准备视频内容
         

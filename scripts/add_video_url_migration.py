@@ -11,7 +11,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import text
 from app.core.database import SessionLocal, engine
+<<<<<<< HEAD
 from app.core.app_logging import setup_logging
+=======
+from app.core.logging import setup_logging
+>>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
 
 def add_video_url_column():
     """添加video_url字段到video_analyses表"""

@@ -24,7 +24,10 @@ class VideoAnalysis(BaseModel):
     __tablename__ = "video_analyses"
     
     # 关联信息
+<<<<<<< HEAD
     user_id = Column(String, ForeignKey('users.id'), nullable=False, index=True)
+=======
+>>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
     video_file_id = Column(Integer, ForeignKey('uploaded_files.id'), nullable=False, index=True)
     template_id = Column(Integer, ForeignKey('prompt_templates.id'), nullable=True, index=True)
     
@@ -93,7 +96,10 @@ class VideoAnalysis(BaseModel):
     is_active = Column(Boolean, default=True, nullable=False, comment="是否有效")
     
     # 关联关系
+<<<<<<< HEAD
     user = relationship("User", back_populates="video_analyses")
+=======
+>>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
     video_file = relationship("UploadedFile", back_populates="video_analyses")
     template = relationship("PromptTemplate", back_populates="video_analyses")
     ai_config = relationship("AIConfig")

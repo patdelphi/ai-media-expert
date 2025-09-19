@@ -14,7 +14,11 @@ from sqlalchemy.orm import sessionmaker
 sys.path.append(str(Path(__file__).parent.parent))
 
 from app.core.database import SessionLocal
+<<<<<<< HEAD
 from app.core.app_logging import api_logger
+=======
+from app.core.logging import api_logger
+>>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
 
 def add_transmission_method_column():
     """添加transmission_method字段"""
