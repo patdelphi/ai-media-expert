@@ -1,4 +1,0 @@
-This is a test file for upload testing.
-It simulates a video file for API testing purposes.
-File size: small
-Content: text data for testing upload functionality.
