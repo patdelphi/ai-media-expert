@@ -13,11 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.core.config import settings
-<<<<<<< HEAD
-from app.core.app_logging import get_logger
-=======
-from app.core.logging import get_logger
->>>>>>> ad3f17f (feat: 完善视频上传功能 - 修复时长格式化、上传时间显示、移除时间编辑按钮)
+from app.core.app_logging import api_logger
 from app.models.user import User
 from app.models.video import Video
 from app.schemas.common import ResponseModel
@@ -25,9 +21,6 @@ from app.schemas.video_upload import UploadStatus
 
 # 创建路由器
 router = APIRouter()
-
-# 获取日志记录器
-api_logger = get_logger("api")
 
 # 上传目录配置
 UPLOAD_DIR = Path(settings.upload_dir) / "videos"

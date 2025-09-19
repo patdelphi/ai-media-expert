@@ -24,11 +24,7 @@ from app.schemas.video_upload import (
 )
 from app.schemas.common import ResponseModel
 from app.core.config import settings
-<<<<<<< HEAD
 from app.core.app_logging import api_logger
-=======
-from app.core.logging import api_logger
->>>>>>> ad3f17f (feat: 完善视频上传功能 - 修复时长格式化、上传时间显示、移除时间编辑按钮)
 from app.services.video_processing import VideoProcessingService
 
 router = APIRouter()

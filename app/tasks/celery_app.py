@@ -8,10 +8,11 @@ from celery import Celery
 from app.core.config import settings
 
 # 创建Celery应用实例
+# 使用内存broker替代Redis，避免Redis连接问题
 celery_app = Celery(
     "ai_media_expert",
-    broker=settings.celery_broker_url,
-    backend=settings.celery_result_backend,
+    broker="memory://",
+    backend="cache+memory://",
     include=[
         "app.tasks.download_tasks",
         "app.tasks.analysis_tasks",

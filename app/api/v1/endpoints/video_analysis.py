@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from app.api.deps import get_db
+from app.core.app_logging import api_logger
 from app.models.uploaded_file import UploadedFile
 from app.models.prompt_template import PromptTemplate
 from app.models.tag_group import TagGroup
@@ -28,11 +29,6 @@ from app.schemas.video_analysis import (
     VideoFileInfo
 )
 from app.schemas.common import ResponseModel, PaginatedResponse, PaginationParams
-<<<<<<< HEAD
-from app.core.app_logging import api_logger
-=======
-from app.core.logging import api_logger
->>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
 
 router = APIRouter()
 
@@ -297,12 +293,6 @@ def start_video_analysis(
             ai_config_id=request.ai_config_id,
             transmission_method=request.transmission_method or 'url',
             status="pending",
-<<<<<<< HEAD
-            progress=0,
-            user_id="anonymous"  # 临时设置为匿名用户，后续可集成用户认证
-=======
-            progress=0
->>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
         )
         
         db.add(analysis)
@@ -389,23 +379,6 @@ def get_analysis_result(
             processing_time=analysis.processing_time,
             token_usage=analysis.token_usage,
             cost_estimate=analysis.cost_estimate,
-<<<<<<< HEAD
-            # AI API调试信息
-            api_call_time=analysis.api_call_time,
-            api_response_time=analysis.api_response_time,
-            api_duration=analysis.api_duration,
-            prompt_tokens=analysis.prompt_tokens,
-            completion_tokens=analysis.completion_tokens,
-            total_tokens=analysis.total_tokens,
-            temperature=analysis.temperature,
-            max_tokens=analysis.max_tokens,
-            model_name=analysis.model_name,
-            api_provider=analysis.api_provider,
-            request_id=analysis.request_id,
-            debug_info=analysis.debug_info,
-            transmission_method=analysis.transmission_method,
-=======
->>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
             error_message=analysis.error_message,
             error_code=analysis.error_code,
             started_at=analysis.started_at,
@@ -452,6 +425,7 @@ def stream_analysis_result(
             import json
             import time
             from app.core.database import SessionLocal
+            from app.core.app_logging import api_logger
             
             # 创建新的数据库会话用于生成器
             stream_db = SessionLocal()
@@ -667,10 +641,6 @@ def get_analysis_history(
                 ai_config_id=analysis.ai_config_id,
                 status=analysis.status,
                 progress=analysis.progress,
-<<<<<<< HEAD
-                analysis_result=analysis.analysis_result,
-=======
->>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
                 result_summary=analysis.result_summary,
                 confidence_score=analysis.confidence_score,
                 processing_time=analysis.processing_time,
@@ -710,6 +680,7 @@ async def process_video_analysis(analysis_id: int, db: Session):
     import asyncio
     from datetime import datetime
     from app.services.ai_service import ai_service
+    from app.core.app_logging import api_logger
     
     try:
         # 获取解析任务

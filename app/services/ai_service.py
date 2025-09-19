@@ -13,11 +13,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-<<<<<<< HEAD
 from app.core.app_logging import api_logger
-=======
-from app.core.logging import api_logger
->>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
 from app.models.video import AIConfig
 from app.models.video_analysis import VideoAnalysis
 from app.utils.video_base64 import video_base64_encoder
@@ -301,11 +297,6 @@ class AIService:
                                     completion_tokens += len(content_chunk) // 4  # 粗略估算
                                     
                                     # 更新分析结果和实时统计
-<<<<<<< HEAD
-                                    analysis.analysis_result = self._clean_response_content(full_content)
-=======
-                                    analysis.analysis_result = full_content
->>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
                                     analysis.completion_tokens = completion_tokens
                                     analysis.total_tokens = analysis.prompt_tokens + completion_tokens
                                     
@@ -349,41 +340,6 @@ class AIService:
                 final_debug_info = {
                     "model": ai_config.model,
                     "provider": ai_config.provider,
-<<<<<<< HEAD
-                    "api_config": {
-                        "temperature": ai_config.temperature,
-                        "max_tokens": ai_config.max_tokens,
-                        "api_base": ai_config.api_base
-                    },
-                    "token_usage": {
-                        "prompt_tokens": analysis.prompt_tokens,
-                        "completion_tokens": completion_tokens,
-                        "total_tokens": analysis.prompt_tokens + completion_tokens
-                    },
-                    "response_info": {
-                        "status_code": response.status_code,
-                        "content_length": len(full_content),
-                        "response_headers": dict(response.headers)
-                    },
-                    "timing": {
-                        "api_call_time": analysis.api_call_time.isoformat(),
-                        "api_response_time": analysis.api_response_time.isoformat() if analysis.api_response_time else None,
-                        "api_end_time": api_end_time.isoformat(),
-                        "total_duration": (api_end_time - analysis.api_call_time).total_seconds(),
-                        "api_duration": analysis.api_duration
-                    },
-                    "status": "completed",
-                    "completion_reason": "stream_ended"
-=======
-                    "response_info": {
-                        "status_code": response.status_code,
-                        "content_length": len(full_content),
-                        "completion_tokens": completion_tokens
-                    },
-                    "status": "completed",
-                    "api_end_time": api_end_time.isoformat(),
-                    "total_duration": (api_end_time - analysis.api_call_time).total_seconds()
->>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
                 }
                 
                 # 合并调试信息，保留之前的curl命令、api_url等重要信息
@@ -396,27 +352,6 @@ class AIService:
                         "curl_command": "调试信息在流式处理中丢失"
                     })
                     analysis.debug_info = final_debug_info
-<<<<<<< HEAD
-                
-                # 确保所有调试信息字段都被正确设置
-                analysis.model_name = ai_config.model
-                analysis.api_provider = ai_config.provider
-                analysis.temperature = ai_config.temperature
-                analysis.max_tokens = ai_config.max_tokens
-                analysis.api_duration = (api_end_time - analysis.api_call_time).total_seconds()
-                analysis.processing_time = (api_end_time - analysis.api_call_time).total_seconds()
-                analysis.completed_at = api_end_time
-                
-                # 设置token使用统计
-                analysis.token_usage = {
-                    "prompt_tokens": analysis.prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": analysis.prompt_tokens + completion_tokens,
-                    "estimated_cost": self._estimate_cost(ai_config.model, analysis.prompt_tokens + completion_tokens)
-                }
-                
-=======
->>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
                 db.commit()
                 
                 api_logger.info(f"OpenAI API call completed successfully. Tokens: {analysis.total_tokens}")
@@ -493,11 +428,6 @@ class AIService:
                                     completion_tokens += len(content_chunk) // 4
                                     
                                     # 更新分析结果
-<<<<<<< HEAD
-                                    analysis.analysis_result = self._clean_response_content(full_content)
-=======
-                                    analysis.analysis_result = full_content
->>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
                                     analysis.completion_tokens = completion_tokens
                                     analysis.total_tokens = analysis.prompt_tokens + completion_tokens
                                     db.commit()
@@ -534,69 +464,6 @@ class AIService:
                 
                 api_logger.info(f"Anthropic API call completed successfully. Tokens: {analysis.total_tokens}")
     
-<<<<<<< HEAD
-    def _clean_response_content(self, content: str) -> str:
-        """清理响应内容中的标记符号
-        
-        Args:
-            content: 原始响应内容
-            
-        Returns:
-            清理后的内容
-        """
-        if not content:
-            return content
-            
-        # 移除常见的标记符号
-        markers_to_remove = [
-            "<|begin_of_box|>",
-            "<|end_of_box|>",
-            "<|box_start|>",
-            "<|box_end|>",
-            "<|start|>",
-            "<|end|>"
-        ]
-        
-        cleaned_content = content
-        for marker in markers_to_remove:
-            cleaned_content = cleaned_content.replace(marker, "")
-        
-        # 清理多余的空行
-        cleaned_content = "\n".join(line for line in cleaned_content.split("\n") if line.strip())
-        
-        return cleaned_content.strip()
-    
-    def _estimate_cost(self, model: str, total_tokens: int) -> float:
-        """估算API调用成本
-        
-        Args:
-            model: 模型名称
-            total_tokens: 总token数量
-            
-        Returns:
-            预估成本（美元）
-        """
-        # 基于不同模型的定价（每1K tokens的价格，美元）
-        pricing = {
-            "gpt-4": 0.03,
-            "gpt-4-turbo": 0.01,
-            "gpt-3.5-turbo": 0.002,
-            "glm-4": 0.001,  # 智谱AI GLM-4
-            "glm-4v": 0.002,  # GLM-4V视觉模型
-            "glm-4.5v": 0.002,  # GLM-4.5V
-            "claude-3-opus": 0.015,
-            "claude-3-sonnet": 0.003,
-            "claude-3-haiku": 0.00025
-        }
-        
-        # 获取模型价格，默认使用GPT-4价格
-        price_per_1k = pricing.get(model.lower(), 0.03)
-        
-        # 计算成本
-        return (total_tokens / 1000) * price_per_1k
-    
-=======
->>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
     def _prepare_video_content(self, analysis: VideoAnalysis) -> Optional[Dict[str, Any]]:
         """根据传输方式准备视频内容
         

@@ -10,12 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-<<<<<<< HEAD
-from app.core.app_logging import api_logger
-=======
-from app.core.logging import api_logger
->>>>>>> ad3f17f (feat: 完善视频上传功能 - 修复时长格式化、上传时间显示、移除时间编辑按钮)
 from app.core.config import settings
+from app.core.app_logging import api_logger
 
 
 class VideoMetadataExtractor:

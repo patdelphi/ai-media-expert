@@ -14,7 +14,7 @@ import numpy as np
 from PIL import Image
 
 from app.core.config import settings
-from app.core.app_logging import analysis_logger
+from app.core.app_logging import analysis_logger, api_logger
 from app.models.video import AnalysisTask, Video
 
 

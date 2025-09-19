@@ -71,10 +71,6 @@ class VideoAnalysisResponse(VideoAnalysisBase):
     api_provider: Optional[str] = None
     request_id: Optional[str] = None
     debug_info: Optional[Dict[str, Any]] = None
-<<<<<<< HEAD
-    transmission_method: Optional[str] = None
-=======
->>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
     error_message: Optional[str] = None
     error_code: Optional[str] = None
     started_at: Optional[datetime] = None
@@ -94,10 +90,6 @@ class VideoAnalysisListResponse(BaseModel):
     ai_config_id: int
     status: str
     progress: int
-<<<<<<< HEAD
-    analysis_result: Optional[str] = None
-=======
->>>>>>> bf58121 (feat: 优化视频分析流式输出和历史记录功能)
     result_summary: Optional[str] = None
     confidence_score: Optional[float] = None
     processing_time: Optional[float] = None

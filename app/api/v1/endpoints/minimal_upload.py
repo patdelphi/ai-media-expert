@@ -117,10 +117,6 @@ async def upload_file(
         
         # 保存文件信息到数据库
         db_file = UploadedFile(
-<<<<<<< HEAD
-            user_id="anonymous",  # 临时设置为匿名用户，后续可以集成用户认证
-=======
->>>>>>> ad3f17f (feat: 完善视频上传功能 - 修复时长格式化、上传时间显示、移除时间编辑按钮)
             original_filename=original_filename,
             saved_filename=saved_filename,
             file_size=file.size,
