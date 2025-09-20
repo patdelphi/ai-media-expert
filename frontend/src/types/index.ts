@@ -4,6 +4,8 @@ export interface ApiResponse<T = any> {
   data: T;
   message: string;
   code: number;
+  filename?: string; // 文件上传时返回的文件名
+  file_path?: string; // 文件上传时返回的文件路径
 }
 
 // 用户相关类型

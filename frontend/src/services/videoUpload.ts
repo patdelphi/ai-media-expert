@@ -213,7 +213,7 @@ class VideoUploadService {
       const response = await apiService.post('/minimal/upload', formData);
 
       // 检查响应格式 - 支持新旧两种格式
-      const isSuccess = response.success || response.filename;
+      const isSuccess = (response as any).success || (response as any).filename;
       
       if (isSuccess) {
         // 上传成功
@@ -226,8 +226,8 @@ class VideoUploadService {
         task.progress.uploadedChunks = 1;
         
         // 记录文件信息
-        if (response.file_path) {
-          console.log('文件已保存到:', response.file_path);
+        if ((response as any).file_path) {
+          console.log('文件已保存到:', (response as any).file_path);
         }
         
         this.updateTaskProgress(taskId);
@@ -249,7 +249,7 @@ class VideoUploadService {
     const task = this.uploadTasks.get(taskId);
     if (!task || !task.session) return;
 
-    const { session, file } = task;
+    const { session } = task; // 移除未使用的 file 变量
     const uploadPromises: Promise<void>[] = [];
 
     // 找出未上传的分片

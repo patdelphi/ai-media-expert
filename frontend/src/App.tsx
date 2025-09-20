@@ -3,7 +3,6 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import UserMenu from './components/UserMenu';
-import { MENU_CONFIG } from './config';
 import { BreadcrumbItem } from './types';
 
 // 页面组件导入
