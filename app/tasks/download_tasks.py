@@ -1,23 +1,26 @@
 """视频下载异步任务
 
-使用Celery实现视频下载的异步处理。
+使用Celery实现视频下载的异步处理，支持进度跟踪和错误处理。
 """
 
-import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Optional
+from pathlib import Path
+import asyncio
+import traceback
 
 from celery import current_task
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session
 
-from app.core.database import engine
-from app.core.app_logging import download_logger
-from app.models.video import DownloadTask, Video
-from app.services.download_service import DownloadService
 from app.tasks.celery_app import celery_app
+from app.core.database import SessionLocal
+from app.models.video import Video, DownloadTask
+from app.services.download_service import DownloadService
+from app.services.download_api_client import get_download_api_client
+from app.core.config import settings
+from app.core.app_logging import get_logger
 
-# 创建数据库会话
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+download_logger = get_logger("download_tasks")
 
 
 @celery_app.task(bind=True, name="download_video")
@@ -31,7 +34,6 @@ def download_video_task(self, task_id: int) -> Dict:
         任务执行结果
     """
     db = SessionLocal()
-    download_service = DownloadService()
     
     try:
         # 获取下载任务
@@ -52,280 +54,310 @@ def download_video_task(self, task_id: int) -> Dict:
             user_id=task.user_id
         )
         
-        # 进度回调函数
-        def progress_hook(d):
-            if d['status'] == 'downloading':
-                # 计算下载进度
-                if 'total_bytes' in d and d['total_bytes']:
-                    progress = int((d['downloaded_bytes'] / d['total_bytes']) * 100)
-                elif 'total_bytes_estimate' in d and d['total_bytes_estimate']:
-                    progress = int((d['downloaded_bytes'] / d['total_bytes_estimate']) * 100)
-                else:
-                    progress = task.progress + 1  # 增量更新
-                
-                # 限制进度范围
-                progress = min(max(progress, 0), 95)  # 下载完成后留5%给后处理
-                
-                # 更新任务进度
-                if progress != task.progress:
-                    task.progress = progress
-                    db.commit()
-                    
-                    # 更新Celery任务状态
-                    current_task.update_state(
-                        state='PROGRESS',
-                        meta={
-                            'current': progress,
-                            'total': 100,
-                            'status': f'Downloading... {progress}%'
-                        }
-                    )
-            
-            elif d['status'] == 'finished':
-                download_logger.info(
-                    "Download finished",
-                    task_id=task_id,
-                    filename=d.get('filename')
-                )
+        # 使用异步函数处理下载
+        result = asyncio.run(_download_video_async(task, db))
         
-        # 构建下载选项
-        download_options = {
-            'quality': task.quality,
-            'format_preference': task.format_preference,
-            'audio_only': task.audio_only,
-        }
-        
-        # 如果有额外选项，合并进去
-        if task.options:
-            download_options.update(task.options)
-        
-        # 执行下载
-        file_path, video_info = download_service.download_video(
-            task_id=task_id,
-            url=task.url,
-            options=download_options,
-            progress_callback=progress_hook
-        )
-        
-        # 创建或更新视频记录
-        video = create_or_update_video(db, video_info, task)
-        
-        # 更新任务状态为完成
-        task.status = "completed"
-        task.progress = 100
-        task.completed_at = datetime.utcnow()
-        task.video_id = video.id
-        task.file_path = file_path
-        task.error_message = None
-        db.commit()
-        
-        download_logger.info(
-            "Video download completed",
-            task_id=task_id,
-            video_id=video.id,
-            file_path=file_path
-        )
-        
-        return {
-            'status': 'completed',
-            'task_id': task_id,
-            'video_id': video.id,
-            'file_path': file_path,
-            'message': 'Video downloaded successfully'
-        }
+        return result
         
     except Exception as e:
-        error_msg = str(e)
-        download_logger.error(
-            "Video download failed",
-            task_id=task_id,
-            error=error_msg,
-            exc_info=True
-        )
-        
         # 更新任务状态为失败
-        if 'task' in locals():
+        task = db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
+        if task:
             task.status = "failed"
-            task.error_message = error_msg
-            task.retry_count += 1
+            task.error_message = str(e)
+            task.error_code = "TASK_ERROR"
+            task.completed_at = datetime.utcnow()
             db.commit()
         
-        # 如果还有重试次数，则重试
-        if hasattr(self, 'retry') and task.retry_count < task.max_retries:
-            download_logger.info(
-                "Retrying download task",
-                task_id=task_id,
-                retry_count=task.retry_count,
-                max_retries=task.max_retries
-            )
-            raise self.retry(countdown=60 * (task.retry_count + 1))  # 递增延迟
+        download_logger.error(
+            "Download task failed",
+            task_id=task_id,
+            error=str(e),
+            traceback=traceback.format_exc()
+        )
         
         return {
             'status': 'failed',
-            'task_id': task_id,
-            'error': error_msg,
-            'message': 'Video download failed'
+            'error': str(e),
+            'task_id': task_id
         }
-        
+    
     finally:
         db.close()
 
 
-def create_or_update_video(db, video_info: Dict, task: DownloadTask) -> Video:
-    """创建或更新视频记录
+async def _download_video_async(task: DownloadTask, db: Session) -> Dict:
+    """异步下载视频处理函数
     
     Args:
+        task: 下载任务对象
         db: 数据库会话
-        video_info: 视频信息
-        task: 下载任务
-    
+        
     Returns:
-        视频对象
+        Dict: 处理结果
     """
-    # 检查是否已存在相同的视频
-    existing_video = None
-    if video_info.get('video_id') and video_info.get('platform'):
-        existing_video = db.query(Video).filter(
-            Video.video_id == video_info['video_id'],
-            Video.platform == video_info['platform']
-        ).first()
+    download_service = None
     
-    if existing_video:
-        # 更新现有视频信息
-        video = existing_video
-        video.file_path = video_info.get('file_path', video.file_path)
-        video.file_size = video_info.get('file_size', video.file_size)
-        video.updated_at = datetime.utcnow()
-    else:
-        # 创建新视频记录
-        video = Video(
-            title=video_info.get('title', 'Unknown Title'),
-            description=video_info.get('description'),
-            file_path=video_info.get('file_path'),
-            file_size=video_info.get('file_size'),
-            duration=video_info.get('duration'),
-            resolution=video_info.get('resolution'),
-            format=video_info.get('ext', 'mp4'),
-            platform=video_info.get('platform'),
-            original_url=video_info.get('original_url'),
-            video_id=video_info.get('video_id'),
-            author=video_info.get('uploader'),
-            author_id=video_info.get('uploader_id'),
-            upload_date=video_info.get('upload_date'),
-            view_count=video_info.get('view_count', 0),
-            like_count=video_info.get('like_count', 0),
-            comment_count=video_info.get('comment_count', 0),
-            status="active",
-            metadata={
-                'thumbnail': video_info.get('thumbnail'),
-                'formats': video_info.get('formats', []),
-                'download_task_id': task.id
+    try:
+        # 初始化下载服务
+        download_service = DownloadService()
+        
+        # 处理下载任务
+        result = await download_service.process_download_task(task.id)
+        
+        # 刷新任务状态
+        db.refresh(task)
+        
+        if task.status == "completed":
+            download_logger.info(
+                "Video download completed successfully",
+                task_id=task.id,
+                file_path=task.file_path,
+                file_size=task.file_size
+            )
+            
+            return {
+                'status': 'completed',
+                'task_id': task.id,
+                'file_path': task.file_path,
+                'file_size': task.file_size,
+                'video_id': task.video_id
             }
+        else:
+            return {
+                'status': task.status,
+                'task_id': task.id,
+                'error': task.error_message,
+                'error_code': task.error_code
+            }
+            
+    except Exception as e:
+        # 更新任务状态为失败
+        task.status = "failed"
+        task.error_message = str(e)
+        task.error_code = "DOWNLOAD_ERROR"
+        task.completed_at = datetime.utcnow()
+        db.commit()
+        
+        download_logger.error(
+            "Download processing failed",
+            task_id=task.id,
+            error=str(e),
+            traceback=traceback.format_exc()
         )
-        db.add(video)
-    
-    db.commit()
-    db.refresh(video)
-    
-    return video
+        
+        return {
+            'status': 'failed',
+            'error': str(e),
+            'task_id': task.id
+        }
 
 
-@celery_app.task(name="batch_download_videos")
-def batch_download_videos_task(task_ids: list) -> Dict:
-    """批量下载视频任务
+@celery_app.task(bind=True, name="create_download_task")
+def create_download_task_async(self, url: str, user_id: int, priority: str = "normal") -> Dict:
+    """创建下载任务
     
     Args:
-        task_ids: 下载任务ID列表
-    
+        url: 视频URL
+        user_id: 用户ID
+        priority: 任务优先级
+        
     Returns:
-        批量任务执行结果
+        创建结果
     """
-    results = []
+    db = SessionLocal()
     
-    for task_id in task_ids:
-        try:
-            result = download_video_task.delay(task_id)
-            results.append({
-                'task_id': task_id,
-                'celery_task_id': result.id,
-                'status': 'queued'
-            })
-        except Exception as e:
-            results.append({
-                'task_id': task_id,
-                'status': 'failed',
-                'error': str(e)
-            })
+    try:
+        download_service = DownloadService()
+        
+        # 异步创建下载任务
+        result = asyncio.run(_create_download_task_async(download_service, url, user_id, priority, db))
+        
+        return result
+        
+    except Exception as e:
+        download_logger.error(
+            "Failed to create download task",
+            url=url,
+            user_id=user_id,
+            error=str(e)
+        )
+        
+        return {
+            'status': 'failed',
+            'error': str(e)
+        }
     
-    download_logger.info(
-        "Batch download tasks queued",
-        task_count=len(task_ids),
-        results=results
-    )
-    
-    return {
-        'status': 'queued',
-        'total_tasks': len(task_ids),
-        'results': results
-    }
+    finally:
+        db.close()
 
 
-@celery_app.task(name="cleanup_failed_downloads")
-def cleanup_failed_downloads_task() -> Dict:
-    """清理失败的下载任务
+async def _create_download_task_async(
+    download_service: DownloadService, 
+    url: str, 
+    user_id: int, 
+    priority: str,
+    db: Session
+) -> Dict:
+    """异步创建下载任务
     
-    删除失败任务产生的临时文件。
+    Args:
+        download_service: 下载服务实例
+        url: 视频URL
+        user_id: 用户ID
+        priority: 任务优先级
+        db: 数据库会话
+        
+    Returns:
+        创建结果
+    """
+    try:
+        # 提取视频信息
+        video_info = await download_service.extract_video_info(url)
+        
+        # 创建下载任务
+        task = await download_service.create_download_task(
+            url=url,
+            user_id=user_id,
+            priority=priority,
+            video_info=video_info
+        )
+        
+        download_logger.info(
+            "Download task created successfully",
+            task_id=task.id,
+            url=url,
+            user_id=user_id,
+            title=video_info.get('title', 'Unknown')
+        )
+        
+        return {
+            'status': 'created',
+            'task_id': task.id,
+            'video_info': video_info
+        }
+        
+    except Exception as e:
+        download_logger.error(
+            "Failed to create download task",
+            url=url,
+            user_id=user_id,
+            error=str(e)
+        )
+        
+        return {
+            'status': 'failed',
+            'error': str(e)
+        }
+
+
+@celery_app.task(name="cleanup_old_tasks")
+def cleanup_old_tasks() -> Dict:
+    """清理旧的下载任务
     
     Returns:
         清理结果
     """
     db = SessionLocal()
-    cleaned_count = 0
     
     try:
-        # 查找失败的任务
-        failed_tasks = db.query(DownloadTask).filter(
-            DownloadTask.status == "failed",
-            DownloadTask.file_path.isnot(None)
+        # 清理7天前的已完成任务
+        cutoff_date = datetime.utcnow() - timedelta(days=7)
+        
+        old_tasks = db.query(DownloadTask).filter(
+            DownloadTask.status.in_(["completed", "failed"]),
+            DownloadTask.completed_at < cutoff_date
         ).all()
         
-        for task in failed_tasks:
-            if task.file_path and os.path.exists(task.file_path):
+        cleaned_count = 0
+        for task in old_tasks:
+            # 删除文件（如果存在）
+            if task.file_path and Path(task.file_path).exists():
                 try:
-                    os.remove(task.file_path)
-                    task.file_path = None
-                    cleaned_count += 1
-                    download_logger.info(
-                        "Cleaned up failed download file",
-                        task_id=task.id,
-                        file_path=task.file_path
-                    )
-                except OSError as e:
+                    Path(task.file_path).unlink()
+                except Exception as e:
                     download_logger.warning(
-                        "Failed to clean up file",
-                        task_id=task.id,
+                        "Failed to delete file",
                         file_path=task.file_path,
                         error=str(e)
                     )
+            
+            # 删除任务记录
+            db.delete(task)
+            cleaned_count += 1
         
         db.commit()
         
+        download_logger.info(
+            "Cleaned up old download tasks",
+            cleaned_count=cleaned_count
+        )
+        
         return {
             'status': 'completed',
-            'cleaned_files': cleaned_count,
-            'message': f'Cleaned up {cleaned_count} failed download files'
+            'cleaned_count': cleaned_count
+        }
+        
+    except Exception as e:
+        db.rollback()
+        download_logger.error(
+            "Failed to cleanup old tasks",
+            error=str(e)
+        )
+        
+        return {
+            'status': 'failed',
+            'error': str(e)
+        }
+    
+    finally:
+        db.close()
+
+
+@celery_app.task(name="get_task_status")
+def get_task_status(task_id: int) -> Dict:
+    """获取任务状态
+    
+    Args:
+        task_id: 任务ID
+        
+    Returns:
+        任务状态信息
+    """
+    db = SessionLocal()
+    
+    try:
+        task = db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
+        
+        if not task:
+            return {
+                'status': 'not_found',
+                'error': f'Task {task_id} not found'
+            }
+        
+        return {
+            'status': task.status,
+            'progress': task.progress,
+            'file_size': task.file_size,
+            'downloaded_size': task.downloaded_size,
+            'download_speed': task.download_speed,
+            'eta': task.eta,
+            'error_message': task.error_message,
+            'error_code': task.error_code,
+            'started_at': task.started_at.isoformat() if task.started_at else None,
+            'completed_at': task.completed_at.isoformat() if task.completed_at else None
         }
         
     except Exception as e:
         download_logger.error(
-            "Failed to cleanup failed downloads",
-            error=str(e),
-            exc_info=True
+            "Failed to get task status",
+            task_id=task_id,
+            error=str(e)
         )
+        
         return {
-            'status': 'failed',
-            'error': str(e),
-            'message': 'Failed to cleanup failed downloads'
+            'status': 'error',
+            'error': str(e)
         }
     
     finally:

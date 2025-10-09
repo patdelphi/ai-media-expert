@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
-    BigInteger, Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, 
+    BigInteger, Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, 
     String, Text, JSON
 )
 from sqlalchemy.orm import relationship
@@ -144,8 +144,8 @@ class DownloadTask(BaseModel):
     
     # 任务信息
     url = Column(Text, nullable=False)
-    platform = Column(String(50), nullable=True)
-    status = Column(String(20), default="pending", nullable=False)  # pending, processing, completed, failed, cancelled
+    platform = Column(String(50), nullable=True, index=True)  # 添加索引以支持按平台筛选
+    status = Column(String(20), default="pending", nullable=False, index=True)  # 添加索引以支持按状态筛选
     progress = Column(Integer, default=0, nullable=False)  # 0-100
     
     # 下载配置
@@ -156,16 +156,22 @@ class DownloadTask(BaseModel):
     # 结果信息
     video_id = Column(Integer, ForeignKey("videos.id"), nullable=True, index=True)
     file_path = Column(Text, nullable=True)
+    file_size = Column(BigInteger, nullable=True)  # 文件大小（字节）
+    downloaded_size = Column(BigInteger, default=0, nullable=False)  # 已下载大小（字节）
+    download_speed = Column(Integer, nullable=True)  # 下载速度（字节/秒）
+    eta = Column(Integer, nullable=True)  # 预计剩余时间（秒）
     error_message = Column(Text, nullable=True)
+    error_code = Column(String(50), nullable=True)  # 错误代码
     
     # 任务调度
-    priority = Column(Integer, default=5, nullable=False)  # 1-10, 数字越小优先级越高
+    priority = Column(Integer, default=5, nullable=False, index=True)  # 1-10, 数字越小优先级越高，添加索引支持优先级排序
     retry_count = Column(Integer, default=0, nullable=False)
     max_retries = Column(Integer, default=3, nullable=False)
+    celery_task_id = Column(String(255), nullable=True, index=True)  # Celery任务ID
     
     # 时间信息
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime, nullable=True, index=True)  # 添加索引支持时间范围查询
+    completed_at = Column(DateTime, nullable=True, index=True)  # 添加索引支持时间范围查询
     
     # 配置选项
     options = Column(JSON, nullable=True)  # 额外的下载选项
@@ -174,6 +180,14 @@ class DownloadTask(BaseModel):
     user = relationship("User", back_populates="download_tasks")
     history_record = relationship("DownloadHistory", back_populates="task", uselist=False)
     video = relationship("Video", back_populates="download_tasks")
+    
+    # 复合索引定义
+    __table_args__ = (
+        Index('idx_download_task_user_status', 'user_id', 'status'),  # 用户状态复合索引
+        Index('idx_download_task_status_priority', 'status', 'priority'),  # 状态优先级复合索引
+        Index('idx_download_task_platform_status', 'platform', 'status'),  # 平台状态复合索引
+        Index('idx_download_task_created_status', 'created_at', 'status'),  # 创建时间状态复合索引
+    )
     
     def __repr__(self):
         return f"<DownloadTask(id={self.id}, url='{self.url[:50]}...', status='{self.status}')>"
@@ -192,7 +206,12 @@ class DownloadTask(BaseModel):
             "audio_only": self.audio_only,
             "video_id": self.video_id,
             "file_path": self.file_path,
+            "file_size": self.file_size,
+            "downloaded_size": self.downloaded_size,
+            "download_speed": self.download_speed,
+            "eta": self.eta,
             "error_message": self.error_message,
+            "error_code": self.error_code,
             "priority": self.priority,
             "retry_count": self.retry_count,
             "max_retries": self.max_retries,

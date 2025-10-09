@@ -4,8 +4,48 @@
 """
 
 import re
+import time
+import random
+import string
 from typing import List
 from urllib.parse import urlparse
+
+
+def gen_random_str(length: int = 10) -> str:
+    """生成随机字符串
+    
+    Args:
+        length: 字符串长度
+        
+    Returns:
+        str: 随机字符串
+    """
+    letters = string.ascii_letters + string.digits
+    return ''.join(random.choice(letters) for _ in range(length))
+
+
+def get_timestamp() -> int:
+    """获取当前时间戳
+    
+    Returns:
+        int: 当前时间戳（毫秒）
+    """
+    return int(time.time() * 1000)
+
+
+def split_filename(filename: str) -> tuple:
+    """分割文件名和扩展名
+    
+    Args:
+        filename: 文件名
+        
+    Returns:
+        tuple: (文件名, 扩展名)
+    """
+    if '.' in filename:
+        name, ext = filename.rsplit('.', 1)
+        return name, ext
+    return filename, ''
 
 
 def extract_valid_urls(text: str) -> List[str]:
@@ -111,3 +151,25 @@ def is_bilibili_url(url: str) -> bool:
     domain = extract_domain(url)
     bilibili_domains = ['bilibili.com', 'b23.tv']
     return any(domain.endswith(d) for d in bilibili_domains)
+
+
+def model_to_query_string(model) -> str:
+    """
+    将Pydantic模型转换为查询字符串
+    
+    Args:
+        model: Pydantic模型实例
+        
+    Returns:
+        str: URL查询字符串
+    """
+    from urllib.parse import urlencode
+    
+    # 获取模型的字典表示
+    model_dict = model.model_dump() if hasattr(model, 'model_dump') else model.dict()
+    
+    # 过滤掉None值
+    filtered_dict = {k: v for k, v in model_dict.items() if v is not None}
+    
+    # 转换为查询字符串
+    return urlencode(filtered_dict)

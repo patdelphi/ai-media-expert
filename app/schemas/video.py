@@ -83,47 +83,12 @@ class VideoResponse(BaseModel):
     share_count: Optional[int]
     status: str
     is_analyzed: bool
-    extra_metadata: Optional[Dict[str, Any]] = Field(alias="metadata")
+    extra_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="额外元数据")
     created_at: datetime
     updated_at: datetime
     
     class Config:
         from_attributes = True
-        populate_by_name = True
-    
-    @classmethod
-    def from_orm(cls, obj):
-        """自定义ORM转换，处理metadata字段"""
-        data = {
-            'id': obj.id,
-            'title': obj.title,
-            'description': obj.description,
-            'file_path': obj.file_path,
-            'file_size': obj.file_size,
-            'duration': obj.duration,
-            'resolution': obj.resolution,
-            'format': obj.format,
-            'fps': obj.fps,
-            'bitrate': obj.bitrate,
-            'codec': obj.codec,
-            'platform': obj.platform,
-            'original_url': obj.original_url,
-            'video_id': obj.video_id,
-            'author': obj.author,
-            'author_id': obj.author_id,
-            'channel_name': obj.channel_name,
-            'upload_date': obj.upload_date,
-            'view_count': obj.view_count,
-            'like_count': obj.like_count,
-            'comment_count': obj.comment_count,
-            'share_count': obj.share_count,
-            'status': obj.status,
-            'is_analyzed': obj.is_analyzed,
-            'metadata': obj.extra_metadata if obj.extra_metadata is not None else {},
-            'created_at': obj.created_at,
-            'updated_at': obj.updated_at
-        }
-        return cls(**data)
 
 
 class DownloadTaskCreate(BaseModel):
@@ -162,7 +127,12 @@ class DownloadTaskResponse(BaseModel):
     audio_only: bool
     video_id: Optional[int]
     file_path: Optional[str]
+    file_size: Optional[int]
+    downloaded_size: int
+    download_speed: Optional[int]
+    eta: Optional[int]
     error_message: Optional[str]
+    error_code: Optional[str]
     priority: int
     retry_count: int
     max_retries: int

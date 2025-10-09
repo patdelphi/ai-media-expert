@@ -40,23 +40,26 @@ class SimpleUploadResponse:
 async def simple_upload(
     file: UploadFile = File(...),
     title: str = Form(None),
-    description: str = Form(None)
+    description: str = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ) -> Any:
     """简单视频文件上传
     
     接收单个视频文件并保存到服务器。
     """
-    # 记录接收到的参数（在try之前，避免参数验证失败时无法记录）
-    api_logger.info(
-        "Simple upload parameters received",
-        has_file=file is not None,
-        filename=getattr(file, 'filename', 'no_filename') if file else 'no_file',
-        content_type=getattr(file, 'content_type', 'no_content_type') if file else 'no_file',
-        title=title,
-        description=description
-    )
     
     try:
+        # 记录接收到的参数
+        api_logger.info(
+            "Simple upload parameters received",
+            has_file=file is not None,
+            filename=getattr(file, 'filename', 'no_filename') if file else 'no_file',
+            content_type=getattr(file, 'content_type', 'no_content_type') if file else 'no_file',
+            title=title,
+            description=description,
+            user_id=current_user.id if current_user else 'no_user'
+        )
         # 记录上传请求
         api_logger.info(
             "Simple upload request received",

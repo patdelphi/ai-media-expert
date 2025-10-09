@@ -277,6 +277,7 @@ class DouyinAdapter(BasePlatformAdapter):
         return any(re.search(pattern, url, re.IGNORECASE) for pattern in patterns)
     
     def extract_video_id(self, url: str) -> Optional[str]:
+        """从URL中提取视频ID，支持短链接解析"""
         # 匹配完整URL中的视频ID
         patterns = [
             r'/video/(\d+)',  # 标准视频链接
@@ -291,10 +292,37 @@ class DouyinAdapter(BasePlatformAdapter):
             if match:
                 return match.group(1)
         
-        # 匹配短链接
+        # 对于短链接，需要通过AwemeIdFetcher获取真实的视频ID
         if 'v.douyin.com' in url:
-            short_code = url.split('/')[-1].split('?')[0]
-            return short_code
+            try:
+                from app.crawlers.douyin.web.utils import AwemeIdFetcher
+                import asyncio
+                
+                # 创建AwemeIdFetcher实例
+                fetcher = AwemeIdFetcher()
+                
+                # 如果在异步上下文中，直接调用
+                try:
+                    loop = asyncio.get_running_loop()
+                    # 在异步上下文中，创建任务
+                    task = loop.create_task(fetcher.get_aweme_id(url))
+                    # 这里我们需要返回一个特殊标记，让调用方知道需要异步处理
+                    return f"__async_fetch__{url}"
+                except RuntimeError:
+                    # 不在异步上下文中，使用同步方式
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        video_id = loop.run_until_complete(fetcher.get_aweme_id(url))
+                        return video_id
+                    finally:
+                        loop.close()
+                        
+            except Exception as e:
+                download_logger.error(f"解析短链接失败: {e}")
+                # 如果解析失败，返回短链接代码作为fallback
+                short_code = url.split('/')[-1].split('?')[0]
+                return short_code
         
         return None
     

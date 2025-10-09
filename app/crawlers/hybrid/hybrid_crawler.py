@@ -1,66 +1,30 @@
-"""混合爬虫
+"""混合爬虫模块
 
-统一的多平台视频解析入口，支持抖音、TikTok、B站等平台。
-基于Douyin_TikTok_Download_API项目的HybridCrawler实现。
+集成抖音和TikTok爬虫，提供统一的视频解析接口。
+基于Douyin_TikTok_Download_API项目的核心功能。
 """
 
 import asyncio
 from typing import Dict, Any, Optional
-from urllib.parse import urlparse
 
 from app.core.app_logging import download_logger
 from app.crawlers.utils.utils import is_douyin_url, is_tiktok_url, is_bilibili_url
+from app.crawlers.douyin.web.web_crawler import DouyinWebCrawler  # 导入抖音Web爬虫
+from app.crawlers.tiktok.web.web_crawler import TikTokWebCrawler  # 导入TikTok Web爬虫
+from app.crawlers.tiktok.app.app_crawler import TikTokAPPCrawler  # 导入TikTok App爬虫
 
 
 class HybridCrawler:
     """混合爬虫类
     
-    提供统一的多平台视频解析功能。
+    集成抖音和TikTok的爬虫功能，提供统一的视频解析接口。
     """
     
     def __init__(self):
-        """初始化混合爬虫"""
-        # 延迟导入避免循环依赖
-        self._douyin_crawler = None
-        self._tiktok_crawler = None
-        self._bilibili_crawler = None
-    
-    @property
-    def douyin_crawler(self):
-        """获取抖音爬虫实例"""
-        if self._douyin_crawler is None:
-            try:
-                from app.crawlers.douyin.web.web_crawler import DouyinWebCrawler
-                self._douyin_crawler = DouyinWebCrawler()
-            except ImportError as e:
-                download_logger.error(f"导入抖音爬虫失败: {e}")
-                self._douyin_crawler = None
-        return self._douyin_crawler
-    
-    @property
-    def tiktok_crawler(self):
-        """获取TikTok爬虫实例"""
-        if self._tiktok_crawler is None:
-            try:
-                from app.crawlers.tiktok.web.web_crawler import TikTokWebCrawler
-                self._tiktok_crawler = TikTokWebCrawler()
-            except ImportError as e:
-                download_logger.error(f"导入TikTok爬虫失败: {e}")
-                self._tiktok_crawler = None
-        return self._tiktok_crawler
-    
-    @property
-    def bilibili_crawler(self):
-        """获取B站爬虫实例"""
-        if self._bilibili_crawler is None:
-            try:
-                from app.crawlers.bilibili.web.web_crawler import BilibiliWebCrawler
-                self._bilibili_crawler = BilibiliWebCrawler()
-            except ImportError as e:
-                download_logger.error(f"导入B站爬虫失败: {e}")
-                self._bilibili_crawler = None
-        return self._bilibili_crawler
-    
+        self.DouyinWebCrawler = DouyinWebCrawler()
+        self.TikTokWebCrawler = TikTokWebCrawler()
+        self.TikTokAPPCrawler = TikTokAPPCrawler()
+
     async def hybrid_parsing_single_video(self, url: str, minimal: bool = False) -> Dict[str, Any]:
         """解析单个视频
         
@@ -69,281 +33,201 @@ class HybridCrawler:
             minimal: 是否返回最小数据集
             
         Returns:
-            Dict[str, Any]: 视频信息
+            Dict[str, Any]: 解析后的视频数据
             
         Raises:
             ValueError: 无法识别视频来源
-            Exception: 解析失败
+            Exception: 解析过程中的其他错误
         """
         try:
-            # 判断平台并解析
-            if is_douyin_url(url):
-                return await self._parse_douyin_video(url, minimal)
-            elif is_tiktok_url(url):
-                return await self._parse_tiktok_video(url, minimal)
-            elif is_bilibili_url(url):
-                return await self._parse_bilibili_video(url, minimal)
+            # 解析抖音视频/Parse Douyin video
+            if "douyin" in url:
+                platform = "douyin"
+                aweme_id = await self.DouyinWebCrawler.get_aweme_id(url)
+                data = await self.DouyinWebCrawler.fetch_one_video(aweme_id)
+                data = data.get("aweme_detail")
+                # $.aweme_detail.aweme_type
+                aweme_type = data.get("aweme_type")
+            # 解析TikTok视频/Parse TikTok video
+            elif "tiktok" in url:
+                platform = "tiktok"
+                aweme_id = await self.TikTokWebCrawler.get_aweme_id(url)
+
+                # 2024-09-14: Switch to TikTokAPPCrawler instead of TikTokWebCrawler
+                # data = await self.TikTokWebCrawler.fetch_one_video(aweme_id)
+                # data = data.get("itemInfo").get("itemStruct")
+
+                data = await self.TikTokAPPCrawler.fetch_one_video(aweme_id)
+                # $.imagePost exists if aweme_type is photo
+                aweme_type = data.get("aweme_type")
             else:
-                raise ValueError(f"无法识别视频来源: {url}")
-                
-        except Exception as e:
-            download_logger.error(f"视频解析失败: {url}, 错误: {e}")
-            raise
-    
-    async def _parse_douyin_video(self, url: str, minimal: bool = False) -> Dict[str, Any]:
-        """解析抖音视频
-        
-        Args:
-            url: 抖音视频URL
-            minimal: 是否返回最小数据集
-            
-        Returns:
-            Dict[str, Any]: 视频信息
-        """
-        if not self.douyin_crawler:
-            raise Exception("抖音爬虫未初始化")
-        
-        try:
-            # 获取aweme_id
-            aweme_id = await self.douyin_crawler.get_aweme_id(url)
-            if not aweme_id:
-                raise Exception("无法提取抖音视频ID")
-            
-            # 获取视频详情
-            data = await self.douyin_crawler.fetch_one_video(aweme_id)
-            if not data or 'aweme_detail' not in data:
-                raise Exception("获取抖音视频详情失败")
-            
-            video_data = data['aweme_detail']
-            aweme_type = video_data.get('aweme_type', 0)
-            
-            if minimal:
-                return self._format_minimal_data(video_data, 'douyin', aweme_type)
-            else:
-                return self._format_douyin_data(video_data)
-                
-        except Exception as e:
-            download_logger.error(f"抖音视频解析失败: {url}, 错误: {e}")
-            raise
-    
-    async def _parse_tiktok_video(self, url: str, minimal: bool = False) -> Dict[str, Any]:
-        """解析TikTok视频
-        
-        Args:
-            url: TikTok视频URL
-            minimal: 是否返回最小数据集
-            
-        Returns:
-            Dict[str, Any]: 视频信息
-        """
-        if not self.tiktok_crawler:
-            raise Exception("TikTok爬虫未初始化")
-        
-        try:
-            # 获取aweme_id
-            aweme_id = await self.tiktok_crawler.get_aweme_id(url)
-            if not aweme_id:
-                raise Exception("无法提取TikTok视频ID")
-            
-            # 获取视频详情
-            data = await self.tiktok_crawler.fetch_one_video(aweme_id)
-            if not data:
-                raise Exception("获取TikTok视频详情失败")
-            
-            aweme_type = data.get('aweme_type', 0)
-            
-            if minimal:
-                return self._format_minimal_data(data, 'tiktok', aweme_type)
-            else:
-                return self._format_tiktok_data(data)
-                
-        except Exception as e:
-            download_logger.error(f"TikTok视频解析失败: {url}, 错误: {e}")
-            raise
-    
-    async def _parse_bilibili_video(self, url: str, minimal: bool = False) -> Dict[str, Any]:
-        """解析B站视频
-        
-        Args:
-            url: B站视频URL
-            minimal: 是否返回最小数据集
-            
-        Returns:
-            Dict[str, Any]: 视频信息
-        """
-        if not self.bilibili_crawler:
-            # B站爬虫暂未实现，返回基础信息
-            download_logger.warning("B站爬虫暂未实现")
-            return {
-                'platform': 'bilibili',
-                'title': '未知标题',
-                'description': '',
-                'url': url,
-                'error': 'B站爬虫暂未实现'
+                raise ValueError("hybrid_parsing_single_video: Cannot judge the video source from the URL.")
+
+            # 检查是否需要返回最小数据/Check if minimal data is required
+            if not minimal:
+                return data
+
+            # 如果是最小数据，处理数据/If it is minimal data, process the data
+            url_type_code_dict = {
+                # common
+                0: 'video',
+                # Douyin
+                2: 'image',
+                4: 'video',
+                68: 'image',
+                # TikTok
+                51: 'video',
+                55: 'video',
+                58: 'video',
+                61: 'video',
+                150: 'image'
             }
-        
-        # TODO: 实现B站视频解析
-        return {
-            'platform': 'bilibili',
-            'title': '未知标题',
-            'description': '',
-            'url': url
-        }
-    
-    def _format_minimal_data(self, data: Dict[str, Any], platform: str, aweme_type: int) -> Dict[str, Any]:
-        """格式化最小数据集
-        
-        Args:
-            data: 原始视频数据
-            platform: 平台名称
-            aweme_type: 视频类型
+            # 判断链接类型/Judge link type
+            url_type = url_type_code_dict.get(aweme_type, 'video')
+
+            """
+            以下为(视频||图片)数据处理的四个方法,如果你需要自定义数据处理请在这里修改.
+            The following are four methods of (video || image) data processing. 
+            If you need to customize data processing, please modify it here.
             
-        Returns:
-            Dict[str, Any]: 格式化后的最小数据
-        """
-        # 视频类型映射
-        url_type_code_dict = {
-            # 通用
-            0: 'video',
-            # 抖音
-            2: 'image',
-            4: 'video',
-            68: 'image',
-            # TikTok
-            51: 'video',
-            55: 'video',
-            58: 'video',
-            61: 'video',
-            150: 'image'
-        }
-        
-        url_type = url_type_code_dict.get(aweme_type, 'video')
-        
-        # 提取基础信息
-        if platform == 'douyin':
-            author_info = data.get('author', {})
-            return {
-                'platform': platform,
+            创建已知数据字典(索引相同)，稍后使用.update()方法更新数据
+            Create a known data dictionary (index the same), 
+            and then use the .update() method to update the data
+            """
+
+            result_data = {
                 'type': url_type,
-                'title': data.get('desc', ''),
-                'aweme_id': data.get('aweme_id', ''),
-                'author': {
-                    'nickname': author_info.get('nickname', '') if isinstance(author_info, dict) else str(author_info)
+                'platform': platform,
+                'aweme_id': aweme_id,
+                'desc': data.get("desc"),
+                'create_time': data.get("create_time"),
+                'author': data.get("author"),
+                'music': data.get("music"),
+                'statistics': data.get("statistics"),
+                'cover_data': {
+                    'cover': data.get("video", {}).get("cover"),
+                    'origin_cover': data.get("video", {}).get("origin_cover"),
+                    'dynamic_cover': data.get("video", {}).get("dynamic_cover")
                 },
-                'duration': data.get('duration', 0),
-                'create_time': data.get('create_time', 0),
-                'statistics': {
-                    'digg_count': data.get('statistics', {}).get('digg_count', 0),
-                    'comment_count': data.get('statistics', {}).get('comment_count', 0),
-                    'share_count': data.get('statistics', {}).get('share_count', 0),
-                    'play_count': data.get('statistics', {}).get('play_count', 0)
-                }
+                'hashtags': data.get('text_extra'),
             }
-        elif platform == 'tiktok':
-            author_info = data.get('author', {})
-            return {
-                'platform': platform,
-                'type': url_type,
-                'title': data.get('desc', ''),
-                'aweme_id': data.get('aweme_id', ''),
-                'author': {
-                    'nickname': author_info.get('nickname', '') if isinstance(author_info, dict) else str(author_info)
-                },
-                'duration': data.get('duration', 0),
-                'create_time': data.get('create_time', 0),
-                'statistics': {
-                    'digg_count': data.get('statistics', {}).get('digg_count', 0),
-                    'comment_count': data.get('statistics', {}).get('comment_count', 0),
-                    'share_count': data.get('statistics', {}).get('share_count', 0),
-                    'play_count': data.get('statistics', {}).get('play_count', 0)
-                }
-            }
-        else:
-            return {
-                'platform': platform,
-                'type': url_type,
-                'title': '未知标题',
-                'data': data
-            }
-    
-    def _format_douyin_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """格式化抖音完整数据
+            
+            # 创建一个空变量，稍后使用.update()方法更新数据/Create an empty variable and use the .update() method to update the data
+            api_data = None
+            
+            # 判断链接类型并处理数据/Judge link type and process data
+            # 抖音数据处理/Douyin data processing
+            if platform == 'douyin':
+                # 抖音视频数据处理/Douyin video data processing
+                if url_type == 'video':
+                    # 将信息储存在字典中/Store information in a dictionary
+                    uri = data['video']['play_addr']['uri']
+                    wm_video_url_HQ = data['video']['play_addr']['url_list'][0]
+                    wm_video_url = f"https://aweme.snssdk.com/aweme/v1/playwm/?video_id={uri}&radio=1080p&line=0"
+                    nwm_video_url_HQ = wm_video_url_HQ.replace('playwm', 'play')
+                    nwm_video_url = f"https://aweme.snssdk.com/aweme/v1/play/?video_id={uri}&ratio=1080p&line=0"
+                    api_data = {
+                        'video_data':
+                            {
+                                'wm_video_url': wm_video_url,
+                                'wm_video_url_HQ': wm_video_url_HQ,
+                                'nwm_video_url': nwm_video_url,
+                                'nwm_video_url_HQ': nwm_video_url_HQ
+                            }
+                    }
+                # 抖音图片数据处理/Douyin image data processing
+                elif url_type == 'image':
+                    # 无水印图片列表/No watermark image list
+                    no_watermark_image_list = []
+                    # 有水印图片列表/With watermark image list
+                    watermark_image_list = []
+                    # 遍历图片列表/Traverse image list
+                    for i in data['images']:
+                        no_watermark_image_list.append(i['url_list'][0])
+                        watermark_image_list.append(i['download_url_list'][0])
+                    api_data = {
+                        'image_data':
+                            {
+                                'no_watermark_image_list': no_watermark_image_list,
+                                'watermark_image_list': watermark_image_list
+                            }
+                    }
+            # TikTok数据处理/TikTok data processing
+            elif platform == 'tiktok':
+                # TikTok视频数据处理/TikTok video data processing
+                if url_type == 'video':
+                    # 将信息储存在字典中/Store information in a dictionary
+                    wm_video = (
+                        data.get('video', {})
+                        .get('download_addr', {})
+                        .get('url_list', [None])[0]
+                    )
+
+                    api_data = {
+                        'video_data':
+                            {
+                                'wm_video_url': wm_video,
+                                'wm_video_url_HQ': wm_video,
+                                'nwm_video_url': data['video']['play_addr']['url_list'][0],
+                                'nwm_video_url_HQ': data['video']['bit_rate'][0]['play_addr']['url_list'][0]
+                            }
+                    }
+                # TikTok图片数据处理/TikTok image data processing
+                elif url_type == 'image':
+                    # 无水印图片列表/No watermark image list
+                    no_watermark_image_list = []
+                    # 有水印图片列表/With watermark image list
+                    watermark_image_list = []
+                    for i in data['image_post_info']['images']:
+                        no_watermark_image_list.append(i['display_image']['url_list'][0])
+                        watermark_image_list.append(i['owner_watermark_image']['url_list'][0])
+                    api_data = {
+                        'image_data':
+                            {
+                                'no_watermark_image_list': no_watermark_image_list,
+                                'watermark_image_list': watermark_image_list
+                            }
+                    }
+            
+            # 更新数据/Update data
+            if api_data:
+                result_data.update(api_data)
+            
+            return result_data
+            
+        except Exception as e:
+            download_logger.error(f"视频解析失败 - URL: {url}, 错误: {str(e)}")
+            raise
+
+    async def get_video_info(self, url: str) -> Optional[Dict[str, Any]]:
+        """获取视频信息的简化接口
         
         Args:
-            data: 抖音原始数据
+            url: 视频URL
             
         Returns:
-            Dict[str, Any]: 格式化后的数据
+            Optional[Dict[str, Any]]: 视频信息，失败时返回None
         """
-        return {
-            'platform': 'douyin',
-            'aweme_id': data.get('aweme_id', ''),
-            'title': data.get('desc', ''),
-            'description': data.get('desc', ''),
-            'author': {
-                'uid': data.get('author', {}).get('uid', ''),
-                'nickname': data.get('author', {}).get('nickname', ''),
-                'avatar': data.get('author', {}).get('avatar_thumb', {}).get('url_list', [''])[0]
-            },
-            'video': {
-                'duration': data.get('duration', 0),
-                'ratio': data.get('video', {}).get('ratio', ''),
-                'cover': data.get('video', {}).get('cover', {}).get('url_list', [''])[0],
-                'play_addr': data.get('video', {}).get('play_addr', {}).get('url_list', [])
-            },
-            'music': {
-                'title': data.get('music', {}).get('title', ''),
-                'author': data.get('music', {}).get('author', ''),
-                'play_url': data.get('music', {}).get('play_url', {}).get('url_list', [''])[0]
-            },
-            'statistics': {
-                'digg_count': data.get('statistics', {}).get('digg_count', 0),
-                'comment_count': data.get('statistics', {}).get('comment_count', 0),
-                'share_count': data.get('statistics', {}).get('share_count', 0),
-                'play_count': data.get('statistics', {}).get('play_count', 0)
-            },
-            'create_time': data.get('create_time', 0),
-            'aweme_type': data.get('aweme_type', 0),
-            'raw_data': data
-        }
-    
-    def _format_tiktok_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """格式化TikTok完整数据
-        
-        Args:
-            data: TikTok原始数据
-            
-        Returns:
-            Dict[str, Any]: 格式化后的数据
-        """
-        return {
-            'platform': 'tiktok',
-            'aweme_id': data.get('aweme_id', ''),
-            'title': data.get('desc', ''),
-            'description': data.get('desc', ''),
-            'author': {
-                'uid': data.get('author', {}).get('uid', ''),
-                'nickname': data.get('author', {}).get('nickname', ''),
-                'avatar': data.get('author', {}).get('avatar_thumb', {}).get('url_list', [''])[0]
-            },
-            'video': {
-                'duration': data.get('duration', 0),
-                'ratio': data.get('video', {}).get('ratio', ''),
-                'cover': data.get('video', {}).get('cover', {}).get('url_list', [''])[0],
-                'play_addr': data.get('video', {}).get('play_addr', {}).get('url_list', [])
-            },
-            'music': {
-                'title': data.get('music', {}).get('title', ''),
-                'author': data.get('music', {}).get('author', ''),
-                'play_url': data.get('music', {}).get('play_url', {}).get('url_list', [''])[0]
-            },
-            'statistics': {
-                'digg_count': data.get('statistics', {}).get('digg_count', 0),
-                'comment_count': data.get('statistics', {}).get('comment_count', 0),
-                'share_count': data.get('statistics', {}).get('share_count', 0),
-                'play_count': data.get('statistics', {}).get('play_count', 0)
-            },
-            'create_time': data.get('create_time', 0),
-            'aweme_type': data.get('aweme_type', 0),
-            'raw_data': data
-        }
+        try:
+            return await self.hybrid_parsing_single_video(url, minimal=True)
+        except Exception as e:
+            download_logger.error(f"获取视频信息失败: {e}")
+            return None
+
+    async def main(self):
+        """测试方法"""
+        # 测试混合解析单一视频接口/Test hybrid parsing single video endpoint
+        # url = "https://v.douyin.com/L4FJNR3/"
+        # url = "https://www.tiktok.com/@taylorswift/video/7359655005701311786"
+        url = "https://www.tiktok.com/@flukegk83/video/7360734489271700753"
+        # url = "https://www.tiktok.com/@minecraft/photo/7369296852669205791"
+        minimal = True
+        result = await self.hybrid_parsing_single_video(url, minimal=minimal)
+        print(result)
+
+
+if __name__ == '__main__':
+    # 实例化混合爬虫/Instantiate hybrid crawler
+    hybrid_crawler = HybridCrawler()
+    # 运行测试代码/Run test code
+    asyncio.run(hybrid_crawler.main())

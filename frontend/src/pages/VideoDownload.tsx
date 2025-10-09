@@ -40,6 +40,34 @@ const VideoDownload: React.FC = () => {
   const formats = ['MP4', 'WebM', 'MKV', 'AVI', 'MOV'];
   const qualities = ['144p', '240p', '360p', '480p', '720p', '1080p', '2K', '4K'];
   
+  // 格式化下载速度
+  const formatSpeed = (bytesPerSecond: number): string => {
+    if (bytesPerSecond < 1024) {
+      return `${bytesPerSecond.toFixed(0)} B/s`;
+    } else if (bytesPerSecond < 1024 * 1024) {
+      return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+    } else if (bytesPerSecond < 1024 * 1024 * 1024) {
+      return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`;
+    } else {
+      return `${(bytesPerSecond / (1024 * 1024 * 1024)).toFixed(1)} GB/s`;
+    }
+  };
+  
+  // 格式化剩余时间
+  const formatTime = (seconds: number): string => {
+    if (seconds < 60) {
+      return `${Math.round(seconds)}秒`;
+    } else if (seconds < 3600) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = Math.round(seconds % 60);
+      return `${minutes}分${remainingSeconds}秒`;
+    } else {
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      return `${hours}小时${minutes}分钟`;
+    }
+  };
+  
   // 加载支持的平台列表
   useEffect(() => {
     const loadSupportedPlatforms = async () => {
@@ -135,7 +163,9 @@ const VideoDownload: React.FC = () => {
           ...task,
           status: data.status as any,
           progress: data.progress,
-          updated_at: data.updated_at
+          updated_at: data.updated_at,
+          download_speed: data.download_speed,
+          eta: data.eta
         } : task
       ));
       
@@ -147,6 +177,14 @@ const VideoDownload: React.FC = () => {
           progress: data.progress
         });
         setDownloadProgress(data.progress);
+        
+        // 更新下载速度和剩余时间
+        if (data.download_speed) {
+          setDownloadSpeed(formatSpeed(data.download_speed));
+        }
+        if (data.eta) {
+          setRemainingTime(formatTime(data.eta));
+        }
       }
     });
     
@@ -701,19 +739,69 @@ const VideoDownload: React.FC = () => {
       {/* 下载队列 */}
       {downloadQueue.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <h3 className="text-lg font-medium text-gray-800">
               下载队列 ({downloadQueue.length} 个任务)
             </h3>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  const pendingTasks = downloadQueue.filter(task => task.status === 'pending');
+                  pendingTasks.forEach(task => handlePause(task.id));
+                }}
+                className="text-sm text-yellow-600 hover:text-yellow-800"
+                disabled={!downloadQueue.some(task => task.status === 'pending')}
+              >
+                <i className="fas fa-pause mr-1"></i>
+                暂停全部
+              </button>
+              <button
+                onClick={() => {
+                  const failedTasks = downloadQueue.filter(task => task.status === 'failed');
+                  failedTasks.forEach(task => handleRetry(task.id));
+                }}
+                className="text-sm text-blue-600 hover:text-blue-800"
+                disabled={!downloadQueue.some(task => task.status === 'failed')}
+              >
+                <i className="fas fa-redo mr-1"></i>
+                重试失败
+              </button>
+              <button
+                onClick={() => {
+                  const completedTasks = downloadQueue.filter(task => task.status === 'completed');
+                  completedTasks.forEach(task => handleDelete(task.id));
+                }}
+                className="text-sm text-green-600 hover:text-green-800"
+                disabled={!downloadQueue.some(task => task.status === 'completed')}
+              >
+                <i className="fas fa-check mr-1"></i>
+                清理完成
+              </button>
+            </div>
           </div>
           <div className="divide-y divide-gray-200">
             {downloadQueue.map(task => (
               <div key={task.id} className="p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <h4 className="font-medium text-gray-800 truncate">{task.title}</h4>
-                    <p className="text-sm text-gray-500">{task.platform} • {task.created_at}</p>
-                    <div className="mt-2">
+                    <div className="flex items-center space-x-2">
+                      <h4 className="font-medium text-gray-800 truncate">{task.title}</h4>
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        task.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        task.status === 'downloading' ? 'bg-blue-100 text-blue-800' :
+                        task.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                        task.status === 'failed' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {task.status === 'completed' && '已完成'}
+                        {task.status === 'downloading' && '下载中'}
+                        {task.status === 'pending' && '等待中'}
+                        {task.status === 'failed' && '失败'}
+                        {task.status === 'paused' && '已暂停'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-1">{task.platform} • {task.created_at}</p>
+                    <div className="mt-3">
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
                           className={`h-2 rounded-full transition-all duration-300 ${
@@ -721,6 +809,8 @@ const VideoDownload: React.FC = () => {
                               ? 'bg-green-500'
                               : task.status === 'failed'
                               ? 'bg-red-500'
+                              : task.status === 'paused'
+                              ? 'bg-yellow-500'
                               : 'bg-blue-500'
                           }`}
                           style={{ width: `${task.progress}%` }}
@@ -730,9 +820,13 @@ const VideoDownload: React.FC = () => {
                         <span>{task.progress}%</span>
                         <span>
                           {task.status === 'completed' && '下载完成'}
-                          {task.status === 'downloading' && `${downloadSpeed} • ${remainingTime}`}
+                          {task.status === 'downloading' && task.download_speed && task.eta ? 
+                            `${formatSpeed(task.download_speed)} • ${formatTime(task.eta)}` : 
+                            task.status === 'downloading' ? `${downloadSpeed} • ${remainingTime}` : ''
+                          }
                           {task.status === 'pending' && '等待中'}
                           {task.status === 'failed' && '下载失败'}
+                          {task.status === 'paused' && '已暂停'}
                         </span>
                       </div>
                     </div>
@@ -741,22 +835,48 @@ const VideoDownload: React.FC = () => {
                     {task.status === 'downloading' && (
                       <button
                         onClick={() => handlePause(task.id)}
-                        className="text-yellow-600 hover:text-yellow-800"
+                        className="text-yellow-600 hover:text-yellow-800 p-2 rounded-full hover:bg-yellow-50"
+                        title="暂停下载"
                       >
                         <i className="fas fa-pause"></i>
+                      </button>
+                    )}
+                    {task.status === 'paused' && (
+                      <button
+                        onClick={() => handleResume(task.id)}
+                        className="text-green-600 hover:text-green-800 p-2 rounded-full hover:bg-green-50"
+                        title="恢复下载"
+                      >
+                        <i className="fas fa-play"></i>
                       </button>
                     )}
                     {task.status === 'failed' && (
                       <button
                         onClick={() => handleRetry(task.id)}
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-blue-600 hover:text-blue-800 p-2 rounded-full hover:bg-blue-50"
+                        title="重试下载"
                       >
                         <i className="fas fa-redo"></i>
                       </button>
                     )}
+                    {task.status === 'completed' && (
+                      <button
+                        onClick={() => {
+                          // 打开文件所在目录
+                          if (task.file_path) {
+                            window.open(`file://${task.file_path}`, '_blank');
+                          }
+                        }}
+                        className="text-green-600 hover:text-green-800 p-2 rounded-full hover:bg-green-50"
+                        title="打开文件"
+                      >
+                        <i className="fas fa-folder-open"></i>
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDelete(task.id)}
-                      className="text-red-600 hover:text-red-800"
+                      className="text-red-600 hover:text-red-800 p-2 rounded-full hover:bg-red-50"
+                      title="删除任务"
                     >
                       <i className="fas fa-trash"></i>
                     </button>

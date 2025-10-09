@@ -12,6 +12,7 @@ from pathlib import Path
 from app.core.config import settings
 from app.core.app_logging import setup_logging
 from app.api.v1 import api_router
+from app.middleware.exception_handler import ExceptionHandlerMiddleware
 
 # 创建FastAPI应用
 fastapi_app = FastAPI(
@@ -28,6 +29,9 @@ fastapi_app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 添加全局异常处理中间件
+fastapi_app.add_middleware(ExceptionHandlerMiddleware)
 
 # 挂载静态文件目录
 uploads_dir = Path("uploads")

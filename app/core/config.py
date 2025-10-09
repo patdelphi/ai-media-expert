@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     celery_broker_url: str = Field(default="memory://", env="CELERY_BROKER_URL")
     celery_result_backend: str = Field(default="cache+memory://", env="CELERY_RESULT_BACKEND")
     
+    # 下载API配置
+    download_api_url: str = Field(default="http://localhost:8001", description="下载API服务地址")
+    download_api_timeout: int = Field(default=30, description="下载API请求超时时间(秒)")
+    
     # JWT配置
     jwt_secret_key: str = Field(env="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")

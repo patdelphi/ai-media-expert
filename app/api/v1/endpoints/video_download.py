@@ -16,6 +16,7 @@ from app.models.video import DownloadTask
 from app.schemas.common import ResponseModel
 from app.services.video_parsing_service import video_parsing_service
 from app.services.download_service import DownloadService
+from app.tasks.download_tasks import download_video_task
 
 router = APIRouter()
 download_service = DownloadService()
@@ -155,7 +156,7 @@ async def create_download_task(
             minimal=True
         )
         
-        # 创建下载任务
+        # 创建下载任务记录
         task = await download_service.create_download_task(
             db=db,
             user_id=current_user.id,
@@ -171,16 +172,31 @@ async def create_download_task(
             }
         )
         
-        # 添加到后台任务队列
-        background_tasks.add_task(
-            download_service.process_download_task,
+        # 提交到Celery异步任务队列
+        celery_task = download_video_task.delay(
             task_id=task.id,
-            db=db
+            url=request.url,
+            options={
+                'format': request.format,
+                'quality': request.quality,
+                'download_video': request.download_video,
+                'download_audio': request.download_audio,
+                'download_subtitles': request.download_subtitles,
+                'download_thumbnail': request.download_thumbnail
+            }
+        )
+        
+        # 更新任务的Celery任务ID
+        await download_service.update_task_celery_id(
+            db=db,
+            task_id=task.id,
+            celery_task_id=celery_task.id
         )
         
         download_logger.info(
             "下载任务创建成功",
             task_id=task.id,
+            celery_task_id=celery_task.id,
             url=request.url,
             title=video_info.get('title')
         )
@@ -190,6 +206,7 @@ async def create_download_task(
             message="下载任务创建成功",
             data={
                 'task_id': task.id,
+                'celery_task_id': celery_task.id,
                 'status': task.status,
                 'title': video_info.get('title'),
                 'platform': video_info.get('platform')

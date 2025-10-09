@@ -8,8 +8,10 @@ import re
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Callable
 from urllib.parse import urlparse
+import aiofiles
+import aiohttp
 
 import yt_dlp
 import httpx
@@ -20,23 +22,74 @@ from app.core.app_logging import download_logger
 from app.models.video import DownloadTask, Video
 from app.services.platform_adapters import get_platform_adapter
 from app.services.video_parsing_service import video_parsing_service
+from app.services.download_api_client import get_download_api_client
+
+
+class DownloadProgressCallback:
+    """下载进度回调类"""
+    
+    def __init__(self, task_id: int, db: Session):
+        self.task_id = task_id
+        self.db = db
+        self.last_update = datetime.now()
+        
+    def __call__(self, downloaded: int, total: int, speed: Optional[int] = None):
+        """更新下载进度到数据库"""
+        now = datetime.now()
+        # 限制更新频率，避免过于频繁的数据库操作
+        if (now - self.last_update).total_seconds() < 1:
+            return
+            
+        try:
+            task = self.db.query(DownloadTask).filter(DownloadTask.id == self.task_id).first()
+            if task:
+                if total > 0:
+                    task.progress = min((downloaded / total) * 100, 99)
+                task.downloaded_size = downloaded
+                task.file_size = total if total > 0 else task.file_size
+                if speed:
+                    task.download_speed = speed
+                    # 计算预计剩余时间
+                    if total > downloaded and speed > 0:
+                        remaining_bytes = total - downloaded
+                        task.eta = int(remaining_bytes / speed)
+                
+                self.db.commit()
+                self.last_update = now
+                
+        except Exception as e:
+            download_logger.error(
+                "Failed to update download progress",
+                task_id=self.task_id,
+                error=str(e)
+            )
 
 
 class DownloadService:
-    """视频下载服务类
+    """视频下载服务
     
-    负责管理视频下载的整个生命周期，包括URL解析、信息提取、
-    文件下载、元数据保存等功能。
+    负责管理视频下载的整个生命周期：
+    1. URL解析和信息提取
+    2. 文件下载和进度跟踪
+    3. 元数据保存
     """
     
     def __init__(self):
+        """初始化下载服务"""
         self.download_dir = settings.download_dir
-        self.max_concurrent = settings.max_concurrent_downloads
+        self.download_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 下载配置
+        self.max_concurrent_downloads = settings.max_concurrent_downloads
         self.timeout = settings.download_timeout
         
-        # 确保下载目录存在
-        self.download_dir.mkdir(parents=True, exist_ok=True)
-    
+        download_logger.info(
+            "Download service initialized",
+            download_dir=str(self.download_dir),
+            max_concurrent=self.max_concurrent_downloads,
+            timeout=self.timeout
+        )
+
     async def extract_video_info(self, url: str, minimal: bool = False) -> Dict:
         """提取视频信息
         
@@ -126,511 +179,306 @@ class DownloadService:
                 error=str(e)
             )
             raise Exception(f"Failed to extract video information: {str(e)}")
-    
-    async def create_download_task(
-        self,
-        db: Session,
-        user_id: str,
-        url: str,
-        video_info: Dict,
-        options: Dict
-    ) -> DownloadTask:
-        """创建下载任务
-        
-        Args:
-            db: 数据库会话
-            user_id: 用户ID
-            url: 视频URL
-            video_info: 视频信息
-            options: 下载选项
-            
-        Returns:
-            创建的下载任务
-        """
-        from uuid import uuid4
-        
-        task = DownloadTask(
-            id=str(uuid4()),
-            user_id=user_id,
-            url=url,
-            title=video_info.get('title', 'Unknown Title'),
-            platform=video_info.get('platform', 'unknown'),
-            status='pending',
-            progress=0.0,
-            options=options,
-            video_info=video_info
-        )
-        
-        db.add(task)
-        db.commit()
-        db.refresh(task)
-        
-        download_logger.info(
-            "Download task created",
-            task_id=task.id,
-            user_id=user_id,
-            url=url,
-            title=task.title
-        )
-        
-        return task
-    
-    async def get_user_tasks(
-        self,
-        db: Session,
-        user_id: str,
-        status: Optional[str] = None,
-        limit: int = 20,
-        offset: int = 0
-    ) -> List[DownloadTask]:
-        """获取用户的下载任务列表
-        
-        Args:
-            db: 数据库会话
-            user_id: 用户ID
-            status: 状态过滤
-            limit: 数量限制
-            offset: 偏移量
-            
-        Returns:
-            任务列表
-        """
-        query = db.query(DownloadTask).filter(DownloadTask.user_id == user_id)
-        
-        if status:
-            query = query.filter(DownloadTask.status == status)
-        
-        tasks = query.order_by(DownloadTask.created_at.desc()).offset(offset).limit(limit).all()
-        
-        return tasks
-    
-    async def get_task_by_id(
-        self,
-        db: Session,
-        task_id: str,
-        user_id: str
-    ) -> Optional[DownloadTask]:
-        """根据ID获取任务
-        
-        Args:
-            db: 数据库会话
-            task_id: 任务ID
-            user_id: 用户ID
-            
-        Returns:
-            任务对象或None
-        """
-        return db.query(DownloadTask).filter(
-            DownloadTask.id == task_id,
-            DownloadTask.user_id == user_id
-        ).first()
-    
-    async def cancel_task(
-        self,
-        db: Session,
-        task_id: str,
-        user_id: str
-    ) -> bool:
-        """取消任务
-        
-        Args:
-            db: 数据库会话
-            task_id: 任务ID
-            user_id: 用户ID
-            
-        Returns:
-            是否成功
-        """
-        task = await self.get_task_by_id(db, task_id, user_id)
-        if not task or task.status in ['completed', 'cancelled']:
-            return False
-        
-        task.status = 'cancelled'
-        task.updated_at = datetime.utcnow()
-        db.commit()
-        
-        download_logger.info(
-            "Task cancelled",
-            task_id=task_id,
-            user_id=user_id
-        )
-        
-        return True
-    
-    async def reset_task(
-        self,
-        db: Session,
-        task_id: str
-    ) -> bool:
-        """重置任务状态
-        
-        Args:
-            db: 数据库会话
-            task_id: 任务ID
-            
-        Returns:
-            是否成功
-        """
-        task = db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
-        if not task:
-            return False
-        
-        task.status = 'pending'
-        task.progress = 0.0
-        task.error_message = None
-        task.updated_at = datetime.utcnow()
-        db.commit()
-        
-        return True
-    
-    async def delete_task(
-        self,
-        db: Session,
-        task_id: str,
-        user_id: str
-    ) -> bool:
-        """删除任务
-        
-        Args:
-            db: 数据库会话
-            task_id: 任务ID
-            user_id: 用户ID
-            
-        Returns:
-            是否成功
-        """
-        task = await self.get_task_by_id(db, task_id, user_id)
-        if not task:
-            return False
-        
-        # 如果有文件，尝试删除
-        if task.file_path and os.path.exists(task.file_path):
-            try:
-                os.remove(task.file_path)
-            except Exception as e:
-                download_logger.warning(
-                    "Failed to delete file",
-                    file_path=task.file_path,
-                    error=str(e)
-                )
-        
-        db.delete(task)
-        db.commit()
-        
-        download_logger.info(
-            "Task deleted",
-            task_id=task_id,
-            user_id=user_id
-        )
-        
-        return True
-    
-    async def process_download_task(self, task_id: str, db: Session):
+
+    async def process_download_task(self, task_id: int, db: Session) -> Dict:
         """处理下载任务
         
         Args:
             task_id: 任务ID
             db: 数据库会话
+            
+        Returns:
+            Dict: 处理结果
         """
         task = db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
         if not task:
-            download_logger.error("Task not found", task_id=task_id)
-            return
+            return {"status": "failed", "error": "Task not found"}
         
         try:
-            # 更新任务状态为下载中
-            task.status = 'downloading'
-            task.updated_at = datetime.utcnow()
+            # 更新任务状态为处理中
+            task.status = "processing"
+            task.started_at = datetime.now()
             db.commit()
             
             download_logger.info(
-                "Starting download task",
+                "Starting download task processing",
                 task_id=task_id,
-                url=task.url,
-                title=task.title
+                url=task.url
             )
             
-            # 实际的视频下载逻辑
-            await self._download_video_file(task, db)
+            # 获取下载API客户端
+            api_client = await get_download_api_client()
             
-            if task.status != 'cancelled':
-                task.status = 'completed'
-                task.progress = 100.0
-                task.updated_at = datetime.utcnow()
+            # 解析视频信息
+            video_info = await api_client.parse_video_info(task.url, minimal=False)
+            
+            # 更新任务的视频信息
+            task.platform = video_info.platform
+            db.commit()
+            
+            # 选择最佳下载URL
+            download_url = self._select_download_url(
+                video_info.video_urls, 
+                task.quality or "best",
+                task.audio_only
+            )
+            
+            if not download_url:
+                raise Exception("No suitable download URL found")
+            
+            # 生成文件路径
+            file_path = self._generate_file_path(video_info, task.format_preference or "mp4")
+            
+            # 创建进度回调
+            progress_callback = DownloadProgressCallback(task_id, db)
+            
+            # 下载文件
+            success = await self.download_file(
+                download_url["url"], 
+                file_path, 
+                progress_callback
+            )
+            
+            if success:
+                # 保存视频元数据到数据库
+                video = await self._save_video_metadata(db, video_info, file_path)
+                
+                # 更新任务状态
+                task.status = "completed"
+                task.completed_at = datetime.now()
+                task.progress = 100
+                task.file_path = str(file_path)
+                task.video_id = video.id if video else None
                 db.commit()
                 
                 download_logger.info(
-                    "Download task completed",
+                    "Download task completed successfully",
                     task_id=task_id,
-                    file_path=task.file_path
+                    file_path=str(file_path)
                 )
-            
+                
+                return {
+                    "status": "completed",
+                    "file_path": str(file_path),
+                    "video_id": video.id if video else None
+                }
+            else:
+                raise Exception("File download failed")
+                
         except Exception as e:
-            task.status = 'failed'
+            # 更新任务状态为失败
+            task.status = "failed"
             task.error_message = str(e)
-            task.updated_at = datetime.utcnow()
+            task.retry_count += 1
             db.commit()
             
             download_logger.error(
                 "Download task failed",
                 task_id=task_id,
-                error=str(e)
+                error=str(e),
+                retry_count=task.retry_count
             )
-    
-    async def _download_video_file(self, task: DownloadTask, db: Session):
-        """实际下载视频文件
+            
+            return {
+                "status": "failed",
+                "error": str(e),
+                "retry_count": task.retry_count
+            }
+
+    async def download_file(
+        self, 
+        url: str, 
+        file_path: Path, 
+        progress_callback: Optional[Callable[[int, int, Optional[int]], None]] = None
+    ) -> bool:
+        """下载文件
         
         Args:
-            task: 下载任务
-            db: 数据库会话
+            url: 下载URL
+            file_path: 保存路径
+            progress_callback: 进度回调函数
+            
+        Returns:
+            bool: 下载是否成功
         """
-        import asyncio
-        import httpx
-        from pathlib import Path
-        
         try:
-            # 从视频信息中获取下载URL
-            video_info = task.video_info or {}
-            video_url = video_info.get('video_url')
-            
-            if not video_url:
-                # 如果没有直接的视频URL，尝试使用yt-dlp
-                await self._download_with_ytdlp(task, db)
-                return
-            
-            # 准备下载路径
-            safe_title = re.sub(r'[<>:"/\\|?*]', '_', task.title or 'video')
-            file_extension = video_info.get('ext', 'mp4')
-            filename = f"{safe_title}.{file_extension}"
-            file_path = Path(self.download_dir) / filename
-            
-            # 确保下载目录存在
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            # 开始下载
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                async with client.stream('GET', video_url) as response:
-                    response.raise_for_status()
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=self.timeout)
+            ) as session:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        download_logger.error(
+                            "Failed to download file",
+                            url=url,
+                            status=response.status
+                        )
+                        return False
                     
                     total_size = int(response.headers.get('content-length', 0))
-                    downloaded = 0
+                    downloaded_size = 0
+                    start_time = datetime.now()
                     
-                    with open(file_path, 'wb') as f:
-                        async for chunk in response.aiter_bytes(chunk_size=8192):
-                            if task.status == 'cancelled':
-                                f.close()
-                                if file_path.exists():
-                                    file_path.unlink()
-                                return
+                    # 确保目录存在
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    async with aiofiles.open(file_path, 'wb') as f:
+                        async for chunk in response.content.iter_chunked(8192):
+                            await f.write(chunk)
+                            downloaded_size += len(chunk)
                             
-                            f.write(chunk)
-                            downloaded += len(chunk)
+                            # 计算下载速度
+                            elapsed = (datetime.now() - start_time).total_seconds()
+                            speed = int(downloaded_size / elapsed) if elapsed > 0 else 0
                             
-                            # 更新进度
-                            if total_size > 0:
-                                progress = (downloaded / total_size) * 100
-                                task.progress = min(progress, 99.0)  # 保留1%给后处理
-                                task.updated_at = datetime.utcnow()
-                                db.commit()
-            
-            # 设置文件路径
-            task.file_path = str(file_path)
-            task.progress = 100.0
-            db.commit()
-            
-            download_logger.info(
-                "Video downloaded successfully",
-                task_id=task.id,
-                file_path=str(file_path),
-                file_size=downloaded
-            )
-            
+                            # 调用进度回调
+                            if progress_callback:
+                                progress_callback(downloaded_size, total_size, speed)
+                    
+                    download_logger.info(
+                        "File downloaded successfully",
+                        url=url,
+                        file_path=str(file_path),
+                        size=downloaded_size
+                    )
+                    return True
+                    
         except Exception as e:
             download_logger.error(
-                "Video download failed",
-                task_id=task.id,
-                error=str(e)
-            )
-            raise
-    
-    async def _download_with_ytdlp(self, task: DownloadTask, db: Session):
-        """使用yt-dlp下载视频
-        
-        Args:
-            task: 下载任务
-            db: 数据库会话
-        """
-        import asyncio
-        from concurrent.futures import ThreadPoolExecutor
-        
-        def progress_hook(d):
-            """yt-dlp进度回调"""
-            if d['status'] == 'downloading':
-                if 'total_bytes' in d and d['total_bytes']:
-                    progress = (d['downloaded_bytes'] / d['total_bytes']) * 100
-                elif '_percent_str' in d:
-                    progress_str = d['_percent_str'].replace('%', '')
-                    try:
-                        progress = float(progress_str)
-                    except:
-                        progress = 0
-                else:
-                    progress = 0
-                
-                task.progress = min(progress, 99.0)
-                task.updated_at = datetime.utcnow()
-                db.commit()
-            
-            elif d['status'] == 'finished':
-                task.file_path = d['filename']
-                task.progress = 100.0
-                db.commit()
-        
-        def download_with_ytdlp():
-            """在线程中执行yt-dlp下载"""
-            safe_title = re.sub(r'[<>:"/\\|?*]', '_', task.title or 'video')
-            
-            ydl_opts = {
-                'outtmpl': str(Path(self.download_dir) / f'{safe_title}.%(ext)s'),
-                'format': 'best[height<=720]/best',  # 优先720p，回退到最佳质量
-                'progress_hooks': [progress_hook],
-                'no_warnings': True,
-            }
-            
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([task.url])
-        
-        # 在线程池中执行下载
-        loop = asyncio.get_event_loop()
-        with ThreadPoolExecutor() as executor:
-            await loop.run_in_executor(executor, download_with_ytdlp)
-    
-    def download_video(
-        self, 
-        task_id: int, 
-        url: str, 
-        options: Dict,
-        progress_callback=None
-    ) -> Tuple[str, Dict]:
-        """下载视频文件
-        
-        执行实际的视频下载操作。
-        
-        Args:
-            task_id: 下载任务ID
-            url: 视频URL
-            options: 下载选项
-            progress_callback: 进度回调函数
-        
-        Returns:
-            (文件路径, 视频信息) 的元组
-        
-        Raises:
-            Exception: 当下载失败时
-        """
-        try:
-            # 首先提取视频信息
-            video_info = self.extract_video_info(url)
-            
-            # 生成文件名和路径
-            filename = self._generate_filename(video_info, options)
-            file_path = self.download_dir / filename
-            
-            # 配置yt-dlp下载选项
-            ydl_opts = self._build_download_options(file_path, options)
-            
-            # 添加进度钩子
-            if progress_callback:
-                ydl_opts['progress_hooks'] = [progress_callback]
-            
-            # 执行下载
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-            
-            # 验证文件是否下载成功
-            if not file_path.exists():
-                raise Exception("Downloaded file not found")
-            
-            # 更新文件信息
-            video_info.update({
-                'file_path': str(file_path),
-                'file_size': file_path.stat().st_size,
-            })
-            
-            download_logger.info(
-                "Video downloaded successfully",
-                task_id=task_id,
+                "File download failed",
                 url=url,
                 file_path=str(file_path),
-                file_size=video_info['file_size']
-            )
-            
-            return str(file_path), video_info
-            
-        except Exception as e:
-            download_logger.error(
-                "Video download failed",
-                task_id=task_id,
-                url=url,
                 error=str(e)
             )
-            raise Exception(f"Video download failed: {str(e)}")
-    
-    def validate_url(self, url: str) -> bool:
-        """验证URL是否有效
-        
-        Args:
-            url: 要验证的URL
-        
-        Returns:
-            URL是否有效
-        """
-        try:
-            # 基本URL格式验证
-            parsed = urlparse(url)
-            if not parsed.scheme or not parsed.netloc:
-                return False
-            
-            # 检查是否为支持的平台
-            platform = self._detect_platform(url)
-            if not platform:
-                return False
-            
-            # 尝试提取基本信息（不下载）
-            ydl_opts = {
-                'quiet': True,
-                'no_warnings': True,
-                'skip_download': True,
-                'extract_flat': True,  # 快速提取
-            }
-            
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                return info is not None
-                
-        except Exception:
             return False
-    
-    def get_supported_platforms(self) -> List[str]:
-        """获取支持的平台列表
+
+    def _select_download_url(self, video_urls: List[Dict], quality: str, audio_only: bool) -> Optional[Dict]:
+        """选择最佳下载URL"""
+        if not video_urls:
+            return None
         
-        Returns:
-            支持的平台名称列表
-        """
-        return [
-            'tiktok', 'douyin', 'youtube', 'bilibili', 
-            'instagram', 'twitter', 'facebook', 'kuaishou'
-        ]
-    
+        # 如果只要音频，查找音频格式
+        if audio_only:
+            for url_info in video_urls:
+                if url_info.get("ext") in ["mp3", "m4a", "aac"]:
+                    return url_info
+        
+        # 根据质量要求筛选
+        if quality == "best":
+            # 选择最高质量
+            best_url = None
+            max_resolution = 0
+            
+            for url_info in video_urls:
+                resolution = url_info.get("resolution", "0x0")
+                try:
+                    width, height = map(int, resolution.split("x"))
+                    pixels = width * height
+                    if pixels > max_resolution:
+                        max_resolution = pixels
+                        best_url = url_info
+                except:
+                    continue
+            
+            return best_url or video_urls[0]
+        
+        elif quality == "worst":
+            # 选择最低质量
+            worst_url = None
+            min_resolution = float('inf')
+            
+            for url_info in video_urls:
+                resolution = url_info.get("resolution", "0x0")
+                try:
+                    width, height = map(int, resolution.split("x"))
+                    pixels = width * height
+                    if pixels < min_resolution:
+                        min_resolution = pixels
+                        worst_url = url_info
+                except:
+                    continue
+            
+            return worst_url or video_urls[0]
+        
+        else:
+            # 查找指定分辨率
+            for url_info in video_urls:
+                if quality in url_info.get("resolution", ""):
+                    return url_info
+            
+            # 如果没找到指定分辨率，返回第一个
+            return video_urls[0]
+
+    def _generate_file_path(self, video_info, format_ext: str) -> Path:
+        """生成文件保存路径"""
+        # 清理文件名中的非法字符
+        title = re.sub(r'[<>:"/\\|?*]', '_', video_info.title)
+        title = title[:100]  # 限制文件名长度
+        
+        # 按平台分类存储
+        platform_dir = self.download_dir / video_info.platform
+        platform_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 生成唯一文件名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{title}_{timestamp}.{format_ext}"
+        
+        return platform_dir / filename
+
+    async def _save_video_metadata(self, db: Session, video_info, file_path: Path) -> Optional[Video]:
+        """保存视频元数据到数据库"""
+        try:
+            # 检查是否已存在相同的视频
+            existing_video = db.query(Video).filter(
+                Video.platform_video_id == video_info.video_id,
+                Video.platform == video_info.platform
+            ).first()
+            
+            if existing_video:
+                return existing_video
+            
+            # 创建新的视频记录
+            video = Video(
+                title=video_info.title,
+                description=video_info.description,
+                platform=video_info.platform,
+                platform_video_id=video_info.video_id,
+                url=video_info.original_url,
+                thumbnail_url=video_info.thumbnail,
+                duration=video_info.duration,
+                view_count=video_info.view_count,
+                like_count=video_info.like_count,
+                comment_count=video_info.comment_count,
+                uploader_name=video_info.uploader,
+                uploader_id=video_info.uploader_id,
+                upload_date=self._parse_upload_date(video_info.upload_date),
+                file_path=str(file_path),
+                file_size=file_path.stat().st_size if file_path.exists() else None,
+                resolution=video_info.resolution,
+                format=file_path.suffix[1:] if file_path.suffix else None
+            )
+            
+            db.add(video)
+            db.commit()
+            db.refresh(video)
+            
+            download_logger.info(
+                "Video metadata saved",
+                video_id=video.id,
+                title=video.title,
+                platform=video.platform
+            )
+            
+            return video
+            
+        except Exception as e:
+            download_logger.error(
+                "Failed to save video metadata",
+                error=str(e)
+            )
+            return None
+
     def _detect_platform(self, url: str) -> Optional[str]:
-        """检测视频平台
-        
-        Args:
-            url: 视频URL
-        
-        Returns:
-            平台名称，如果无法识别则返回None
-        """
+        """检测视频平台"""
         url_lower = url.lower()
         
         platform_patterns = {
@@ -650,16 +498,9 @@ class DownloadService:
                     return platform
         
         return None
-    
+
     def _parse_upload_date(self, date_str: Optional[str]) -> Optional[str]:
-        """解析上传日期
-        
-        Args:
-            date_str: 日期字符串（YYYYMMDD格式）
-        
-        Returns:
-            ISO格式的日期字符串
-        """
+        """解析上传日期"""
         if not date_str:
             return None
         
@@ -674,16 +515,9 @@ class DownloadService:
             pass
         
         return None
-    
+
     def _get_best_resolution(self, formats: List[Dict]) -> Optional[str]:
-        """获取最佳分辨率
-        
-        Args:
-            formats: 格式列表
-        
-        Returns:
-            分辨率字符串（如"1920x1080"）
-        """
+        """获取最佳分辨率"""
         if not formats:
             return None
         
@@ -703,86 +537,127 @@ class DownloadService:
                 return f"{width}x{height}"
         
         return None
-    
-    def _generate_filename(self, video_info: Dict, options: Dict) -> str:
-        """生成文件名
+
+    async def update_task_celery_id(
+        self,
+        db: Session,
+        task_id: str,
+        celery_task_id: str
+    ) -> bool:
+        """更新任务的Celery任务ID
         
         Args:
+            db: 数据库会话
+            task_id: 任务ID
+            celery_task_id: Celery任务ID
+            
+        Returns:
+            是否更新成功
+        """
+        try:
+            task = db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
+            if not task:
+                download_logger.warning(
+                    "任务不存在",
+                    task_id=task_id
+                )
+                return False
+                
+            task.celery_task_id = celery_task_id
+            task.updated_at = datetime.now()
+            db.commit()
+            
+            download_logger.info(
+                "Celery任务ID更新成功",
+                task_id=task_id,
+                celery_task_id=celery_task_id
+            )
+            return True
+            
+        except Exception as e:
+            download_logger.error(
+                "更新Celery任务ID失败",
+                task_id=task_id,
+                celery_task_id=celery_task_id,
+                error=str(e)
+            )
+            db.rollback()
+            return False
+
+
+    async def create_download_task(
+        self,
+        db: Session,
+        user_id: int,
+        url: str,
+        video_info: Dict,
+        options: Dict = None
+    ) -> DownloadTask:
+        """创建下载任务
+        
+        Args:
+            db: 数据库会话
+            user_id: 用户ID
+            url: 视频URL
             video_info: 视频信息
             options: 下载选项
-        
+            
         Returns:
-            生成的文件名
+            创建的下载任务
         """
-        # 清理标题，移除不安全的字符
-        title = video_info.get('title', 'video')
-        safe_title = re.sub(r'[<>:"/\\|?*]', '_', title)
-        safe_title = safe_title[:100]  # 限制长度
-        
-        # 获取扩展名
-        ext = options.get('format_preference', 'mp4')
-        if not ext.startswith('.'):
-            ext = f'.{ext}'
-        
-        # 添加时间戳避免重名
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        
-        # 构建文件名
-        filename = f"{safe_title}_{timestamp}{ext}"
-        
-        return filename
-    
-    def _build_download_options(self, file_path: Path, options: Dict) -> Dict:
-        """构建yt-dlp下载选项
-        
-        Args:
-            file_path: 输出文件路径
-            options: 用户选项
-        
-        Returns:
-            yt-dlp选项字典
-        """
-        ydl_opts = {
-            'outtmpl': str(file_path),
-            'format': self._build_format_selector(options),
-            'writesubtitles': True,
-            'writeautomaticsub': True,
-            'subtitleslangs': ['zh', 'en'],
-            'ignoreerrors': False,
-        }
-        
-        # 仅音频选项
-        if options.get('audio_only', False):
-            ydl_opts.update({
-                'format': 'bestaudio/best',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }]
-            })
-        
-        return ydl_opts
-    
-    def _build_format_selector(self, options: Dict) -> str:
-        """构建格式选择器
-        
-        Args:
-            options: 下载选项
-        
-        Returns:
-            yt-dlp格式选择器字符串
-        """
-        quality = options.get('quality', 'best')
-        format_pref = options.get('format_preference', 'mp4')
-        
-        if quality == 'best':
-            return f'best[ext={format_pref}]/best'
-        elif quality == 'worst':
-            return f'worst[ext={format_pref}]/worst'
-        elif quality.endswith('p'):
-            # 特定分辨率，如720p, 1080p
-            height = quality[:-1]
-            return f'best[height<={height}][ext={format_pref}]/best[height<={height}]'
-        else:
-            return f'best[ext={format_pref}]/best'
+        try:
+            # 检查是否已存在相同URL的未完成任务
+            existing_task = db.query(DownloadTask).filter(
+                DownloadTask.user_id == user_id,
+                DownloadTask.url == url,
+                DownloadTask.status.in_(["pending", "processing"])
+            ).first()
+            
+            if existing_task:
+                download_logger.warning(
+                    "下载任务已存在",
+                    user_id=user_id,
+                    url=url,
+                    existing_task_id=existing_task.id
+                )
+                return existing_task
+            
+            # 创建新的下载任务
+            task = DownloadTask(
+                user_id=user_id,
+                url=url,
+                platform=video_info.get('platform'),
+                status="pending",
+                quality=options.get('quality', 'best') if options else 'best',
+                format_preference=options.get('format', 'mp4') if options else 'mp4',
+                audio_only=options.get('download_audio', False) if options else False,
+                options=options or {}
+            )
+            
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+            
+            download_logger.info(
+                "下载任务创建成功",
+                task_id=task.id,
+                user_id=user_id,
+                url=url,
+                platform=video_info.get('platform')
+            )
+            
+            return task
+            
+        except Exception as e:
+            download_logger.error(
+                "创建下载任务失败",
+                user_id=user_id,
+                url=url,
+                error=str(e)
+            )
+            db.rollback()
+            raise
+
+
+# 全局下载服务实例
+download_service = DownloadService()
