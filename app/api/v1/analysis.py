@@ -7,8 +7,10 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.models.video import Video, AnalysisTask
+from app.models.user import User
 from app.schemas.video import AnalysisRequest, AnalysisResponse
 from app.services.analysis_service import AnalysisService
+from app.api.deps import get_current_user
 
 router = APIRouter()
 
@@ -17,7 +19,8 @@ async def start_analysis(
     video_id: int,
     analysis_request: AnalysisRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """开始视频分析"""
     
@@ -37,6 +40,7 @@ async def start_analysis(
     
     # 创建分析任务
     task = AnalysisTask(
+        user_id=current_user.id,
         video_id=video_id,
         analysis_types=json.dumps(analysis_request.analysis_types),
         ai_config_id=analysis_request.ai_config_id,
@@ -169,7 +173,8 @@ async def start_batch_analysis(
     video_ids: List[int],
     analysis_request: AnalysisRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """批量开始分析"""
     
@@ -191,6 +196,7 @@ async def start_batch_analysis(
         
         # 创建分析任务
         task = AnalysisTask(
+            user_id=current_user.id,
             video_id=video_id,
             analysis_types=json.dumps(analysis_request.analysis_types),
             ai_config_id=analysis_request.ai_config_id,

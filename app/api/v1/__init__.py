@@ -4,7 +4,7 @@
 """
 
 from fastapi import APIRouter
-from .endpoints import auth, users, system_config, tag_groups
+from .endpoints import auth, users, system_config, tag_groups, video_upload, video_processing, simple_upload, test_upload, minimal_upload, file_manager, video_analysis, video_download, websocket
 from .upload import router as upload_router
 from .videos import router as videos_router
 from .analysis import router as analysis_router
@@ -18,6 +18,15 @@ api_router.include_router(auth.router, prefix="/auth", tags=["认证"])
 api_router.include_router(users.router, prefix="/users", tags=["用户管理"])
 api_router.include_router(system_config.router, prefix="/system/config", tags=["系统配置"])
 api_router.include_router(tag_groups.router, prefix="/tag-groups", tags=["标签组管理"])
+api_router.include_router(video_upload.router, prefix="/upload", tags=["视频上传"])
+api_router.include_router(simple_upload.router, prefix="/simple-upload", tags=["简单上传"])
+api_router.include_router(test_upload.router, prefix="/test-upload", tags=["测试上传"])
+api_router.include_router(minimal_upload.router, prefix="/minimal", tags=["最简上传"])
+api_router.include_router(file_manager.router, prefix="/files", tags=["文件管理"])
+api_router.include_router(video_processing.router, prefix="/processing", tags=["视频处理"])
+api_router.include_router(video_analysis.router, prefix="/video-analysis", tags=["视频解析"])
+api_router.include_router(video_download.router, prefix="/video-download", tags=["视频下载"])
+api_router.include_router(websocket.router, prefix="/websocket", tags=["WebSocket"])
 
 # 其他功能路由
 api_router.include_router(upload_router, prefix="/upload", tags=["upload"])

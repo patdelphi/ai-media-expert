@@ -34,9 +34,13 @@ class User(BaseModel):
     last_login_at = Column(DateTime, nullable=True)
     
     # 关联关系
+    uploaded_files = relationship("UploadedFile", back_populates="user")
+    videos = relationship("Video", back_populates="user")
+    video_analyses = relationship("VideoAnalysis", back_populates="user")
     download_tasks = relationship("DownloadTask", back_populates="user")
     analysis_tasks = relationship("AnalysisTask", back_populates="user")
     user_sessions = relationship("UserSession", back_populates="user")
+    download_history = relationship("DownloadHistory", back_populates="user")
     
     def __repr__(self):
         return f"<User(id={self.id}, email='{self.email}', username='{self.username}')>"

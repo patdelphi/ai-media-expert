@@ -26,7 +26,7 @@ from app.schemas.system_config import (
     SystemConfigImport
 )
 from app.schemas.common import ResponseModel
-from app.core.logging import api_logger
+from app.core.app_logging import api_logger
 
 router = APIRouter()
 

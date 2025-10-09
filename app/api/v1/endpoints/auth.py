@@ -27,7 +27,7 @@ from app.schemas.auth import (
     UserResponse
 )
 from app.schemas.common import ResponseModel
-from app.core.logging import security_logger
+from app.core.app_logging import security_logger
 
 router = APIRouter()
 

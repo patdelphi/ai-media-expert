@@ -21,6 +21,9 @@ class PromptTemplate(BaseModel):
     def __repr__(self):
         return f"<PromptTemplate(id={self.id}, title={self.title})>"
     
+    # 关联关系
+    video_analyses = relationship("VideoAnalysis", back_populates="template", lazy="dynamic")
+    
     def to_dict(self):
         """转换为字典"""
         return {

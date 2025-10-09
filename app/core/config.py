@@ -26,15 +26,19 @@ class Settings(BaseSettings):
     port: int = Field(default=8000, env="PORT")
     workers: int = Field(default=1, env="WORKERS")
     
+    # 公网访问配置（用于GLM-4.5V等视频理解模型）
+    ngrok_url: Optional[str] = Field(default=None, env="NGROK_URL")  # ngrok公网地址，如：https://abc123.ngrok.io
+    public_base_url: Optional[str] = Field(default=None, env="PUBLIC_BASE_URL")  # 自定义公网地址
+    
     # 数据库配置
     database_url: str = Field(env="DATABASE_URL")
     
     # Redis配置
     redis_url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
     
-    # Celery配置
-    celery_broker_url: str = Field(default="redis://localhost:6379/1", env="CELERY_BROKER_URL")
-    celery_result_backend: str = Field(default="redis://localhost:6379/2", env="CELERY_RESULT_BACKEND")
+    # Celery配置 - 使用内存作为后备方案
+    celery_broker_url: str = Field(default="memory://", env="CELERY_BROKER_URL")
+    celery_result_backend: str = Field(default="cache+memory://", env="CELERY_RESULT_BACKEND")
     
     # JWT配置
     jwt_secret_key: str = Field(env="JWT_SECRET_KEY")
@@ -49,6 +53,18 @@ class Settings(BaseSettings):
         default=[".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".webm"],
         env="ALLOWED_VIDEO_EXTENSIONS"
     )
+    
+    # 视频上传配置
+    chunk_size: int = Field(default=1048576, env="CHUNK_SIZE")  # 1MB
+    max_chunks: int = Field(default=10000, env="MAX_CHUNKS")
+    upload_session_timeout: int = Field(default=86400, env="UPLOAD_SESSION_TIMEOUT")  # 24小时
+    concurrent_uploads: int = Field(default=3, env="CONCURRENT_UPLOADS")
+    
+    # FFmpeg配置
+    ffmpeg_path: str = Field(default="ffmpeg", env="FFMPEG_PATH")
+    ffprobe_path: str = Field(default="ffprobe", env="FFPROBE_PATH")
+    thumbnail_quality: int = Field(default=2, env="THUMBNAIL_QUALITY")  # 1-31, 越小质量越高
+    preview_image_count: int = Field(default=6, env="PREVIEW_IMAGE_COUNT")
     
     # 视频下载配置
     download_dir: Path = Field(default=Path("./downloads"), env="DOWNLOAD_DIR")
@@ -72,7 +88,7 @@ class Settings(BaseSettings):
     
     # 安全配置
     cors_origins: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:8080"],
+        default=["http://localhost:3000", "http://localhost:3001", "http://localhost:8080"],
         env="CORS_ORIGINS"
     )
     allowed_hosts: List[str] = Field(
@@ -137,6 +153,15 @@ class Settings(BaseSettings):
             return self.database_url
         # 将异步PostgreSQL URL转换为同步版本
         return self.database_url.replace("postgresql+asyncpg://", "postgresql://")
+    
+    def get_base_url(self) -> str:
+        """获取基础URL，优先使用公网地址"""
+        if self.public_base_url:
+            return self.public_base_url
+        elif self.ngrok_url:
+            return self.ngrok_url
+        else:
+            return f"http://{self.host}:{self.port}"
     
     class Config:
         env_file = ".env"

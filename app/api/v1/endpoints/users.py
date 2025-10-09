@@ -18,7 +18,7 @@ from app.schemas.user import (
     UserStatusUpdate, UserSearchParams
 )
 from app.schemas.common import ResponseModel, PaginationParams
-from app.core.logging import api_logger
+from app.core.app_logging import api_logger
 
 router = APIRouter()
 

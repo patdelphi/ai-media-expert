@@ -1238,6 +1238,7 @@ const SystemConfigPage: React.FC = () => {
               { key: 'ai', label: 'AI API配置', icon: 'fa-robot' },
               { key: 'template', label: '提示词模板', icon: 'fa-file-alt' },
               { key: 'tags', label: '预设标签组', icon: 'fa-tags' },
+              { key: 'video-download', label: '视频下载配置', icon: 'fa-download' },
               { key: 'users', label: '用户管理', icon: 'fa-users' }
             ].map((tab) => (
               <button
@@ -2078,6 +2079,184 @@ const SystemConfigPage: React.FC = () => {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* 视频下载配置 */}
+          {activeTab === 'video-download' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-lg font-medium text-gray-900">视频下载配置</h2>
+                <button 
+                  className="btn-primary"
+                  onClick={() => window.location.reload()}
+                >
+                  <i className="fas fa-sync mr-2"></i>
+                  刷新配置
+                </button>
+              </div>
+
+              {/* 基础下载设置 */}
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  <i className="fas fa-cog mr-2 text-blue-500"></i>
+                  基础下载设置
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      默认下载路径
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="/downloads/videos"
+                      defaultValue="./downloads"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      最大并发下载数
+                    </label>
+                    <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="1">1个</option>
+                      <option value="2" selected>2个</option>
+                      <option value="3">3个</option>
+                      <option value="5">5个</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      下载超时时间（秒）
+                    </label>
+                    <input
+                      type="number"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      defaultValue="300"
+                      min="30"
+                      max="3600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      自动重试次数
+                    </label>
+                    <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="0">不重试</option>
+                      <option value="1">1次</option>
+                      <option value="2" selected>2次</option>
+                      <option value="3">3次</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* 平台配置 */}
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  <i className="fas fa-globe mr-2 text-green-500"></i>
+                  平台配置
+                </h3>
+                <div className="space-y-4">
+                  {[
+                    { name: '抖音', key: 'douyin', icon: 'fab fa-tiktok', color: 'text-red-500' },
+                    { name: 'TikTok', key: 'tiktok', icon: 'fab fa-tiktok', color: 'text-black' },
+                    { name: 'B站', key: 'bilibili', icon: 'fas fa-play-circle', color: 'text-blue-500' },
+                    { name: '小红书', key: 'xiaohongshu', icon: 'fas fa-book', color: 'text-pink-500' },
+                    { name: '快手', key: 'kuaishou', icon: 'fas fa-video', color: 'text-yellow-500' },
+                    { name: '微信视频号', key: 'weixin', icon: 'fab fa-weixin', color: 'text-green-500' }
+                  ].map((platform) => (
+                    <div key={platform.key} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-3">
+                          <i className={`${platform.icon} ${platform.color} text-xl`}></i>
+                          <span className="font-medium text-gray-900">{platform.name}</span>
+                          <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                            已启用
+                          </span>
+                        </div>
+                        <button className="text-blue-600 hover:text-blue-800 text-sm">
+                          <i className="fas fa-cog mr-1"></i>
+                          配置
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Cookie配置
+                          </label>
+                          <textarea
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            rows={2}
+                            placeholder="请输入平台Cookie（可选，用于提高解析成功率）"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            User-Agent
+                          </label>
+                          <input
+                            type="text"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            placeholder="自定义User-Agent（可选）"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 高级设置 */}
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  <i className="fas fa-sliders-h mr-2 text-purple-500"></i>
+                  高级设置
+                </h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900">启用代理下载</h4>
+                      <p className="text-sm text-gray-500">通过代理服务器下载视频，提高成功率</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900">自动清理临时文件</h4>
+                      <p className="text-sm text-gray-500">下载完成后自动清理临时文件</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" defaultChecked />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900">启用下载历史记录</h4>
+                      <p className="text-sm text-gray-500">记录所有下载历史，便于管理和统计</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" defaultChecked />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* 保存按钮 */}
+              <div className="flex justify-end space-x-3">
+                <button className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">
+                  重置配置
+                </button>
+                <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                  <i className="fas fa-save mr-2"></i>
+                  保存配置
+                </button>
+              </div>
             </div>
           )}
 

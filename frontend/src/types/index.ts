@@ -40,9 +40,58 @@ export interface FileItem {
   name: string;
   size: string;
   progress: number;
-  status: 'waiting' | 'uploading' | 'completed' | 'failed';
+  status: 'waiting' | 'uploading' | 'completed' | 'failed' | 'paused' | 'cancelled';
   previewUrl: string;
   file: File;
+  error?: string;
+  
+  // 文件基本信息
+  file_size?: number;
+  uploadTime?: string;
+  created_at?: string;
+  file_created_at?: string;
+  path?: string;
+  saved_name?: string;
+  original_filename?: string;
+  saved_filename?: string;
+  
+  // 视频基本信息
+  duration?: number;
+  format_name?: string;
+  format_long_name?: string;
+  bit_rate?: number;
+  
+  // 视频流信息
+  width?: number;
+  height?: number;
+  video_codec?: string;
+  video_codec_long?: string;
+  frame_rate?: string;
+  avg_frame_rate?: string;
+  aspect_ratio?: string;
+  pixel_format?: string;
+  video_bit_rate?: number;
+  nb_frames?: number;
+  
+  // 音频流信息
+  audio_codec?: string;
+  audio_codec_long?: string;
+  sample_rate?: number;
+  channels?: number;
+  channel_layout?: string;
+  audio_bit_rate?: number;
+  
+  // 颜色和质量信息
+  color_space?: string;
+  color_range?: string;
+  color_transfer?: string;
+  color_primaries?: string;
+  profile?: string;
+  level?: string;
+  
+  // 元数据
+  encoder?: string;
+  creation_time?: string;
 }
 
 // 下载任务相关类型
