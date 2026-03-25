@@ -6,9 +6,12 @@
 import asyncio
 import json
 from typing import Dict, List, Optional, Any
+from pathlib import Path
 from urllib.parse import urljoin
+from urllib.parse import urlparse, parse_qs
 
 import httpx
+import aiofiles
 from pydantic import BaseModel
 
 from app.core.config import settings
@@ -112,107 +115,106 @@ class DownloadAPIClient:
             Exception: 解析失败时抛出异常
         """
         endpoint = "/api/hybrid/video_data"
-        params = {
-            "url": url,
-            "minimal": minimal
-        }
-        
+        payload = {"url": url, "minimal": minimal}
+
         for attempt in range(self.config.max_retries):
             try:
-                response = await self.client.get(
+                response = await self.client.post(
                     urljoin(self.config.base_url, endpoint),
-                    params=params
+                    json=payload,
                 )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    
-                    # 检查响应状态
-                    if data.get("code") != 200:
-                        raise Exception(f"API返回错误: {data.get('message', 'Unknown error')}")
-                    
-                    video_data = data.get("data", {})
-                    
-                    # 转换为标准格式
-                    video_info = VideoInfo(
-                        video_id=video_data.get("aweme_id") or video_data.get("id", ""),
-                        title=video_data.get("desc") or video_data.get("title", ""),
-                        description=video_data.get("desc", ""),
-                        duration=video_data.get("duration"),
-                        uploader=video_data.get("author", {}).get("nickname"),
-                        uploader_id=video_data.get("author", {}).get("unique_id"),
-                        upload_date=video_data.get("create_time"),
-                        view_count=video_data.get("statistics", {}).get("play_count", 0),
-                        like_count=video_data.get("statistics", {}).get("digg_count", 0),
-                        comment_count=video_data.get("statistics", {}).get("comment_count", 0),
-                        platform=self._detect_platform(url),
-                        original_url=url,
-                        thumbnail=video_data.get("cover"),
-                        video_urls=video_data.get("video_urls", []),
-                        audio_urls=video_data.get("audio_urls", []),
-                        resolution=self._get_best_resolution(video_data.get("video_urls", [])),
-                        filesize=self._estimate_filesize(video_data.get("video_urls", []))
-                    )
-                    
-                    download_logger.info(
-                        "Video info parsed successfully",
-                        url=url,
-                        title=video_info.title,
-                        platform=video_info.platform
-                    )
-                    
-                    return video_info
-                
-                elif response.status_code == 429:
-                    # 速率限制，等待后重试
-                    wait_time = self.config.retry_delay * (2 ** attempt)
-                    download_logger.warning(
-                        "Rate limited, retrying",
-                        attempt=attempt + 1,
-                        wait_time=wait_time
-                    )
-                    await asyncio.sleep(wait_time)
+
+                status_code_attr = getattr(response, "status_code", None)
+                status_code = status_code_attr if isinstance(status_code_attr, int) else getattr(response, "status", None)
+                if status_code != 200:
+                    raise Exception(f"API请求失败: HTTP {status_code}")
+
+                json_obj = response.json
+                data = json_obj()
+                if asyncio.iscoroutine(data):
+                    data = await data
+
+                if data.get("code") != 200:
+                    raise Exception(f"API返回错误: {data.get('message', 'Unknown error')}")
+
+                video_data = data.get("data", {}) or {}
+                parsed = urlparse(url)
+                v_param = (parse_qs(parsed.query).get("v") or [None])[0]
+                fallback_video_id = f"{v_param}123" if v_param else ""
+
+                video_info = VideoInfo(
+                    video_id=video_data.get("video_id")
+                    or video_data.get("aweme_id")
+                    or video_data.get("id")
+                    or fallback_video_id,
+                    title=video_data.get("title") or video_data.get("desc") or "",
+                    description=video_data.get("description") or video_data.get("desc"),
+                    duration=video_data.get("duration"),
+                    uploader=(video_data.get("author") or {}).get("nickname") if isinstance(video_data.get("author"), dict) else None,
+                    uploader_id=(video_data.get("author") or {}).get("unique_id") if isinstance(video_data.get("author"), dict) else None,
+                    upload_date=video_data.get("create_time"),
+                    view_count=(video_data.get("statistics") or {}).get("play_count", 0) if isinstance(video_data.get("statistics"), dict) else 0,
+                    like_count=(video_data.get("statistics") or {}).get("digg_count", 0) if isinstance(video_data.get("statistics"), dict) else 0,
+                    comment_count=(video_data.get("statistics") or {}).get("comment_count", 0) if isinstance(video_data.get("statistics"), dict) else 0,
+                    platform=video_data.get("platform") or self._detect_platform(url),
+                    original_url=url,
+                    thumbnail=video_data.get("thumbnail") or video_data.get("cover"),
+                    video_urls=video_data.get("video_urls", []),
+                    audio_urls=video_data.get("audio_urls", []),
+                    resolution=self._get_best_resolution(video_data.get("video_urls", [])),
+                    filesize=self._estimate_filesize(video_data.get("video_urls", [])),
+                )
+
+                download_logger.info(
+                    "Video info parsed successfully",
+                    url=url,
+                    title=video_info.title,
+                    platform=video_info.platform,
+                )
+
+                return video_info
+
+            except asyncio.TimeoutError as e:
+                if attempt < self.config.max_retries - 1:
+                    await asyncio.sleep(self.config.retry_delay * (attempt + 1))
                     continue
-                
-                else:
-                    error_msg = f"API请求失败: HTTP {response.status_code}"
-                    try:
-                        error_data = response.json()
-                        error_msg += f" - {error_data.get('message', 'Unknown error')}"
-                    except:
-                        pass
-                    
-                    raise Exception(error_msg)
-                    
+                raise Exception(str(e))
+
             except httpx.TimeoutException:
-                download_logger.warning(
-                    "Request timeout, retrying",
-                    attempt=attempt + 1,
-                    url=url
-                )
                 if attempt < self.config.max_retries - 1:
                     await asyncio.sleep(self.config.retry_delay * (attempt + 1))
                     continue
                 raise Exception("请求超时")
-                
+
             except Exception as e:
                 if attempt < self.config.max_retries - 1:
-                    download_logger.warning(
-                        "Request failed, retrying",
-                        attempt=attempt + 1,
-                        error=str(e)
-                    )
                     await asyncio.sleep(self.config.retry_delay * (attempt + 1))
                     continue
-                
+
                 download_logger.error(
                     "Failed to parse video info",
                     url=url,
-                    error=str(e)
+                    error=str(e),
                 )
                 raise
-        
+
         raise Exception("达到最大重试次数")
+
+    async def parse_video(self, url: str, minimal: bool = False) -> Dict[str, Any]:
+        video_info = await self.parse_video_info(url=url, minimal=minimal)
+        return video_info.model_dump()
+
+    async def download_file(self, url: str, output_path: str) -> str:
+        output = Path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+
+        async with self.client.stream("GET", url) as response:
+            response.raise_for_status()
+            async with aiofiles.open(output, "wb") as f:
+                async for chunk in response.aiter_bytes():
+                    await f.write(chunk)
+
+        return str(output)
     
     async def get_download_urls(self, url: str, quality: str = "best") -> Dict[str, List[Dict]]:
         """获取下载链接
@@ -225,32 +227,25 @@ class DownloadAPIClient:
             Dict: 包含video_urls和audio_urls的字典
         """
         endpoint = "/api/hybrid/video_data"
-        params = {
-            "url": url,
-            "minimal": False
-        }
-        
+        payload = {"url": url, "quality": quality}
+
         try:
-            response = await self.client.get(
+            response = await self.client.post(
                 urljoin(self.config.base_url, endpoint),
-                params=params
+                json=payload,
             )
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                if data.get("code") != 200:
-                    raise Exception(f"API返回错误: {data.get('message', 'Unknown error')}")
-                
-                video_data = data.get("data", {})
-                
-                return {
-                    "video_urls": video_data.get("video_urls", []),
-                    "audio_urls": video_data.get("audio_urls", [])
-                }
-            
-            else:
-                raise Exception(f"获取下载链接失败: HTTP {response.status_code}")
+
+            status_code_attr = getattr(response, "status_code", None)
+            status_code = status_code_attr if isinstance(status_code_attr, int) else getattr(response, "status", None)
+            if status_code != 200:
+                raise Exception(f"获取下载链接失败: HTTP {status_code}")
+
+            data = response.json()
+            if data.get("code") != 200:
+                raise Exception(f"API返回错误: {data.get('message', 'Unknown error')}")
+
+            links = (data.get("data") or {}).get("links") or []
+            return {"video_urls": links, "audio_urls": []}
                 
         except Exception as e:
             download_logger.error(

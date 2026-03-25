@@ -209,30 +209,25 @@ class VideoUploadService {
       formData.append('title', file.name);
       formData.append('description', '视频上传');
 
-      // 上传文件
-      const response = await apiService.post('/minimal/upload', formData);
+      const response = await apiService.postForm('/simple-upload/simple', formData);
 
-      // 检查响应格式 - 支持新旧两种格式
-      const isSuccess = (response as any).success || (response as any).filename;
-      
-      if (isSuccess) {
-        // 上传成功
+      if (response.code === 200 && response.data) {
         task.status = UploadStatus.COMPLETED;
         task.progress.status = UploadStatus.COMPLETED;
         task.progress.progress = 100;
-        task.progress.videoId = 0; // 最简化API不返回video_id
+        task.progress.videoId = 0;
         task.uploadedBytes = task.totalBytes;
         task.chunks.set(0, true);
         task.progress.uploadedChunks = 1;
-        
-        // 记录文件信息
-        if ((response as any).file_path) {
-          console.log('文件已保存到:', (response as any).file_path);
+
+        const filePath = (response.data as any).file_path;
+        if (filePath) {
+          console.log('文件已保存到:', filePath);
         }
-        
+
         this.updateTaskProgress(taskId);
       } else {
-        throw new Error('Upload failed: ' + (response.message || 'Unknown error'));
+        throw new Error(response.message || 'Upload failed');
       }
     } catch (error: any) {
       task.status = UploadStatus.FAILED;

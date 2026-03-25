@@ -3,11 +3,14 @@
 使用Celery实现视频下载的异步处理，支持进度跟踪和错误处理。
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timedelta
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Any, Union
 from pathlib import Path
 import asyncio
 import traceback
+import os
 
 from celery import current_task
 from sqlalchemy.orm import Session
@@ -15,7 +18,6 @@ from sqlalchemy.orm import Session
 from app.tasks.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.models.video import Video, DownloadTask
-from app.services.download_service import DownloadService
 from app.services.download_api_client import get_download_api_client
 from app.core.config import settings
 from app.core.app_logging import get_logger
@@ -24,7 +26,7 @@ download_logger = get_logger("download_tasks")
 
 
 @celery_app.task(bind=True, name="download_video")
-def download_video_task(self, task_id: int) -> Dict:
+def download_video_task(self, task_id: Union[int, str]) -> Dict:
     """下载视频任务
     
     Args:
@@ -33,57 +35,54 @@ def download_video_task(self, task_id: int) -> Dict:
     Returns:
         任务执行结果
     """
-    db = SessionLocal()
-    
-    try:
-        # 获取下载任务
-        task = db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
-        if not task:
-            raise Exception(f"Download task {task_id} not found")
-        
-        # 更新任务状态为处理中
-        task.status = "processing"
-        task.started_at = datetime.utcnow()
-        task.progress = 0
-        db.commit()
-        
-        download_logger.info(
-            "Starting video download",
-            task_id=task_id,
-            url=task.url,
-            user_id=task.user_id
-        )
-        
-        # 使用异步函数处理下载
-        result = asyncio.run(_download_video_async(task, db))
-        
-        return result
-        
-    except Exception as e:
-        # 更新任务状态为失败
-        task = db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
-        if task:
-            task.status = "failed"
-            task.error_message = str(e)
-            task.error_code = "TASK_ERROR"
-            task.completed_at = datetime.utcnow()
+    with SessionLocal() as db:
+        try:
+            task = db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
+            if not task:
+                raise Exception(f"Download task {task_id} not found")
+
+            task.status = "processing"
+            task.started_at = datetime.utcnow()
+            task.progress = 0
             db.commit()
-        
-        download_logger.error(
-            "Download task failed",
-            task_id=task_id,
-            error=str(e),
-            traceback=traceback.format_exc()
-        )
-        
-        return {
-            'status': 'failed',
-            'error': str(e),
-            'task_id': task_id
-        }
-    
-    finally:
-        db.close()
+
+            download_logger.info(
+                "Starting video download",
+                task_id=task_id,
+                url=task.url,
+                user_id=task.user_id,
+            )
+
+            coro = _download_video_async(task, db)
+            try:
+                result = asyncio.run(coro)
+            finally:
+                if asyncio.iscoroutine(coro) and getattr(coro, "cr_frame", None) is not None:
+                    coro.close()
+
+            return result
+
+        except Exception as e:
+            task = db.query(DownloadTask).filter(DownloadTask.id == task_id).first()
+            if task:
+                task.status = "failed"
+                task.error_message = str(e)
+                task.error_code = "TASK_ERROR"
+                task.completed_at = datetime.utcnow()
+                db.commit()
+
+            download_logger.error(
+                "Download task failed",
+                task_id=task_id,
+                error=str(e),
+                traceback=traceback.format_exc(),
+            )
+
+            return {
+                "status": "failed",
+                "error": f"Download failed: {str(e)}",
+                "task_id": task_id,
+            }
 
 
 async def _download_video_async(task: DownloadTask, db: Session) -> Dict:
@@ -96,43 +95,57 @@ async def _download_video_async(task: DownloadTask, db: Session) -> Dict:
     Returns:
         Dict: 处理结果
     """
-    download_service = None
-    
     try:
-        # 初始化下载服务
-        download_service = DownloadService()
-        
-        # 处理下载任务
-        result = await download_service.process_download_task(task.id)
-        
-        # 刷新任务状态
-        db.refresh(task)
-        
-        if task.status == "completed":
-            download_logger.info(
-                "Video download completed successfully",
-                task_id=task.id,
-                file_path=task.file_path,
-                file_size=task.file_size
-            )
-            
-            return {
-                'status': 'completed',
-                'task_id': task.id,
-                'file_path': task.file_path,
-                'file_size': task.file_size,
-                'video_id': task.video_id
-            }
-        else:
-            return {
-                'status': task.status,
-                'task_id': task.id,
-                'error': task.error_message,
-                'error_code': task.error_code
-            }
+        api_client = await get_download_api_client()
+
+        is_healthy = await api_client.health_check()
+        if not is_healthy:
+            raise Exception("Download API service is not healthy")
+
+        video_info: Dict[str, Any] = await api_client.parse_video(task.url)
+        task.platform = video_info.get("platform")
+        db.commit()
+
+        video_urls: List[Dict[str, Any]] = video_info.get("video_urls") or []
+        if not video_urls:
+            raise Exception("No downloadable video url found")
+
+        target = video_urls[0]
+        download_url = target.get("url")
+        if not download_url:
+            raise Exception("No downloadable video url found")
+
+        ext = (target.get("ext") or "mp4").lstrip(".")
+        video_id = video_info.get("video_id") or str(task.id)
+        output_dir = Path(settings.download_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / f"{video_id}.{ext}"
+
+        downloaded_path = await api_client.download_file(download_url, str(output_path))
+
+        task.status = "completed"
+        task.completed_at = datetime.utcnow()
+        task.progress = 100
+        task.file_path = str(downloaded_path)
+        db.commit()
+
+        download_logger.info(
+            "Video download completed successfully",
+            task_id=task.id,
+            file_path=task.file_path,
+            file_size=task.file_size,
+        )
+
+        return {
+            "status": "completed",
+            "task_id": task.id,
+            "file_path": task.file_path,
+            "file_size": task.file_size,
+            "video_id": task.video_id,
+            "message": "Video downloaded successfully",
+        }
             
     except Exception as e:
-        # 更新任务状态为失败
         task.status = "failed"
         task.error_message = str(e)
         task.error_code = "DOWNLOAD_ERROR"
@@ -146,11 +159,68 @@ async def _download_video_async(task: DownloadTask, db: Session) -> Dict:
             traceback=traceback.format_exc()
         )
         
+        return {"status": "failed", "error": f"Download failed: {str(e)}", "task_id": task.id}
+
+
+@celery_app.task(bind=True, name="batch_download_videos")
+def batch_download_videos_task(self, task_ids: List[Union[int, str]]) -> Dict:
+    with SessionLocal() as db:
+        tasks = (
+            db.query(DownloadTask)
+            .filter(DownloadTask.id.in_(task_ids))
+            .all()
+        )
+
+        results: List[Dict[str, Any]] = []
+        for task in tasks:
+            async_result = download_video_task.delay(task.id)
+            results.append(async_result.get())
+
         return {
-            'status': 'failed',
-            'error': str(e),
-            'task_id': task.id
+            "status": "completed",
+            "total_tasks": len(tasks),
+            "results": results,
         }
+
+
+@celery_app.task(name="cleanup_failed_downloads")
+def cleanup_failed_downloads_task() -> Dict:
+    with SessionLocal() as db:
+        try:
+            cutoff_date = datetime.utcnow() - timedelta(days=7)
+            failed_tasks = (
+                db.query(DownloadTask)
+                .filter(
+                    DownloadTask.status == "failed",
+                    DownloadTask.created_at < cutoff_date,
+                )
+                .all()
+            )
+
+            cleaned_count = 0
+            for task in failed_tasks:
+                created_at = getattr(task, "created_at", None)
+                if created_at and created_at >= cutoff_date:
+                    continue
+
+                file_path = getattr(task, "file_path", None)
+                if file_path and os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                    except Exception:
+                        pass
+
+                db.delete(task)
+                cleaned_count += 1
+
+            if cleaned_count:
+                db.commit()
+
+            return {"status": "completed", "cleaned_count": cleaned_count}
+
+        except Exception as e:
+            db.rollback()
+            return {"status": "failed", "error": str(e)}
 
 
 @celery_app.task(bind=True, name="create_download_task")

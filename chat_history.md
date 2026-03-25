@@ -1,4 +1,4 @@
-﻿# AI媒体专家项目聊天记录
+# AI媒体专家项目聊天记录
 
 ## 2025-01-21 视频下载功能设计文档完成
 
@@ -102,3 +102,108 @@
 ---
 
 *记录时间: 2025-01-21*
+
+---
+
+## 2026-03-25 项目现状快速盘点
+
+### 用户问题
+- 分析一下项目，告诉我现状
+
+### 现状结论（摘要）
+- 当前是一个“后端FastAPI + 前端React/Vite”的视频下载/管理/分析平台雏形，目录结构齐全但存在配置/入口/测试等多处不一致，导致“可运行性”和“可持续迭代”风险偏高。
+
+### 关键发现
+- 后端入口使用 `"app/api/v1/__init__.py"` 的 `"api_router"`，而 `"app/api/v1/api.py"` 维护了另一套路由汇总，存在分叉风险。
+- `"pyproject.toml"` 声明 CLI 入口 `"app.main:main"`，但仓库不存在 `"app/main.py"`，打包后 CLI 不可用。
+- pytest 配置 `testpaths=["tests"]`，但实际测试在 `"app/tests"`；运行 pytest 会提示找不到 testpaths，并且当前测试在收集阶段失败（`ImportError: batch_download_videos_task` 不存在）。
+- `"docker-compose.yml"` 的 Celery 命令使用 `"app.tasks.celery"`，但代码里实际是 `"app/tasks/celery_app.py"` 且默认使用 `"memory://"` broker，与 Compose 的 Redis broker 期望不一致。
+- 依赖整体偏重（torch/whisper/ultralytics 等），但工程化校验（测试/类型检查/打包入口）尚未对齐；Pydantic V2 兼容性警告较多（`@validator` / `Field(env=...)`）。
+
+### 记录时间
+- 2026-03-25
+
+---
+
+## 2026-03-25 开始执行优化清单（P0）
+
+### 用户问题
+- 执行吧
+
+### 已执行内容
+- 修复 Python CLI 入口：新增 `"app/main.py"` 以满足 `"pyproject.toml"` 的 `"app.main:main"`。
+- 对齐测试配置并修复用例：将 pytest 收集路径改为 `"app/tests"`，补齐下载任务/下载客户端接口差异，确保 pytest 可通过。
+- 对齐 Celery 入口与配置：新增 `"app/tasks/celery.py"` 以匹配 `"docker-compose.yml"` 的 `-A app.tasks.celery`，并让 broker/backend 从配置读取。
+
+### 验证结果
+- `pytest`：通过（仍存在若干依赖/弃用类 warnings）
+
+### 记录时间
+- 2026-03-25
+
+---
+
+## 2026-03-25 继续执行去冗余（P1）
+
+### 用户确认
+- 暂不提交
+- 继续执行 P1
+
+### 已执行内容
+- 路由汇总收敛：将 v1 路由汇总统一到 `"app/api/v1/api.py"`，并让 `"app/api/v1/__init__.py"` 仅做 re-export，避免“双入口分叉”。
+- 冗余盘点：确认 `"frontend_backup/"` 当前无代码引用；梳理多套上传接口并给出“保留/移除”建议，已写入 `"todo.md"`。
+
+### 验证结果
+- `pytest`：通过
+
+### 记录时间
+- 2026-03-25
+
+---
+
+## 2026-03-25 清理上传冗余入口（P1）
+
+### 用户问题
+- 执行
+
+### 已执行内容
+- 前端上传接口收敛：将 `"frontend/src/services/videoUpload.ts"` 与 `"frontend/src/pages/VideoUpload.tsx"` 的上传请求从 `"/minimal/upload"` 迁移到 `"/simple-upload/simple"`，并按统一响应格式（`code/message/data`）处理。
+- 调试页面同步：将 `"file_manager.html"` 的上传请求迁移到 `"/simple-upload/simple"`（从 localStorage 读取 token 时会自动带上）。
+- 后端路由去冗余：从 v1 路由汇总中移除 `"/minimal"` 与 `"/test-upload"` 两套入口，保留 `"/upload/*"` 与 `"/simple-upload/*"`。
+
+### 验证结果
+- `pytest`：通过
+
+### 记录时间
+- 2026-03-25
+
+---
+
+## 2026-03-25 删除冗余目录与调试页面（P1）
+
+### 用户确认
+- 删除 `"frontend_backup/"`
+- 删除 `"app/api/v1/endpoints/minimal_upload.py"`、`"app/api/v1/endpoints/test_upload.py"`
+- 删除 `"file_manager.html"`
+- 提交当前变更（不 push）
+
+### 已执行内容
+- 已删除以上目录/文件，避免“备份目录、调试页面、已停用接口文件”长期堆积造成维护成本。
+
+### 记录时间
+- 2026-03-25
+
+---
+
+## 2026-03-25 提交与优化方案请求
+
+### 用户问题
+- 先commit当前版本，然后给我一个优化方案，特别是要去除无用、冗余代码
+
+### 助手处理
+- 需要先确认本次提交的范围与提交信息；当前工作区仅发现文件 `"chat_history.md"` 有改动。
+- 优化方案将以“可运行性/一致性优先，其次清理冗余代码与目录，再补齐测试与CI”为主线输出。
+- 已生成执行清单文件 `"todo.md"`，用于后续逐项确认与执行。
+
+### 记录时间
+- 2026-03-25

@@ -117,6 +117,16 @@ class ApiService {
     return response.data;
   }
 
+  // POST表单请求（multipart/form-data）
+  async postForm<T = any>(url: string, formData: FormData): Promise<ApiResponse<T>> {
+    const response = await this.api.post(url, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  }
+
   // PUT请求
   async put<T = any>(url: string, data?: any): Promise<ApiResponse<T>> {
     const response = await this.api.put(url, data);

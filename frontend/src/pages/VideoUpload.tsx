@@ -105,7 +105,6 @@ const VideoUpload: React.FC = () => {
     }
   };
 
-  // 简化的上传函数 - 参考file_manager.html的实现
   const uploadFile = async (fileItem: FileItem) => {
     try {
       console.log('开始上传文件:', fileItem.name, '大小:', fileItem.file.size, '类型:', fileItem.file.type);
@@ -122,13 +121,18 @@ const VideoUpload: React.FC = () => {
       formData.append('title', fileItem.name);
       formData.append('description', '通过视频上传页面上传');
 
-      console.log('发送请求到:', 'http://localhost:8000/api/v1/minimal/upload');
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+      const uploadUrl = `${apiBaseUrl}/simple-upload/simple`;
+      const token = localStorage.getItem('access_token');
+
+      console.log('发送请求到:', uploadUrl);
       
-      const response = await fetch('http://localhost:8000/api/v1/minimal/upload', {
+      const response = await fetch(uploadUrl, {
         method: 'POST',
         body: formData,
         mode: 'cors',
-        credentials: 'omit'
+        credentials: 'omit',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
 
       console.log('响应状态:', response.status, response.statusText);
@@ -142,8 +146,8 @@ const VideoUpload: React.FC = () => {
       const result = await response.json();
       console.log('上传响应:', result);
       
-      if (!result.success) {
-        throw new Error(result.error || result.message || '上传失败');
+      if (result?.code !== 200) {
+        throw new Error(result?.message || result?.error || '上传失败');
       }
 
       // 上传成功
