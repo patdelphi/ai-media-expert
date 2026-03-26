@@ -354,6 +354,33 @@
 
 ---
 
+## 2026-03-26 P3：集成测试推进（按顺序执行）
+
+### 用户问题
+- 按顺序执行
+
+### 已执行内容
+- 下载 API 集成测试：
+  - 新增 `"scripts/download_api_stub.py"`：本地 stub 服务（`/health`、`/api/hybrid/video_data`），用于跑 integration 用例。
+  - 更新 CI：增加 `workflow_dispatch` 手动 job `backend_integration`，启动 stub 并运行 `pytest -m integration`。
+  - 更新 `"app/tests/test_download_api_client.py"`：integration 用例从 “跳过” 改为可运行（依赖 stub 服务）。
+- 分片上传集成测试：
+  - 新增 `"app/tests/test_video_upload_endpoints.py"`：覆盖 `/api/v1/upload/init` + `/api/v1/upload/chunk`，校验合并后文件内容与 DB 状态。
+- CI 类型检查增强：
+  - 后端 CI 增加 `mypy`（以可落地范围为起点）：对 `"app/core/config.py"` 与 `"app/services/download_api_client.py"` 执行 mypy（跳过深层导入，逐步收紧）。
+  - 修复 flake8 F821：补齐 `"app/crawlers/tiktok/web/utils.py"` 的缺失导入，以及 `"app/tasks/download_tasks.py"` 的缺失依赖导入。
+
+### 验证结果
+- `python -m compileall app`：通过
+- `python -m flake8 app`：通过
+- `python -m mypy app/core/config.py app/services/download_api_client.py --follow-imports=skip ...`：通过
+- `python -m pytest -q`：通过
+
+### 记录时间
+- 2026-03-26
+
+---
+
 ## 2026-03-25 提交与优化方案请求
 
 ### 用户问题

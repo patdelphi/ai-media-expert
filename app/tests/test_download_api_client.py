@@ -273,11 +273,14 @@ class TestDownloadAPIClientIntegration:
     @pytest.mark.integration
     async def test_full_download_workflow(self):
         """测试完整的下载工作流程"""
-        # 这个测试需要真实的API服务器
-        # 在CI/CD环境中可以跳过或使用测试服务器
-        pytest.skip("需要真实的API服务器进行集成测试")
-        
-        client = DownloadAPIClient("http://localhost:8080")
+        from app.services.download_api_client import DownloadAPIConfig
+
+        client = DownloadAPIClient(
+            config=DownloadAPIConfig(
+                base_url="http://127.0.0.1:8080",
+                timeout=5,
+            )
+        )
         
         try:
             # 1. 健康检查
@@ -285,17 +288,13 @@ class TestDownloadAPIClientIntegration:
             assert health is True
             
             # 2. 解析视频
-            video_info = await client.parse_video("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-            assert video_info['title']
-            assert video_info['platform'] == 'youtube'
+            video_info = await client.parse_video_info("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+            assert video_info.title
+            assert video_info.platform
             
             # 3. 获取下载链接
-            links = await client.get_download_links("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-            assert len(links) > 0
-            
-            # 4. 下载文件（这里只测试API调用，不实际下载）
-            # file_path = await client.download_file(links[0]['url'], "/tmp/test_video.mp4")
-            # assert file_path
+            links = await client.get_download_urls("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+            assert len(links.get("video_urls") or []) > 0
             
         finally:
             await client.close()

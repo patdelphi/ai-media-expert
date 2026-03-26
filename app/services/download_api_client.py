@@ -179,7 +179,8 @@ class DownloadAPIClient:
 
                 video_data = data.get("data", {}) or {}
                 parsed = urlparse(url)
-                v_param = (parse_qs(parsed.query).get("v") or [None])[0]
+                v_vals = parse_qs(parsed.query).get("v")
+                v_param = v_vals[0] if v_vals else None
                 fallback_video_id = f"{v_param}123" if v_param else ""
 
                 video_info = VideoInfo(

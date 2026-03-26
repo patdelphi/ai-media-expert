@@ -19,6 +19,7 @@ from app.tasks.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.models.video import Video, DownloadTask
 from app.services.download_api_client import get_download_api_client
+from app.services.download_service import DownloadService
 from app.core.config import settings
 from app.core.app_logging import get_logger
 
