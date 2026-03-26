@@ -43,17 +43,30 @@ def get_recent_videos(
     用于视频解析功能的视频选择，默认返回9个视频。
     """
     try:
+        import os
+
         # 获取最近上传的视频文件
+        candidate_limit = min(max(limit, 1) * 5, 100)
         videos = db.query(UploadedFile).filter(
-            UploadedFile.file_size > 0  # 确保文件有效
-        ).order_by(desc(UploadedFile.created_at)).limit(limit).all()
+            UploadedFile.file_size > 0,
+            UploadedFile.file_path.isnot(None)
+        ).order_by(desc(UploadedFile.created_at)).limit(candidate_limit).all()
         
         video_list = []
         for video in videos:
+            if not video.file_path or not os.path.isfile(video.file_path):
+                continue
+            try:
+                if os.path.getsize(video.file_path) <= 0:
+                    continue
+            except OSError:
+                continue
+
             video_info = VideoFileInfo(
                 id=video.id,
                 original_filename=video.original_filename,
                 saved_filename=video.saved_filename,
+                title=video.title,
                 file_size=video.file_size,
                 duration=video.duration,
                 width=video.width,
@@ -62,6 +75,8 @@ def get_recent_videos(
                 created_at=video.created_at
             )
             video_list.append(video_info)
+            if len(video_list) >= limit:
+                break
         
         api_logger.info(f"Retrieved {len(video_list)} recent videos")
         
@@ -76,6 +91,145 @@ def get_recent_videos(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve recent videos: {str(e)}"
+        )
+
+
+@router.get("/videos", response_model=ResponseModel[PaginatedResponse[VideoFileInfo]])
+def get_videos(
+    pagination: PaginationParams = Depends(),
+    db: Session = Depends(get_db)
+) -> Any:
+    """获取可用于解析的视频列表（分页）"""
+    try:
+        import os
+
+        query = db.query(UploadedFile).filter(
+            UploadedFile.file_size > 0,
+            UploadedFile.file_path.isnot(None)
+        ).order_by(desc(UploadedFile.created_at))
+
+        total = query.count()
+
+        items: List[VideoFileInfo] = []
+        offset = pagination.offset
+        batch_size = min(max(pagination.size, 1) * 5, 200)
+        attempts = 0
+
+        while len(items) < pagination.size and attempts < 20:
+            batch = query.offset(offset).limit(batch_size).all()
+            if not batch:
+                break
+
+            for video in batch:
+                if not video.file_path or not os.path.isfile(video.file_path):
+                    continue
+                try:
+                    if os.path.getsize(video.file_path) <= 0:
+                        continue
+                except OSError:
+                    continue
+
+                items.append(VideoFileInfo(
+                    id=video.id,
+                    original_filename=video.original_filename,
+                    saved_filename=video.saved_filename,
+                    title=video.title,
+                    file_size=video.file_size,
+                    duration=video.duration,
+                    width=video.width,
+                    height=video.height,
+                    format_name=video.format_name,
+                    created_at=video.created_at
+                ))
+
+                if len(items) >= pagination.size:
+                    break
+
+            offset += batch_size
+            attempts += 1
+
+        paginated_data = PaginatedResponse.create(
+            items=items,
+            total=total,
+            page=pagination.page,
+            size=pagination.size
+        )
+
+        return ResponseModel(
+            code=200,
+            message="Videos retrieved successfully",
+            data=paginated_data
+        )
+    except Exception as e:
+        api_logger.error(f"Failed to get videos: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve videos: {str(e)}"
+        )
+
+
+@router.get("/videos/{video_id}", response_model=ResponseModel[VideoFileInfo])
+def get_video_detail(
+    video_id: int,
+    require_file: bool = False,
+    db: Session = Depends(get_db)
+) -> Any:
+    """获取单个可用于解析的视频信息"""
+    try:
+        import os
+
+        video = db.query(UploadedFile).filter(
+            UploadedFile.id == video_id
+        ).first()
+
+        if not video:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Video file not found"
+            )
+
+        if require_file:
+            if video.file_size <= 0 or not video.file_path or not os.path.isfile(video.file_path):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Video file is not available"
+                )
+
+            try:
+                if os.path.getsize(video.file_path) <= 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Video file is not available"
+                    )
+            except OSError:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Video file is not available"
+                )
+
+        return ResponseModel(
+            code=200,
+            message="Video retrieved successfully",
+            data=VideoFileInfo(
+                id=video.id,
+                original_filename=video.original_filename,
+                saved_filename=video.saved_filename,
+                title=video.title,
+                file_size=video.file_size,
+                duration=video.duration,
+                width=video.width,
+                height=video.height,
+                format_name=video.format_name,
+                created_at=video.created_at
+            )
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        api_logger.error(f"Failed to get video detail: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve video: {str(e)}"
         )
 
 
@@ -226,6 +380,8 @@ def start_video_analysis(
 ) -> Any:
     """开始视频解析任务"""
     try:
+        import os
+
         # 验证视频文件是否存在
         video_file = db.query(UploadedFile).filter(
             UploadedFile.id == request.video_file_id
@@ -234,6 +390,24 @@ def start_video_analysis(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Video file not found"
+            )
+
+        if not video_file.file_path or not os.path.isfile(video_file.file_path):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Video file is not available on disk"
+            )
+
+        try:
+            if os.path.getsize(video_file.file_path) <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Video file is empty"
+                )
+        except OSError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Video file cannot be accessed"
             )
         
         # 验证AI配置是否存在
@@ -485,11 +659,11 @@ def stream_analysis_result(
                     return
                 
                 # 对于进行中的任务，定期检查状态
-                max_iterations = 60  # 最多检查60次（2分钟）
-                iteration_count = 0
                 last_content_length = 0  # 跟踪上次发送的内容长度
+                start_time = time.monotonic()
+                max_seconds = 60 * 30
                 
-                while current_analysis.status in ["pending", "processing"] and iteration_count < max_iterations:
+                while current_analysis.status in ["pending", "processing"]:
                     try:
                         # 刷新数据
                         stream_db.refresh(current_analysis)
@@ -556,7 +730,14 @@ def stream_analysis_result(
                         
                         # 等待一段时间再检查
                         time.sleep(2)
-                        iteration_count += 1
+                        if time.monotonic() - start_time > max_seconds:
+                            chunk = AnalysisStreamChunk(
+                                type="timeout",
+                                progress=current_analysis.progress,
+                                metadata={"status": current_analysis.status}
+                            )
+                            yield f"data: {json.dumps(chunk.model_dump(), default=str)}\n\n"
+                            return
                         
                     except Exception as e:
                         api_logger.error(f"Error in stream iteration: {str(e)}")
@@ -567,15 +748,6 @@ def stream_analysis_result(
                         )
                         yield f"data: {json.dumps(chunk.model_dump(), default=str)}\n\n"
                         break
-                
-                # 如果达到最大迭代次数，发送超时错误
-                if iteration_count >= max_iterations:
-                    chunk = AnalysisStreamChunk(
-                        type="error",
-                        content="Analysis timeout",
-                        metadata={"error_code": "TIMEOUT"}
-                    )
-                    yield f"data: {json.dumps(chunk.model_dump(), default=str)}\n\n"
                     
             except Exception as e:
                 api_logger.error(f"Error in generate_stream: {str(e)}")

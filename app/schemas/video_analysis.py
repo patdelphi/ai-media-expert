@@ -132,6 +132,7 @@ class VideoFileInfo(BaseModel):
     id: int
     original_filename: str
     saved_filename: str
+    title: Optional[str] = None
     file_size: int
     duration: Optional[float] = None
     width: Optional[int] = None

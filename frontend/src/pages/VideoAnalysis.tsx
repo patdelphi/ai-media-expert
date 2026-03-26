@@ -17,6 +17,7 @@ interface VideoFile {
   id: number;
   original_filename: string;
   saved_filename: string;
+  title?: string;
   file_size: number;
   duration?: number;
   width?: number;
@@ -92,6 +93,20 @@ interface AnalysisResult {
   completed_at?: string;
 }
 
+interface AnalysisHistoryItem {
+  id: number;
+  video_file_id: number;
+  template_id?: number;
+  ai_config_id: number;
+  status: string;
+  progress: number;
+  result_summary?: string;
+  confidence_score?: number;
+  processing_time?: number;
+  created_at: string;
+  completed_at?: string;
+}
+
 interface StreamChunk {
   type: string;
   content?: string;
@@ -117,16 +132,24 @@ const VideoAnalysis: React.FC = () => {
   const [customPrompt, setCustomPrompt] = useState('');
   const [finalPrompt, setFinalPrompt] = useState('');
   const [currentAnalysis, setCurrentAnalysis] = useState<AnalysisResult | null>(null);
-  const [analysisHistory, setAnalysisHistory] = useState<AnalysisResult[]>([]);
+  const [analysisHistory, setAnalysisHistory] = useState<AnalysisHistoryItem[]>([]);
   
   // 视频传输方式状态
   const [transmissionMethod, setTransmissionMethod] = useState<'url' | 'base64' | 'upload'>('url');
   
   // 数据状态
   const [videos, setVideos] = useState<VideoFile[]>([]);
+  const [videoPage, setVideoPage] = useState(1);
+  const [videoPageSize] = useState(12);
+  const [videoTotal, setVideoTotal] = useState(0);
+  const [videoPages, setVideoPages] = useState(1);
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [tagGroups, setTagGroups] = useState<TagGroup[]>([]);
   const [aiConfigs, setAIConfigs] = useState<AIConfig[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize] = useState(10);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyPages, setHistoryPages] = useState(1);
   
   // UI状态
   const [loading, setLoading] = useState(false);
@@ -137,13 +160,19 @@ const VideoAnalysis: React.FC = () => {
   const [streamingResult, setStreamingResult] = useState('');
   const [streamingProgress, setStreamingProgress] = useState(0);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const pollingIntervalRef = useRef<number | null>(null);
+  const pollingTimeoutRef = useRef<number | null>(null);
   
   // 调试信息
   const [currentDebugInfo, setCurrentDebugInfo] = useState<any>({});
   
   // 历史记录展示
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<AnalysisResult | null>(null);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<number | null>(null);
+  const [selectedHistoryVideoTitle, setSelectedHistoryVideoTitle] = useState('');
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
+  const [historyDetailError, setHistoryDetailError] = useState<string | null>(null);
 
   // 页面加载时获取数据
   useEffect(() => {
@@ -225,6 +254,22 @@ const VideoAnalysis: React.FC = () => {
     setTimeout(() => setNotification(null), 5000);
   };
 
+  const loadVideos = async (page: number = 1) => {
+    try {
+      const baseUrl = getApiBaseUrl();
+      const response = await fetch(`${baseUrl}/api/v1/video-analysis/videos?page=${page}&size=${videoPageSize}`);
+      if (!response.ok) return;
+      const result = await response.json();
+      const data = result.data;
+      setVideos(data?.items || []);
+      setVideoTotal(data?.total || 0);
+      setVideoPage(data?.page || page);
+      setVideoPages(data?.pages || 1);
+    } catch (err) {
+      console.error('Failed to load videos:', err);
+    }
+  };
+
   // 加载初始数据
   const loadInitialData = async () => {
     setLoading(true);
@@ -232,7 +277,7 @@ const VideoAnalysis: React.FC = () => {
       // 并行加载所有数据
       const baseUrl = getApiBaseUrl();
       const [videosRes, templatesRes, tagGroupsRes, aiConfigsRes] = await Promise.all([
-        fetch(`${baseUrl}/api/v1/video-analysis/videos/recent`),
+        fetch(`${baseUrl}/api/v1/video-analysis/videos?page=1&size=${videoPageSize}`),
         fetch(`${baseUrl}/api/v1/video-analysis/templates`),
         fetch(`${baseUrl}/api/v1/video-analysis/tag-groups`),
         fetch(`${baseUrl}/api/v1/video-analysis/ai-configs`)
@@ -244,7 +289,11 @@ const VideoAnalysis: React.FC = () => {
 
       if (videosRes.ok) {
         const videosData = await videosRes.json();
-        setVideos(videosData.data || []);
+        const data = videosData.data;
+        setVideos(data?.items || []);
+        setVideoTotal(data?.total || 0);
+        setVideoPage(data?.page || 1);
+        setVideoPages(data?.pages || 1);
       }
 
       if (templatesRes.ok) {
@@ -269,7 +318,7 @@ const VideoAnalysis: React.FC = () => {
       restoreUserPreferences(loadedTemplates, loadedTagGroups, loadedAIConfigs);
       
       // 加载解析历史
-      loadAnalysisHistory();
+      loadAnalysisHistory(1);
 
     } catch (err) {
       console.error('Failed to load initial data:', err);
@@ -430,23 +479,16 @@ const VideoAnalysis: React.FC = () => {
           });
           eventSourceRef.current = eventSource;
 
-          // 设置连接超时检测
-           const connectionTimeout = setTimeout(() => {
-             if (eventSource.readyState === EventSource.CONNECTING) {
-               console.error('EventSource connection timeout');
-               eventSource.close();
-               
-               if (retryCount < 2) {
-                 console.log(`Retrying connection in 2 seconds... (${retryCount + 1}/3)`);
-                 setTimeout(() => startStreaming(analysisId, retryCount + 1), 2000);
-               } else {
-                 showNotification('error', '连接超时，请检查网络或刷新页面重试');
-               }
-             }
-           }, 10000); // 10秒超时
+          const connectionTimeout = setTimeout(() => {
+            if (eventSource.readyState === EventSource.CONNECTING) {
+              console.error('EventSource connection timeout');
+              eventSource.close();
+              handleStreamDisconnected(analysisId, '连接超时');
+            }
+          }, 10000);
            
            // 设置事件处理器
-            setupEventSourceHandlers(eventSource, analysisId, retryCount, connectionTimeout as any);
+           setupEventSourceHandlers(eventSource, analysisId, connectionTimeout as any);
            
          } catch (error) {
            console.error('Failed to create EventSource:', error);
@@ -462,7 +504,7 @@ const VideoAnalysis: React.FC = () => {
   };
 
   // EventSource消息处理函数
-  const setupEventSourceHandlers = (eventSource: EventSource, analysisId: number, retryCount: number, connectionTimeout: number) => {
+  const setupEventSourceHandlers = (eventSource: EventSource, analysisId: number, connectionTimeout: number) => {
     // 连接打开时的处理
     eventSource.onopen = (event) => {
       clearTimeout(connectionTimeout);
@@ -504,11 +546,13 @@ const VideoAnalysis: React.FC = () => {
             showNotification('success', '解析完成！');
             // 获取完整的解析结果包含调试信息
             fetchAnalysisResult(analysisId);
-            loadAnalysisHistory();
+            loadAnalysisHistory(1);
+            break;
+          case 'timeout':
+            handleStreamDisconnected(analysisId, '连接超时');
             break;
           case 'error':
-            showNotification('error', data.content || '解析过程中出现错误');
-            setCurrentStep(3);
+            handleStreamDisconnected(analysisId, data.content || '连接中断');
             break;
         }
       } catch (err) {
@@ -523,55 +567,51 @@ const VideoAnalysis: React.FC = () => {
       
       // 清除连接超时定时器
       clearTimeout(connectionTimeout);
-      
-      // 根据readyState提供更具体的错误信息
-      let errorMessage = '连接中断';
-      let shouldRetry = false;
-      
-      if (eventSource.readyState === EventSource.CONNECTING) {
-        errorMessage = '无法连接到服务器';
-        shouldRetry = retryCount < 3;
-        console.error('Connection failed - server may be unreachable');
-      } else if (eventSource.readyState === EventSource.CLOSED) {
-        errorMessage = '连接已关闭';
-        shouldRetry = retryCount < 2;
-        console.error('Connection closed unexpectedly');
-      }
-      
       eventSource.close();
-      
-      // 自动重连机制
-      if (shouldRetry) {
-        const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 10000); // 指数退避，最大10秒
-        console.log(`Retrying connection in ${retryDelay}ms (attempt ${retryCount + 1})`);
-        showNotification('info', `${errorMessage}，${retryDelay/1000}秒后自动重试...`);
-        
-        setTimeout(() => {
-          console.log(`Attempting reconnection (attempt ${retryCount + 1})`);
-          // startStreamingAnalysis(analysisId, analysisMethod, retryCount + 1);
-        }, retryDelay);
-      } else {
-        // 达到最大重试次数，检查后端状态
-        fetch(`${getApiBaseUrl()}/health`)
-          .then(response => {
-            if (response.ok) {
-              console.log('Backend is reachable, persistent EventSource connection issue');
-              showNotification('error', errorMessage + '，请刷新页面重试或检查浏览器扩展是否干扰连接');
-            } else {
-              console.error('Backend health check failed:', response.status);
-              showNotification('error', '后端服务异常，请稍后重试');
-            }
-          })
-          .catch(networkError => {
-            console.error('Network error:', networkError);
-            showNotification('error', '网络连接失败，请检查网络设置');
-          });
-        
-        // 回退到轮询模式
-        console.log('Falling back to polling mode');
-        startPollingAnalysis(analysisId);
-      }
+
+      handleStreamDisconnected(analysisId, '连接中断');
     };
+  };
+
+  const fetchAnalysisData = async (analysisId: number): Promise<any | null> => {
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/${analysisId}`);
+      if (!response.ok) return null;
+      const result = await response.json();
+      return result.data;
+    } catch (err) {
+      return null;
+    }
+  };
+
+  const handleStreamDisconnected = async (analysisId: number, message: string) => {
+    showNotification('info', `${message}，正在检查任务状态...`);
+
+    const analysisData = await fetchAnalysisData(analysisId);
+    if (!analysisData) {
+      startPollingAnalysis(analysisId);
+      return;
+    }
+
+    if (analysisData.status === 'completed') {
+      setStreamingProgress(100);
+      setCurrentStep(5);
+      setCurrentAnalysis(analysisData);
+      if (analysisData.analysis_result) {
+        setStreamingResult(analysisData.analysis_result);
+      }
+      showNotification('success', '解析完成！');
+      loadAnalysisHistory(1);
+      return;
+    }
+
+    if (analysisData.status === 'failed') {
+      showNotification('error', analysisData.error_message || '解析失败');
+      setCurrentStep(3);
+      return;
+    }
+
+    startPollingAnalysis(analysisId);
   };
 
   // 获取解析结果和调试信息
@@ -620,15 +660,104 @@ const VideoAnalysis: React.FC = () => {
   };
 
   // 加载解析历史
-  const loadAnalysisHistory = async () => {
+  const loadAnalysisHistory = async (page: number = 1) => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/`);
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/?page=${page}&size=${historyPageSize}`);
       if (response.ok) {
         const result = await response.json();
-        setAnalysisHistory(result.data.items || []);
+        const data = result.data;
+        setAnalysisHistory(data?.items || []);
+        setHistoryTotal(data?.total || 0);
+        setHistoryPage(data?.page || page);
+        setHistoryPages(data?.pages || 1);
       }
     } catch (err) {
       console.error('Failed to load analysis history:', err);
+    }
+  };
+
+  const loadHistoryDetail = async (analysisId: number) => {
+    setHistoryDetailLoading(true);
+    setHistoryDetailError(null);
+    setSelectedHistoryItem(null);
+    setSelectedHistoryVideoTitle('');
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/${analysisId}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const result = await response.json();
+      const analysisData = result.data;
+      setSelectedHistoryItem(analysisData);
+
+      if (analysisData?.video_file_id) {
+        const title = await fetchVideoTitle(analysisData.video_file_id);
+        if (title) {
+          setSelectedHistoryVideoTitle(title);
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to load analysis detail:', err);
+      setHistoryDetailError('加载解析结果详情失败，请重试');
+    } finally {
+      setHistoryDetailLoading(false);
+    }
+  };
+
+  const fetchVideoTitle = async (videoFileId: number): Promise<string | null> => {
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/videos/${videoFileId}`);
+      if (!response.ok) return null;
+      const result = await response.json();
+      const data = result.data;
+      return data?.title || data?.original_filename || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const formatExportTimestamp = (dateInput?: string | Date) => {
+    const d = dateInput ? new Date(dateInput) : new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const yy = pad(d.getFullYear() % 100);
+    const mm = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const mi = pad(d.getMinutes());
+    const ss = pad(d.getSeconds());
+    return `${yy}${mm}${dd}${hh}${mi}${ss}`;
+  };
+
+  const sanitizeFilename = (name: string) => {
+    return name.replace(/[\\\/:*?"<>|]/g, '_').trim();
+  };
+
+  const stripExtension = (name: string) => {
+    return name.replace(/\.[^/.]+$/, '');
+  };
+
+  const buildExportFilename = (videoTitle: string, completedAt?: string | Date) => {
+    const safeTitle = sanitizeFilename(stripExtension(videoTitle || '视频标题'));
+    return `${safeTitle} - 解析结果 - ${formatExportTimestamp(completedAt)}.md`;
+  };
+
+  const exportHistoryResult = async (analysisId: number) => {
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/${analysisId}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const result = await response.json();
+      const analysisData = result.data;
+      if (analysisData?.analysis_result) {
+        const title = (analysisData.video_file_id && await fetchVideoTitle(analysisData.video_file_id)) || `analysis-${analysisId}`;
+        exportResult(analysisData.analysis_result, buildExportFilename(title, analysisData.completed_at || analysisData.created_at));
+      } else {
+        showNotification('info', '该记录暂无可导出的解析结果');
+      }
+    } catch (err) {
+      console.error('Failed to export analysis result:', err);
+      showNotification('error', '导出失败，请稍后重试');
     }
   };
 
@@ -638,7 +767,7 @@ const VideoAnalysis: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${filename}.md`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -646,15 +775,19 @@ const VideoAnalysis: React.FC = () => {
   };
   
   // 查看历史记录详情
-  const viewHistoryDetails = (analysis: AnalysisResult) => {
-    setSelectedHistoryItem(analysis);
+  const viewHistoryDetails = async (analysis: AnalysisHistoryItem) => {
     setShowHistoryModal(true);
+    setSelectedHistoryId(analysis.id);
+    await loadHistoryDetail(analysis.id);
   };
   
   // 关闭历史记录模态框
   const closeHistoryModal = () => {
     setShowHistoryModal(false);
     setSelectedHistoryItem(null);
+    setSelectedHistoryId(null);
+    setHistoryDetailLoading(false);
+    setHistoryDetailError(null);
   };
 
   // 重置到第一步
@@ -679,8 +812,17 @@ const VideoAnalysis: React.FC = () => {
   const startPollingAnalysis = (analysisId: number) => {
     console.log('Starting polling mode for analysis:', analysisId);
     showNotification('info', '切换到轮询模式，继续监控分析进度');
+
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    if (pollingTimeoutRef.current) {
+      clearTimeout(pollingTimeoutRef.current);
+      pollingTimeoutRef.current = null;
+    }
     
-    const pollInterval = setInterval(async () => {
+    const pollInterval = window.setInterval(async () => {
       try {
         const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/${analysisId}`);
         if (response.ok) {
@@ -721,13 +863,23 @@ const VideoAnalysis: React.FC = () => {
           // 检查是否完成
           if (analysisData.status === 'completed') {
             clearInterval(pollInterval);
+            pollingIntervalRef.current = null;
+            if (pollingTimeoutRef.current) {
+              clearTimeout(pollingTimeoutRef.current);
+              pollingTimeoutRef.current = null;
+            }
             setStreamingProgress(100);
             setCurrentStep(5);
             showNotification('success', '解析完成！');
             setCurrentAnalysis(analysisData);
-            loadAnalysisHistory();
+            loadAnalysisHistory(1);
           } else if (analysisData.status === 'failed') {
             clearInterval(pollInterval);
+            pollingIntervalRef.current = null;
+            if (pollingTimeoutRef.current) {
+              clearTimeout(pollingTimeoutRef.current);
+              pollingTimeoutRef.current = null;
+            }
             showNotification('error', analysisData.error_message || '解析失败');
             setCurrentStep(3);
           }
@@ -737,12 +889,51 @@ const VideoAnalysis: React.FC = () => {
         // 继续轮询，不中断
       }
     }, 3000); // 每3秒轮询一次
-    
-    // 设置最大轮询时间（5分钟）
-    setTimeout(() => {
-      clearInterval(pollInterval);
-      showNotification('error', '分析超时，请重试');
-    }, 300000);
+
+    pollingIntervalRef.current = pollInterval;
+    const scheduleTimeoutCheck = () => {
+      pollingTimeoutRef.current = window.setTimeout(async () => {
+        const analysisData = await fetchAnalysisData(analysisId);
+        if (analysisData?.status === 'completed') {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          if (pollingTimeoutRef.current) {
+            clearTimeout(pollingTimeoutRef.current);
+            pollingTimeoutRef.current = null;
+          }
+          setStreamingProgress(100);
+          setCurrentStep(5);
+          setCurrentAnalysis(analysisData);
+          if (analysisData.analysis_result) {
+            setStreamingResult(analysisData.analysis_result);
+          }
+          showNotification('success', '解析完成！');
+          loadAnalysisHistory(1);
+          return;
+        }
+
+        if (analysisData?.status === 'failed') {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          if (pollingTimeoutRef.current) {
+            clearTimeout(pollingTimeoutRef.current);
+            pollingTimeoutRef.current = null;
+          }
+          showNotification('error', analysisData.error_message || '解析失败');
+          setCurrentStep(3);
+          return;
+        }
+
+        showNotification('info', '解析耗时较长，继续监控中...');
+        scheduleTimeoutCheck();
+      }, 300000);
+    };
+
+    scheduleTimeoutCheck();
   };
 
   // 组件卸载时清理
@@ -750,6 +941,14 @@ const VideoAnalysis: React.FC = () => {
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
+      }
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      if (pollingTimeoutRef.current) {
+        clearTimeout(pollingTimeoutRef.current);
+        pollingTimeoutRef.current = null;
       }
     };
   }, []);
@@ -799,7 +998,7 @@ const VideoAnalysis: React.FC = () => {
             ].map((item, index) => (
               <div key={item.step} className="flex items-center">
                 <div className={`flex items-center justify-center w-10 h-10 rounded-full ${
-                  currentStep >= item.step ? 'bg-blue-600 text-gray-900' : 'bg-gray-300 text-gray-600'
+                  currentStep >= item.step ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'
                 }`}>
                   <i className={`fas ${item.icon} ${item.step === 4 && currentStep === 4 ? 'fa-spin' : ''}`}></i>
                 </div>
@@ -836,43 +1035,69 @@ const VideoAnalysis: React.FC = () => {
                   <p className="text-sm text-gray-500 mt-2">请先上传视频文件</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                  {videos.map((video) => (
-                    <div
-                      key={video.id}
-                      className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                        selectedVideo?.id === video.id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      onClick={() => setSelectedVideo(video)}
-                    >
-                      <div className="flex items-center mb-3">
-                        <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                          <i className="fas fa-video text-blue-600 text-lg"></i>
+                <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {videos.map((video) => (
+                      <div
+                        key={video.id}
+                        className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                          selectedVideo?.id === video.id
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                        onClick={() => setSelectedVideo(video)}
+                      >
+                        <div className="flex items-center mb-3">
+                          <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                            <i className="fas fa-video text-blue-600 text-lg"></i>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {video.title || video.original_filename}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {formatFileSize(video.file_size)}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {video.original_filename}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {formatFileSize(video.file_size)}
-                          </p>
+                        <div className="text-xs text-gray-600 space-y-1">
+                          {video.duration && (
+                            <div>时长: {formatDuration(video.duration)}</div>
+                          )}
+                          {video.width && video.height && (
+                            <div>分辨率: {video.width}×{video.height}</div>
+                          )}
+                          {video.format_name && (
+                            <div>格式: {video.format_name.toUpperCase()}</div>
+                          )}
                         </div>
                       </div>
-                      <div className="text-xs text-gray-600 space-y-1">
-                        {video.duration && (
-                          <div>时长: {formatDuration(video.duration)}</div>
-                        )}
-                        {video.width && video.height && (
-                          <div>分辨率: {video.width}×{video.height}</div>
-                        )}
-                        {video.format_name && (
-                          <div>格式: {video.format_name.toUpperCase()}</div>
-                        )}
+                    ))}
+                  </div>
+
+                  {videoPages > 1 && (
+                    <div className="mt-4 flex items-center justify-between">
+                      <div className="text-sm text-gray-500">
+                        共 {videoTotal} 条，第 {videoPage}/{videoPages} 页
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => loadVideos(videoPage - 1)}
+                          disabled={videoPage <= 1}
+                          className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                        >
+                          上一页
+                        </button>
+                        <button
+                          onClick={() => loadVideos(videoPage + 1)}
+                          disabled={videoPage >= videoPages}
+                          className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                        >
+                          下一页
+                        </button>
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
               
@@ -880,7 +1105,7 @@ const VideoAnalysis: React.FC = () => {
                 <div className="mt-6 flex justify-end">
                   <button
                     onClick={() => setCurrentStep(2)}
-                    className="px-6 py-2 bg-blue-600 text-gray-900 rounded-lg hover:bg-blue-700 transition-colors"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     下一步
                   </button>
@@ -892,7 +1117,7 @@ const VideoAnalysis: React.FC = () => {
                 <div className="mt-8 border-t pt-6">
                   <h3 className="text-lg font-semibold mb-4">解析历史</h3>
                   <div className="space-y-3">
-                    {analysisHistory.slice(0, 5).map((analysis) => (
+                    {analysisHistory.map((analysis) => (
                       <div key={analysis.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
@@ -932,9 +1157,9 @@ const VideoAnalysis: React.FC = () => {
                               <i className="fas fa-eye mr-1"></i>
                               查看
                             </button>
-                            {analysis.status === 'completed' && analysis.analysis_result && (
+                            {analysis.status === 'completed' && (
                               <button
-                                onClick={() => exportResult(analysis.analysis_result!, `analysis-${analysis.id}`)}
+                                onClick={() => exportHistoryResult(analysis.id)}
                                 className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
                               >
                                 <i className="fas fa-download mr-1"></i>
@@ -946,6 +1171,30 @@ const VideoAnalysis: React.FC = () => {
                       </div>
                     ))}
                   </div>
+
+                  {historyPages > 1 && (
+                    <div className="mt-4 flex items-center justify-between">
+                      <div className="text-sm text-gray-500">
+                        共 {historyTotal} 条，第 {historyPage}/{historyPages} 页
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => loadAnalysisHistory(historyPage - 1)}
+                          disabled={historyPage <= 1}
+                          className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                        >
+                          上一页
+                        </button>
+                        <button
+                          onClick={() => loadAnalysisHistory(historyPage + 1)}
+                          disabled={historyPage >= historyPages}
+                          className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                        >
+                          下一页
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1200,7 +1449,7 @@ const VideoAnalysis: React.FC = () => {
                   <button
                     onClick={() => setCurrentStep(3)}
                     disabled={!selectedTemplate && !customPrompt}
-                    className="px-6 py-2 bg-blue-600 text-gray-900 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
                   >
                     下一步
                   </button>
@@ -1276,7 +1525,7 @@ const VideoAnalysis: React.FC = () => {
                 <button
                   onClick={startAnalysis}
                   disabled={!finalPrompt.trim() || !selectedAIConfig || loading}
-                  className="px-6 py-2 bg-blue-600 text-gray-900 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
                 >
                   {loading ? (
                     <>
@@ -1607,16 +1856,16 @@ const VideoAnalysis: React.FC = () => {
                         <span className="text-xs text-gray-500">实时监控</span>
                         <div className="flex items-center">
                           <div className={`w-2 h-2 rounded-full mr-1 ${
-                            currentDebugInfo.api_response_time ? 'bg-green-500' : 
-                            currentDebugInfo.api_call_time ? 'bg-yellow-500 animate-pulse' : 
+                            currentDebugInfo.api_response_time && currentAnalysis?.status === 'completed' ? 'bg-green-500' :
+                            currentDebugInfo.api_call_time ? 'bg-yellow-500 animate-pulse' :
                             'bg-gray-400'
                           }`}></div>
                           <span className={`text-xs ${
-                            currentDebugInfo.api_response_time ? 'text-green-600' : 
-                            currentDebugInfo.api_call_time ? 'text-yellow-600' : 
+                            currentDebugInfo.api_response_time && currentAnalysis?.status === 'completed' ? 'text-green-600' :
+                            currentDebugInfo.api_call_time ? 'text-yellow-600' :
                             'text-gray-500'
                           }`}>
-                            {currentDebugInfo.api_response_time ? '已完成' : 
+                            {currentDebugInfo.api_response_time && currentAnalysis?.status === 'completed' ? '已完成' :
                              currentDebugInfo.api_call_time ? '处理中' : '等待中'}
                           </span>
                         </div>
@@ -1635,15 +1884,15 @@ const VideoAnalysis: React.FC = () => {
                 <h2 className="text-xl font-semibold">解析结果</h2>
                 <div className="flex space-x-3">
                   <button
-                    onClick={() => exportResult(streamingResult, selectedVideo?.original_filename || 'analysis')}
-                    className="px-4 py-2 bg-green-600 text-gray-900 rounded-lg hover:bg-green-700 transition-colors"
+                    onClick={() => exportResult(streamingResult, buildExportFilename(selectedVideo?.title || selectedVideo?.original_filename || '视频标题', currentAnalysis?.completed_at || currentAnalysis?.created_at))}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                   >
                     <i className="fas fa-download mr-2"></i>
                     导出MD
                   </button>
                   <button
                     onClick={resetToStart}
-                    className="px-4 py-2 bg-blue-600 text-gray-900 rounded-lg hover:bg-blue-700 transition-colors"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     <i className="fas fa-plus mr-2"></i>
                     新建解析
@@ -1978,11 +2227,11 @@ const VideoAnalysis: React.FC = () => {
 
         
         {/* 历史记录详情模态框 */}
-        {showHistoryModal && selectedHistoryItem && (
+        {showHistoryModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
-              <div className="flex justify-between items-center p-6 border-b">
-                <h3 className="text-xl font-semibold">分析结果详情 - ID: {selectedHistoryItem.id}</h3>
+            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+              <div className="flex justify-between items-center p-6 border-b shrink-0">
+                <h3 className="text-xl font-semibold">分析结果详情{selectedHistoryId ? ` - ID: ${selectedHistoryId}` : ''}</h3>
                 <button
                   onClick={closeHistoryModal}
                   className="text-gray-500 hover:text-gray-600 text-2xl"
@@ -1991,7 +2240,30 @@ const VideoAnalysis: React.FC = () => {
                 </button>
               </div>
               
-              <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              <div className="p-6 overflow-y-auto flex-1">
+                {historyDetailLoading && (
+                  <div className="flex items-center justify-center py-12">
+                    <i className="fas fa-spinner fa-spin text-2xl text-blue-600 mr-3"></i>
+                    <span className="text-gray-600">加载解析详情...</span>
+                  </div>
+                )}
+
+                {!historyDetailLoading && historyDetailError && (
+                  <div className="py-10 text-center">
+                    <i className="fas fa-exclamation-circle text-3xl text-red-500 mb-3"></i>
+                    <p className="text-gray-700 mb-4">{historyDetailError}</p>
+                    <button
+                      onClick={() => selectedHistoryId && loadHistoryDetail(selectedHistoryId)}
+                      disabled={!selectedHistoryId}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
+                    >
+                      重试
+                    </button>
+                  </div>
+                )}
+
+                {!historyDetailLoading && !historyDetailError && selectedHistoryItem && (
+                  <>
                 {/* 基本信息 */}
                 <div className="mb-6">
                   <h4 className="text-lg font-medium mb-3">基本信息</h4>
@@ -2168,7 +2440,7 @@ const VideoAnalysis: React.FC = () => {
                     <div className="flex justify-between items-center mb-3">
                       <h4 className="text-lg font-medium">分析结果</h4>
                       <button
-                        onClick={() => exportResult(selectedHistoryItem.analysis_result!, `analysis-${selectedHistoryItem.id}`)}
+                        onClick={() => exportResult(selectedHistoryItem.analysis_result!, buildExportFilename(selectedHistoryVideoTitle || `analysis-${selectedHistoryItem.video_file_id}`, selectedHistoryItem.completed_at || selectedHistoryItem.created_at))}
                         className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
                       >
                         <i className="fas fa-download mr-1"></i>
@@ -2194,12 +2466,14 @@ const VideoAnalysis: React.FC = () => {
                     </div>
                   </div>
                 )}
+                  </>
+                )}
               </div>
               
-              <div className="flex justify-end p-6 border-t bg-gray-50">
+              <div className="flex justify-end p-6 border-t bg-gray-50 shrink-0">
                 <button
                   onClick={closeHistoryModal}
-                  className="px-4 py-2 bg-gray-500 text-gray-900 rounded hover:bg-gray-600 transition-colors"
+                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
                 >
                   关闭
                 </button>

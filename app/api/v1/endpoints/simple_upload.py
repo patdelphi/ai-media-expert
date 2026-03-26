@@ -106,17 +106,55 @@ async def simple_upload(
         # 保存文件
         with open(file_path, "wb") as f:
             f.write(file_content)
+
+        # 录入数据库
+        from app.models.uploaded_file import UploadedFile
+        import datetime
         
+        # 存入 uploaded_files 表（用于旧版历史记录等）
+        new_uploaded_file = UploadedFile(
+            user_id=current_user.id if current_user else "unknown",
+            original_filename=file.filename,
+            saved_filename=unique_filename,
+            file_size=file_size,
+            content_type=file.content_type,
+            title=title or Path(file.filename).stem,
+            description=description,
+            file_path=str(file_path),
+            created_at=datetime.datetime.now(),
+            updated_at=datetime.datetime.now()
+        )
+        db.add(new_uploaded_file)
+        
+        # 存入 videos 表（新版分片上传机制统一表）
+        new_video = Video(
+            title=title or Path(file.filename).stem,
+            description=description,
+            original_filename=file.filename,
+            file_path=str(file_path),
+            file_size=file_size,
+            platform="local",
+            status="uploaded",
+            upload_status=UploadStatus.COMPLETED,
+            uploaded_by=current_user.id if current_user else "unknown",
+            created_at=datetime.datetime.now(),
+            updated_at=datetime.datetime.now()
+        )
+        db.add(new_video)
+        
+        db.commit()
+
         api_logger.info(
             "File saved successfully",
             file_path=str(file_path),
             file_size=file_size
         )
-        
+
         return ResponseModel(
             code=200,
             message="File uploaded successfully",
             data={
+                "video_id": new_video.id,
                 "filename": file.filename,
                 "file_size": file_size,
                 "upload_status": "completed",

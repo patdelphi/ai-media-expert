@@ -202,7 +202,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
         {/* 关闭按钮 */}
         <button
           onClick={onClose}
-          className="absolute top-2 right-2 z-10 text-gray-900 hover:text-gray-700 text-2xl bg-black bg-opacity-50 rounded-full w-8 h-8 flex items-center justify-center"
+          className="absolute top-2 right-2 z-10 text-white hover:text-gray-200 text-2xl bg-black bg-opacity-50 rounded-full w-8 h-8 flex items-center justify-center"
         >
           <i className="fas fa-times"></i>
         </button>
@@ -227,7 +227,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
             <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-t-lg">
               <button
                 onClick={togglePlay}
-                className="text-gray-900 text-6xl hover:text-gray-700 transition-colors"
+                className="text-white text-6xl hover:text-gray-200 transition-colors"
               >
                 <i className="fas fa-play"></i>
               </button>
@@ -302,8 +302,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
                   onClick={() => handlePlaybackRateChange(rate)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     playbackRate === rate
-                      ? 'bg-blue-600 text-gray-900'
-                      : 'bg-gray-700 text-gray-700 hover:bg-gray-600'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
                   }`}
                 >
                   {rate}x
