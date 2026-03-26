@@ -282,6 +282,23 @@
 
 ---
 
+## 2026-03-26 P3：下载接口集成测试与修复
+
+### 用户问题
+- 继续
+
+### 已执行内容
+- 新增下载接口集成测试：新增 `"app/tests/test_download_endpoints.py"`，覆盖创建任务、列表查询、单条查询。
+- 修复下载接口 500：将 `DownloadTaskResponse.from_attributes(...)` 替换为 `model_validate(..., from_attributes=True)`，使响应模型在 Pydantic v2 下可用。
+
+### 验证结果
+- `pytest`：通过
+
+### 记录时间
+- 2026-03-26
+
+---
+
 ## 2026-03-25 提交与优化方案请求
 
 ### 用户问题

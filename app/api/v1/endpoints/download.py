@@ -73,7 +73,7 @@ def create_download_task(
     return ResponseModel(
         code=200,
         message="Download task created successfully",
-        data=DownloadTaskResponse.from_attributes(download_task)
+        data=DownloadTaskResponse.model_validate(download_task, from_attributes=True)
     )
 
 
@@ -106,7 +106,7 @@ def get_download_tasks(
     ).limit(pagination.size).all()
     
     # 转换为响应模型
-    task_responses = [DownloadTaskResponse.from_attributes(task) for task in tasks]
+    task_responses = [DownloadTaskResponse.model_validate(task, from_attributes=True) for task in tasks]
     
     paginated_data = PaginatedResponse.create(
         items=task_responses,
@@ -146,7 +146,7 @@ def get_download_task(
     return ResponseModel(
         code=200,
         message="Download task retrieved successfully",
-        data=DownloadTaskResponse.from_attributes(task)
+        data=DownloadTaskResponse.model_validate(task, from_attributes=True)
     )
 
 
