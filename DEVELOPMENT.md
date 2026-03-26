@@ -1,33 +1,33 @@
-# 🛠️ 开发指南
+﻿# 🛠️ 开发指南
 
 本文档为AI新媒体专家系统的开发者提供详细的开发指南和最佳实践。
 
-## 📁 项目结构
+## 📁 项目结构（以当前代码为准）
 
 ```
 ai-media-expert/
-├── app/                          # 主应用目录
+├── "app"/                        # 主应用目录
 │   ├── __init__.py
-│   ├── main.py                   # FastAPI应用入口
-│   ├── app.py                    # 整合应用启动
-│   ├── api/                      # API接口层
+│   ├── "app.py"                  # FastAPI 应用入口（Uvicorn: "app.app:app"）
+│   ├── "main.py"                 # CLI 入口（"python -m app.main"）
+│   ├── "api"/                    # API接口层
 │   │   ├── __init__.py
 │   │   ├── deps.py               # API依赖项
 │   │   └── v1/                   # API v1版本
 │   │       ├── __init__.py
-│   │       ├── api.py            # 路由汇总
+│   │       ├── api.py            # 路由汇总（单一真源）
 │   │       └── endpoints/        # 具体端点实现
 │   │           ├── auth.py       # 认证相关
 │   │           ├── users.py      # 用户管理
 │   │           ├── videos.py     # 视频管理
 │   │           ├── download.py   # 下载功能
 │   │           └── analysis.py   # 分析功能
-│   ├── core/                     # 核心模块
+│   ├── "core"/                   # 核心模块
 │   │   ├── __init__.py
 │   │   ├── config.py             # 配置管理
 │   │   ├── database.py           # 数据库连接
 │   │   ├── security.py           # 安全工具
-│   │   └── logging.py            # 日志配置
+│   │   └── app_logging.py        # 日志配置
 │   ├── models/                   # 数据模型
 │   │   ├── __init__.py
 │   │   ├── user.py               # 用户模型
@@ -42,30 +42,28 @@ ai-media-expert/
 │   │   ├── download_service.py   # 下载服务
 │   │   ├── analysis_service.py   # 分析服务
 │   │   └── platform_adapters.py  # 平台适配器
-│   ├── tasks/                    # 异步任务
+│   ├── "tasks"/                  # 异步任务
 │   │   ├── __init__.py
 │   │   ├── celery_app.py         # Celery配置
+│   │   ├── celery.py             # Celery 入口（`-A app.tasks.celery`）
 │   │   ├── download_tasks.py     # 下载任务
 │   │   ├── analysis_tasks.py     # 分析任务
 │   │   └── maintenance_tasks.py  # 维护任务
-│   └── ui/                       # 用户界面
-│       ├── __init__.py
-│       └── gradio_app.py         # Gradio界面
-├── Docs/                         # 项目文档
-├── Prototype/                    # 原型文件
-├── tests/                        # 测试文件
-├── uploads/                      # 上传目录
-├── downloads/                    # 下载目录
-├── models/                       # AI模型缓存
-├── logs/                         # 日志文件
-├── .env                          # 环境配置
-├── .env.example                  # 环境配置示例
-├── .gitignore                    # Git忽略文件
-├── docker-compose.yml            # Docker编排
-├── Dockerfile                    # Docker镜像
-├── pyproject.toml                # 项目配置
-├── start.py                      # 启动脚本
-└── README.md                     # 项目说明
+├── "docs"/                       # 历史文档
+├── "Docs"/                       # 文档入口与导航
+├── "scripts"/                    # 运维/一次性脚本
+├── "app/tests"/                  # 自动化测试（pytest 仅收集此目录）
+├── "uploads"/                    # 上传目录
+├── "downloads"/                  # 下载目录
+├── "models"/                     # AI模型缓存
+├── "logs"/                       # 日志文件
+├── ".env"                        # 环境配置
+├── ".env.example"                # 环境配置示例
+├── "docker-compose.yml"          # Docker 编排
+├── "Dockerfile"                  # Docker 镜像
+├── "pyproject.toml"              # 项目配置
+├── "start.py"                    # 启动脚本
+└── "README.md"                   # 项目说明
 ```
 
 ## 🏗️ 架构设计
@@ -73,9 +71,9 @@ ai-media-expert/
 ### 分层架构
 
 1. **表示层 (Presentation Layer)**
-   - Gradio Web界面
+   - 前端 React 应用
    - FastAPI REST接口
-   - WebSocket实时通信
+   - WebSocket实时通信（按实现为准）
 
 2. **业务逻辑层 (Business Logic Layer)**
    - 服务类 (Services)
@@ -182,81 +180,16 @@ repos:
 
 ## 🧪 测试指南
 
-### 测试结构
+### 自动化测试位置
 
-```
-tests/
-├── __init__.py
-├── conftest.py              # pytest配置
-├── test_api/                # API测试
-│   ├── test_auth.py
-│   ├── test_download.py
-│   └── test_analysis.py
-├── test_services/           # 服务测试
-│   ├── test_download_service.py
-│   └── test_analysis_service.py
-├── test_models/             # 模型测试
-└── test_utils/              # 工具测试
-```
-
-### 测试配置
-
-创建 `tests/conftest.py`:
-
-```python
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-from app.core.database import Base, get_db
-from app.main import app
-
-# 测试数据库
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-@pytest.fixture(scope="session")
-def db():
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
-
-@pytest.fixture
-def db_session(db):
-    connection = engine.connect()
-    transaction = connection.begin()
-    session = TestingSessionLocal(bind=connection)
-    yield session
-    session.close()
-    transaction.rollback()
-    connection.close()
-
-@pytest.fixture
-def client(db_session):
-    def override_get_db():
-        yield db_session
-    
-    app.dependency_overrides[get_db] = override_get_db
-    yield TestClient(app)
-    app.dependency_overrides.clear()
-```
+- 自动化测试目录：`"app/tests"`
+- 根目录 `"test_*.py"` / `"debug_*.py"`：手工脚本，不参与 pytest 收集，清单见 `"scripts/manual_tools.md"`
 
 ### 运行测试
 
 ```bash
-# 运行所有测试
-pytest
-
-# 运行特定测试文件
-pytest tests/test_api/test_auth.py
-
-# 运行带覆盖率的测试
-pytest --cov=app --cov-report=html
-
-# 运行特定标记的测试
-pytest -m "not slow"
+python -m pytest -q
+python -m compileall app
 ```
 
 ## 📝 编码规范
@@ -365,7 +298,7 @@ docs: update API documentation
 redis-server
 
 # 启动Celery Worker
-celery -A app.tasks.celery_app worker --loglevel=info
+celery -A app.tasks.celery worker --loglevel=info
 
 # 启动应用
 python start.py

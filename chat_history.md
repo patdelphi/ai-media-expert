@@ -247,6 +247,41 @@
 
 ---
 
+## 2026-03-26 P3：CI 与 PR 模板
+
+### 用户问题
+- 继续
+
+### 已执行内容
+- 新增 CI：添加 `".github/workflows/ci.yml"`，包含后端 `pytest + compileall` 与前端 `lint + build`。
+- 新增 PR 模板：添加 `".github/pull_request_template.md"`，统一提交流程检查项。
+- 更新 `"DEVELOPMENT.md"`：修正项目结构、入口文件、测试目录、Celery 启动参数等口径。
+
+### 验证结果
+- `pytest`：通过
+
+### 记录时间
+- 2026-03-26
+
+---
+
+## 2026-03-26 P3：后端 Smoke Tests
+
+### 用户问题
+- 继续
+
+### 已执行内容
+- 新增 `"app/tests/test_app_smoke.py"`：增加 `/health` 与 `/` 的 smoke tests，用于保证基础路由可用。
+- 适配当前依赖版本：使用 httpx 的 ASGITransport 进行应用内请求，避免 TestClient 兼容性问题。
+
+### 验证结果
+- `pytest`：通过
+
+### 记录时间
+- 2026-03-26
+
+---
+
 ## 2026-03-25 提交与优化方案请求
 
 ### 用户问题
