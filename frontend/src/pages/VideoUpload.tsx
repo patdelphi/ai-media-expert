@@ -22,6 +22,13 @@ const VideoUpload: React.FC = () => {
   const [customTime, setCustomTime] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadXhrsRef = useRef<Record<string, XMLHttpRequest>>({});
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // 检查认证状态
   if (isLoading) {
@@ -56,7 +63,7 @@ const VideoUpload: React.FC = () => {
   const backendOrigin = apiBaseUrl.endsWith('/api/v1') ? apiBaseUrl.slice(0, -('/api/v1'.length)) : apiBaseUrl;
 
   // 加载最近上传的文件
-  const loadRecentFiles = async () => {
+  const loadRecentFiles = async (): Promise<any[] | null> => {
     try {
       const response = await fetch(`${apiBaseUrl}/files/files`, {
         method: 'GET',
@@ -102,10 +109,34 @@ const VideoUpload: React.FC = () => {
           }));
           setRecentFiles(recent);
           console.log('加载的文件数据:', recent); // 调试日志
+          return recent;
         }
       }
     } catch (error) {
       console.error('加载最近文件失败:', error);
+    }
+    return null;
+  };
+
+  const pollMetadataReady = async (savedName: string, displayName: string) => {
+    const timeoutMs = 45_000;
+    const intervalMs = 1200;
+    const deadline = Date.now() + timeoutMs;
+
+    while (isMountedRef.current && Date.now() < deadline) {
+      const list = await loadRecentFiles();
+      const target = list?.find((f: any) =>
+        f?.saved_name === savedName || f?.saved_filename === savedName || f?.path === savedName
+      );
+      if (target && target.duration && target.width && target.height) {
+        showNotification('success', `${displayName} 参数生成完成`);
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, intervalMs));
+    }
+
+    if (isMountedRef.current) {
+      showNotification('info', `${displayName} 已上传，参数仍在生成中`);
     }
   };
 
@@ -196,6 +227,15 @@ const VideoUpload: React.FC = () => {
       
       // 刷新最近文件列表
       await loadRecentFiles();
+
+      const savedPath = result?.data?.file_path;
+      const savedName = typeof savedPath === 'string' && savedPath
+        ? savedPath.split(/[\\/]/).pop()
+        : undefined;
+      if (savedName) {
+        showNotification('info', `${fileItem.name} 服务器处理中，正在生成参数...`);
+        void pollMetadataReady(savedName, fileItem.name);
+      }
       
     } catch (error: any) {
       console.error('上传过程中发生错误:', error);
