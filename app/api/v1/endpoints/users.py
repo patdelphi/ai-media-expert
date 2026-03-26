@@ -354,6 +354,8 @@ def update_user(
     
     # 更新用户信息
     update_data = user_update.dict(exclude_unset=True)
+    if "password" in update_data and update_data["password"]:
+        user.hashed_password = get_password_hash(update_data.pop("password"))
     for field, value in update_data.items():
         setattr(user, field, value)
     

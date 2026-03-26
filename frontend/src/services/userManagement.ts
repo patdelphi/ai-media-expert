@@ -49,6 +49,7 @@ export interface AdminUserUpdateRequest {
   email?: string;
   username?: string;
   full_name?: string;
+  password?: string;
   role?: string;
   is_active?: boolean;
   is_verified?: boolean;

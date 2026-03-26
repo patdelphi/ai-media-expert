@@ -49,6 +49,7 @@ async def simple_upload(
     接收单个视频文件并保存到服务器。
     """
     
+    file_path: Path | None = None
     try:
         # 记录接收到的参数
         api_logger.info(
@@ -58,7 +59,7 @@ async def simple_upload(
             content_type=getattr(file, 'content_type', 'no_content_type') if file else 'no_file',
             title=title,
             description=description,
-            user_id=current_user.id if current_user else 'no_user'
+            user_id=current_user.id
         )
         # 记录上传请求
         api_logger.info(
@@ -107,13 +108,23 @@ async def simple_upload(
         with open(file_path, "wb") as f:
             f.write(file_content)
 
+        # 提取视频元数据
+        from app.services.video_metadata import VideoMetadataExtractor
+        extractor = VideoMetadataExtractor()
+        meta = extractor.extract_comprehensive_metadata(str(file_path))
+        
+        format_info = meta.get('format_info', {})
+        video_streams = meta.get('video_streams', [])
+        audio_streams = meta.get('audio_streams', [])
+        
         # 录入数据库
         from app.models.uploaded_file import UploadedFile
         import datetime
+        import os
         
         # 存入 uploaded_files 表（用于旧版历史记录等）
         new_uploaded_file = UploadedFile(
-            user_id=current_user.id if current_user else "unknown",
+            user_id=current_user.id,
             original_filename=file.filename,
             saved_filename=unique_filename,
             file_size=file_size,
@@ -121,9 +132,28 @@ async def simple_upload(
             title=title or Path(file.filename).stem,
             description=description,
             file_path=str(file_path),
+            duration=format_info.get('duration'),
+            format_name=format_info.get('format_name'),
+            bit_rate=format_info.get('bit_rate'),
             created_at=datetime.datetime.now(),
-            updated_at=datetime.datetime.now()
+            updated_at=datetime.datetime.now(),
+            file_created_at=datetime.datetime.fromtimestamp(os.path.getctime(str(file_path)))
         )
+        
+        if video_streams:
+            vs = video_streams[0]
+            new_uploaded_file.width = vs.get('width')
+            new_uploaded_file.height = vs.get('height')
+            new_uploaded_file.video_codec = vs.get('codec_name')
+            new_uploaded_file.frame_rate = vs.get('r_frame_rate')
+            new_uploaded_file.aspect_ratio = vs.get('display_aspect_ratio')
+
+        if audio_streams:
+            ast = audio_streams[0]
+            new_uploaded_file.audio_codec = ast.get('codec_name')
+            new_uploaded_file.sample_rate = ast.get('sample_rate')
+            new_uploaded_file.channels = ast.get('channels')
+
         db.add(new_uploaded_file)
         
         # 存入 videos 表（新版分片上传机制统一表）
@@ -136,13 +166,43 @@ async def simple_upload(
             platform="local",
             status="uploaded",
             upload_status=UploadStatus.COMPLETED,
-            uploaded_by=current_user.id if current_user else "unknown",
+            uploaded_by=current_user.id,
+            duration=format_info.get('duration'),
+            format=format_info.get('format_name'),
+            bitrate=format_info.get('bit_rate'),
             created_at=datetime.datetime.now(),
             updated_at=datetime.datetime.now()
         )
+        
+        if video_streams:
+            vs = video_streams[0]
+            new_video.resolution = f"{vs.get('width')}x{vs.get('height')}" if vs.get('width') else None
+            
+            fps_str = vs.get('r_frame_rate', '0/1')
+            if '/' in fps_str:
+                num, den = fps_str.split('/')
+                if int(den) > 0:
+                    new_video.fps = int(num) / int(den)
+                    
+            new_video.codec = vs.get('codec_name')
+            new_video.video_codec = vs.get('codec_name')
+            
+        if audio_streams:
+            new_video.audio_codec = audio_streams[0].get('codec_name')
+            
         db.add(new_video)
         
         db.commit()
+        try:
+            from app.tasks.video_tasks import process_uploaded_video
+
+            process_uploaded_video.delay(new_video.id)
+        except Exception as e:
+            api_logger.error(
+                "Failed to enqueue video post-processing",
+                video_id=new_video.id,
+                error=str(e)
+            )
 
         api_logger.info(
             "File saved successfully",
@@ -163,9 +223,20 @@ async def simple_upload(
         )
         
     except HTTPException:
-        # 重新抛出HTTP异常
+        db.rollback()
+        if file_path and file_path.exists():
+            try:
+                file_path.unlink()
+            except OSError:
+                pass
         raise
     except Exception as e:
+        db.rollback()
+        if file_path and file_path.exists():
+            try:
+                file_path.unlink()
+            except OSError:
+                pass
         api_logger.error(
             "Simple upload failed",
             error=str(e),

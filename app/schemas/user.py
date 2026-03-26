@@ -77,6 +77,7 @@ class AdminUserUpdate(BaseModel):
     email: Optional[EmailStr] = Field(default=None, description="用户邮箱")
     username: Optional[str] = Field(default=None, min_length=3, max_length=50, description="用户名")
     full_name: Optional[str] = Field(default=None, max_length=100, description="全名")
+    password: Optional[str] = Field(default=None, min_length=8, max_length=100, description="密码")
     role: Optional[str] = Field(default=None, description="用户角色")
     is_active: Optional[bool] = Field(default=None, description="是否激活")
     is_verified: Optional[bool] = Field(default=None, description="是否验证")
@@ -95,6 +96,19 @@ class AdminUserUpdate(BaseModel):
             allowed_roles = ['user', 'premium', 'admin']
             if v not in allowed_roles:
                 raise ValueError(f'Role must be one of: {", ".join(allowed_roles)}')
+        return v
+
+    @field_validator("password")
+    def validate_password(cls, v):
+        if v is not None:
+            if len(v) < 8:
+                raise ValueError('Password must be at least 8 characters long')
+
+            has_letter = any(c.isalpha() for c in v)
+            has_digit = any(c.isdigit() for c in v)
+
+            if not (has_letter and has_digit):
+                raise ValueError('Password must contain both letters and numbers')
         return v
 
 

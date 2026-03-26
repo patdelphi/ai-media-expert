@@ -103,7 +103,7 @@ const SystemConfigPage: React.FC = () => {
   const [userTotal, setUserTotal] = useState(0);
   const [userCurrentPage, setUserCurrentPage] = useState(1);
   const [userPageSize] = useState(10);
-  const [userSearchParams, setUserSearchParams] = useState<UserSearchParams>({});
+  const [userSearchParams, setUserSearchParams] = useState<UserSearchParams>({ is_active: true });
   const [showUserCreateForm, setShowUserCreateForm] = useState(false);
   const [showUserEditForm, setShowUserEditForm] = useState(false);
   const [editingUser, setEditingUser] = useState<UserListItem | null>(null);
@@ -119,7 +119,7 @@ const SystemConfigPage: React.FC = () => {
   const [userSearchForm, setUserSearchForm] = useState({
     search: '',
     role: '',
-    is_active: '',
+    is_active: 'true',
     is_verified: ''
   });
 
@@ -145,7 +145,7 @@ const SystemConfigPage: React.FC = () => {
     loadCategories();
     loadAiConfigs();
     loadTemplates();
-    loadUsers();
+    loadUsers({ is_active: true });
     loadTagGroups();
   }, []);
 
@@ -159,7 +159,7 @@ const SystemConfigPage: React.FC = () => {
   // 当用户搜索参数或分页改变时重新加载用户
   useEffect(() => {
     if (activeTab === 'users') {
-      loadUsers();
+      loadUsers(userSearchParams);
     }
   }, [userCurrentPage, userSearchParams, activeTab]);
 
@@ -995,10 +995,10 @@ const SystemConfigPage: React.FC = () => {
     setUserSearchForm({
       search: '',
       role: '',
-      is_active: '',
+      is_active: 'true',
       is_verified: ''
     });
-    setUserSearchParams({});
+    setUserSearchParams({ is_active: true });
     setUserCurrentPage(1);
   };
 
@@ -1055,6 +1055,7 @@ const SystemConfigPage: React.FC = () => {
         email: userFormData.email || undefined,
         username: userFormData.username || undefined,
         full_name: userFormData.full_name || undefined,
+        password: userFormData.password || undefined,
         role: userFormData.role,
         is_active: userFormData.is_active,
         is_verified: userFormData.is_verified

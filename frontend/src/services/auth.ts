@@ -127,7 +127,7 @@ class AuthService {
 
   // 修改密码
   async changePassword(data: PasswordChangeRequest): Promise<ApiResponse<any>> {
-    return apiService.put('/users/me/password', data);
+    return apiService.post('/users/change-password', data);
   }
 
   // 上传头像
