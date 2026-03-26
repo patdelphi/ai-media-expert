@@ -51,10 +51,13 @@ const VideoUpload: React.FC = () => {
     setTimeout(() => setNotification(null), 5000); // 5秒后自动消失
   };
 
+  const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8000/api/v1`;
+  const backendOrigin = apiBaseUrl.endsWith('/api/v1') ? apiBaseUrl.slice(0, -('/api/v1'.length)) : apiBaseUrl;
+
   // 加载最近上传的文件
   const loadRecentFiles = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/files/files', {
+      const response = await fetch(`${apiBaseUrl}/files/files`, {
         method: 'GET',
         mode: 'cors',
         credentials: 'omit'
@@ -121,7 +124,6 @@ const VideoUpload: React.FC = () => {
       formData.append('title', fileItem.name);
       formData.append('description', '通过视频上传页面上传');
 
-      const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
       const uploadUrl = `${apiBaseUrl}/simple-upload/simple`;
       const token = localStorage.getItem('access_token');
 
@@ -355,7 +357,7 @@ const VideoUpload: React.FC = () => {
   // 播放视频
   const playVideo = (filename: string, originalName?: string) => {
     // 使用后端静态文件服务
-    const videoUrl = `http://localhost:8000/uploads/videos/${filename}`;
+    const videoUrl = `${backendOrigin}/uploads/videos/${filename}`;
     setCurrentVideo({
       url: videoUrl,
       title: originalName || filename
@@ -395,7 +397,7 @@ const VideoUpload: React.FC = () => {
       const timestamp = Math.floor(customDate.getTime() / 1000);
       
       // 调用API更新文件创建时间
-      const response = await fetch(`http://localhost:8000/api/v1/files/update-time/${editingFile.saved_name}`, {
+      const response = await fetch(`${apiBaseUrl}/files/update-time/${editingFile.saved_name}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -435,7 +437,7 @@ const VideoUpload: React.FC = () => {
     }
     
     try {
-      const response = await fetch(`/api/v1/files/files/${encodeURIComponent(filename)}`, {
+      const response = await fetch(`${apiBaseUrl}/files/files/${encodeURIComponent(filename)}`, {
         method: 'DELETE',
         mode: 'cors',
         credentials: 'omit'
