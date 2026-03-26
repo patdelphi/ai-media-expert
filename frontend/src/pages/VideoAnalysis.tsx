@@ -1355,29 +1355,29 @@ const VideoAnalysis: React.FC = () => {
 
                 {/* 右侧：AI API调试信息 */}
                 <div className="lg:col-span-1">
-                  <div className="bg-gray-800 text-white rounded-lg overflow-hidden">
-                    <div className="px-4 py-2 bg-gray-900">
+                  <div className="bg-white border border-gray-200 text-gray-800 rounded-lg overflow-hidden shadow-sm">
+                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center">
-                          <i className="fas fa-bug mr-2"></i>
-                          <span className="font-medium">AI API 调试信息</span>
+                          <i className="fas fa-bug text-gray-500 mr-2"></i>
+                          <span className="font-medium text-gray-900">AI API 调试信息</span>
                         </div>
                         {/* API状态指示器 */}
                         <div className="flex items-center">
                           {currentDebugInfo.api_call_time && !currentDebugInfo.api_response_time ? (
-                            <div className="flex items-center text-yellow-400">
+                            <div className="flex items-center text-yellow-600">
                               <i className="fas fa-spinner fa-spin mr-1"></i>
-                              <span className="text-xs">调用中</span>
+                              <span className="text-xs font-medium">调用中</span>
                             </div>
                           ) : currentDebugInfo.api_response_time ? (
-                            <div className="flex items-center text-green-400">
+                            <div className="flex items-center text-green-600">
                               <i className="fas fa-check-circle mr-1"></i>
-                              <span className="text-xs">成功</span>
+                              <span className="text-xs font-medium">成功</span>
                             </div>
                           ) : (
-                            <div className="flex items-center text-gray-400">
+                            <div className="flex items-center text-gray-500">
                               <i className="fas fa-clock mr-1"></i>
-                              <span className="text-xs">等待中</span>
+                              <span className="text-xs font-medium">等待中</span>
                             </div>
                           )}
                         </div>
@@ -1386,36 +1386,36 @@ const VideoAnalysis: React.FC = () => {
                     <div className="p-4 space-y-4 max-h-96 overflow-y-auto">
                       {/* 基本信息 */}
                       <div>
-                        <h4 className="text-sm font-medium text-gray-300 mb-2">基本信息</h4>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">基本信息</h4>
                         <div className="space-y-1 text-xs">
                           <div className="flex justify-between">
-                            <span className="text-gray-400">模型:</span>
-                            <span className="text-white">{currentDebugInfo.model_name || 'N/A'}</span>
+                            <span className="text-gray-500">模型:</span>
+                            <span className="text-gray-900">{currentDebugInfo.model_name || 'N/A'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-400">提供商:</span>
-                            <span className="text-white">{currentDebugInfo.api_provider || 'N/A'}</span>
+                            <span className="text-gray-500">提供商:</span>
+                            <span className="text-gray-900">{currentDebugInfo.api_provider || 'N/A'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-400">请求ID:</span>
-                            <span className="text-white text-xs truncate">{currentDebugInfo.request_id || 'N/A'}</span>
+                            <span className="text-gray-500">请求ID:</span>
+                            <span className="text-gray-900 text-xs truncate">{currentDebugInfo.request_id || 'N/A'}</span>
                           </div>
                         </div>
                       </div>
 
                       {/* 时间信息 */}
                       <div>
-                        <h4 className="text-sm font-medium text-gray-300 mb-2">时间信息</h4>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">时间信息</h4>
                         <div className="space-y-1 text-xs">
                           <div className="flex justify-between">
-                            <span className="text-gray-400">调用时间:</span>
-                            <span className="text-white">
+                            <span className="text-gray-500">调用时间:</span>
+                            <span className="text-gray-900">
                               {currentDebugInfo.api_call_time ? new Date(currentDebugInfo.api_call_time).toLocaleTimeString() : 'N/A'}
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-400">耗时:</span>
-                            <span className={`${currentDebugInfo.api_duration && currentDebugInfo.api_duration > 10 ? 'text-red-400' : 'text-green-400'}`}>
+                            <span className="text-gray-500">耗时:</span>
+                            <span className={`${currentDebugInfo.api_duration && currentDebugInfo.api_duration > 10 ? 'text-red-500' : 'text-green-600'}`}>
                               {currentDebugInfo.api_duration ? `${currentDebugInfo.api_duration.toFixed(3)}秒` : 'N/A'}
                             </span>
                           </div>
@@ -1424,25 +1424,25 @@ const VideoAnalysis: React.FC = () => {
 
                       {/* Token使用情况 */}
                       <div>
-                        <h4 className="text-sm font-medium text-gray-300 mb-2">Token 使用</h4>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Token 使用</h4>
                         <div className="space-y-1 text-xs">
                           <div className="flex justify-between">
-                            <span className="text-gray-400">输入:</span>
-                            <span className="text-blue-400">{currentDebugInfo.prompt_tokens || 0}</span>
+                            <span className="text-gray-500">输入:</span>
+                            <span className="text-blue-600">{currentDebugInfo.prompt_tokens || 0}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-400">输出:</span>
-                            <span className="text-green-400">{currentDebugInfo.completion_tokens || 0}</span>
+                            <span className="text-gray-500">输出:</span>
+                            <span className="text-green-600">{currentDebugInfo.completion_tokens || 0}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-400">总计:</span>
-                            <span className="text-purple-400">{currentDebugInfo.total_tokens || 0}</span>
+                            <span className="text-gray-500">总计:</span>
+                            <span className="text-purple-600">{currentDebugInfo.total_tokens || 0}</span>
                           </div>
                           {/* 成本估算 */}
                           {currentDebugInfo.token_usage?.estimated_cost && (
                             <div className="flex justify-between">
-                              <span className="text-gray-400">预估成本:</span>
-                              <span className="text-yellow-400">${currentDebugInfo.token_usage.estimated_cost.toFixed(4)}</span>
+                              <span className="text-gray-500">预估成本:</span>
+                              <span className="text-yellow-600">${currentDebugInfo.token_usage.estimated_cost.toFixed(4)}</span>
                             </div>
                           )}
                         </div>
@@ -1450,15 +1450,15 @@ const VideoAnalysis: React.FC = () => {
                         {/* Token使用可视化 */}
                         {currentDebugInfo.total_tokens && currentDebugInfo.total_tokens > 0 && (
                           <div className="mt-2">
-                            <div className="flex h-1 bg-gray-600 rounded overflow-hidden">
+                            <div className="flex h-1 bg-gray-200 rounded overflow-hidden">
                               <div 
-                                className="bg-blue-400"
+                                className="bg-blue-500"
                                 style={{
                                   width: `${((currentDebugInfo.prompt_tokens || 0) / currentDebugInfo.total_tokens) * 100}%`
                                 }}
                               ></div>
                               <div 
-                                className="bg-green-400"
+                                className="bg-green-500"
                                 style={{
                                   width: `${((currentDebugInfo.completion_tokens || 0) / currentDebugInfo.total_tokens) * 100}%`
                                 }}
@@ -1470,45 +1470,45 @@ const VideoAnalysis: React.FC = () => {
 
                       {/* 模型参数 */}
                       <div>
-                        <h4 className="text-sm font-medium text-gray-300 mb-2">模型参数</h4>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">模型参数</h4>
                         <div className="space-y-1 text-xs">
                           <div className="flex justify-between">
-                            <span className="text-gray-400">温度:</span>
-                            <span className="text-white">{currentDebugInfo.temperature || 'N/A'}</span>
+                            <span className="text-gray-500">温度:</span>
+                            <span className="text-gray-900">{currentDebugInfo.temperature || 'N/A'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-400">最大Token:</span>
-                            <span className="text-white">{currentDebugInfo.max_tokens || 'N/A'}</span>
+                            <span className="text-gray-500">最大Token:</span>
+                            <span className="text-gray-900">{currentDebugInfo.max_tokens || 'N/A'}</span>
                           </div>
                         </div>
                       </div>
 
                       {/* API调用日志 */}
                       <div>
-                        <h4 className="text-sm font-medium text-gray-300 mb-2">调用日志</h4>
-                        <div className="bg-gray-900 rounded p-2 text-xs max-h-32 overflow-y-auto">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">调用日志</h4>
+                        <div className="bg-gray-100 rounded p-2 text-xs max-h-32 overflow-y-auto border border-gray-200">
                           {currentDebugInfo.api_call_time && (
-                            <div className="text-blue-400 mb-1">
+                            <div className="text-blue-600 mb-1">
                               [{new Date(currentDebugInfo.api_call_time).toLocaleTimeString()}] API调用开始
                             </div>
                           )}
                           {currentDebugInfo.debug_info?.status && (
-                            <div className="text-yellow-400 mb-1">
+                            <div className="text-yellow-600 mb-1">
                               状态: {currentDebugInfo.debug_info.status}
                             </div>
                           )}
                           {currentDebugInfo.debug_info?.chunks_received && (
-                            <div className="text-cyan-400 mb-1">
+                            <div className="text-cyan-600 mb-1">
                               已接收: {currentDebugInfo.debug_info.chunks_received} 个数据块
                             </div>
                           )}
                           {currentDebugInfo.api_response_time && (
-                            <div className="text-green-400 mb-1">
+                            <div className="text-green-600 mb-1">
                               [{new Date(currentDebugInfo.api_response_time).toLocaleTimeString()}] API响应完成
                             </div>
                           )}
                           {currentDebugInfo.api_duration && (
-                            <div className="text-purple-400 mb-1">
+                            <div className="text-purple-600 mb-1">
                               总耗时: {currentDebugInfo.api_duration.toFixed(3)}秒
                             </div>
                           )}
@@ -1520,35 +1520,35 @@ const VideoAnalysis: React.FC = () => {
 
                       {/* 视频处理模式说明 */}
                        <div>
-                         <h4 className="text-sm font-medium text-gray-300 mb-2">处理模式</h4>
-                         <div className="bg-gray-900 rounded p-2 text-xs">
+                         <h4 className="text-sm font-medium text-gray-700 mb-2">处理模式</h4>
+                         <div className="bg-gray-100 rounded p-2 text-xs border border-gray-200">
                            {transmissionMethod === 'base64' ? (
                              <>
-                               <div className="text-purple-400 mb-1">
+                               <div className="text-purple-600 mb-1">
                                  <i className="fas fa-code mr-1"></i>
                                  Base64编码传输模式
                                </div>
-                               <div className="text-gray-400 text-xs">
+                               <div className="text-gray-600 text-xs">
                                  视频文件直接编码传输
                                </div>
                              </>
                            ) : (currentDebugInfo.model_name?.toLowerCase().includes('glm-4.5v') || currentDebugInfo.model_name?.toLowerCase().includes('glm-4v')) && transmissionMethod !== ('base64' as any) ? (
                              <>
-                               <div className="text-green-400 mb-1">
+                               <div className="text-green-600 mb-1">
                                  <i className="fas fa-video mr-1"></i>
                                  视频内容理解模式
                                </div>
-                               <div className="text-gray-400 text-xs">
+                               <div className="text-gray-600 text-xs">
                                  使用公网URL访问视频内容
                                </div>
                              </>
                            ) : (
                              <>
-                               <div className="text-yellow-400 mb-1">
+                               <div className="text-yellow-600 mb-1">
                                  <i className="fas fa-info-circle mr-1"></i>
                                  元数据分析模式
                                </div>
-                               <div className="text-gray-400 text-xs">
+                               <div className="text-gray-600 text-xs">
                                  基于视频文件信息分析
                                </div>
                              </>
@@ -1558,13 +1558,13 @@ const VideoAnalysis: React.FC = () => {
                        
                        {/* URL配置状态 */}
                        <div>
-                         <h4 className="text-sm font-medium text-gray-300 mb-2">URL配置</h4>
-                         <div className="bg-gray-900 rounded p-2 text-xs">
-                           <div className="text-blue-400 mb-1">
+                         <h4 className="text-sm font-medium text-gray-700 mb-2">URL配置</h4>
+                         <div className="bg-gray-100 rounded p-2 text-xs border border-gray-200">
+                           <div className="text-blue-600 mb-1">
                              <i className="fas fa-globe mr-1"></i>
                              {window.location.hostname === 'localhost' ? '本地开发环境' : '公网环境'}
                            </div>
-                           <div className="text-gray-400 text-xs">
+                           <div className="text-gray-600 text-xs">
                              {window.location.hostname === 'localhost' 
                                ? '建议配置ngrok获得更好的GLM体验' 
                                : '已配置公网访问，支持GLM视频理解'}
@@ -1575,9 +1575,9 @@ const VideoAnalysis: React.FC = () => {
                       {/* Curl命令 */}
                       {currentDebugInfo.debug_info?.curl_command && (
                         <div>
-                          <h4 className="text-sm font-medium text-gray-300 mb-2">Curl命令</h4>
-                          <div className="bg-gray-900 rounded p-2 text-xs">
-                            <code className="text-green-300 break-all">
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">Curl命令</h4>
+                          <div className="bg-gray-100 rounded p-2 text-xs border border-gray-200">
+                            <code className="text-green-700 break-all">
                               {currentDebugInfo.debug_info.curl_command}
                             </code>
                           </div>
@@ -1587,15 +1587,15 @@ const VideoAnalysis: React.FC = () => {
                       {/* 实时统计 */}
                       {currentDebugInfo.debug_info?.current_content_length && (
                         <div>
-                          <h4 className="text-sm font-medium text-gray-300 mb-2">实时统计</h4>
-                          <div className="bg-gray-900 rounded p-2 text-xs space-y-1">
-                            <div className="text-blue-400">
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">实时统计</h4>
+                          <div className="bg-gray-100 rounded p-2 text-xs space-y-1 border border-gray-200">
+                            <div className="text-blue-600">
                               内容长度: {currentDebugInfo.debug_info.current_content_length} 字符
                             </div>
-                            <div className="text-green-400">
+                            <div className="text-green-600">
                               输出Token: {currentDebugInfo.debug_info.current_completion_tokens}
                             </div>
-                            <div className="text-purple-400">
+                            <div className="text-purple-600">
                               总Token: {currentDebugInfo.debug_info.current_total_tokens}
                             </div>
                           </div>
@@ -1678,34 +1678,34 @@ const VideoAnalysis: React.FC = () => {
                 
                 {/* 右侧：AI API调试信息 */}
                 <div className="lg:col-span-1">
-                  <div className="bg-gray-800 text-white rounded-lg overflow-hidden">
-                    <div className="px-4 py-2 bg-gray-900">
+                  <div className="bg-white border border-gray-200 text-gray-800 rounded-lg overflow-hidden shadow-sm">
+                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center">
-                          <i className="fas fa-bug mr-2"></i>
-                          <span className="font-medium">AI API 调试信息</span>
+                          <i className="fas fa-bug text-gray-500 mr-2"></i>
+                          <span className="font-medium text-gray-900">AI API 调试信息</span>
                         </div>
                         {/* API状态指示器 */}
                         <div className="flex items-center">
                           {currentAnalysis?.status === 'completed' ? (
-                            <div className="flex items-center text-green-400">
+                            <div className="flex items-center text-green-600">
                               <i className="fas fa-check-circle mr-1"></i>
-                              <span className="text-xs">已完成</span>
+                              <span className="text-xs font-medium">已完成</span>
                             </div>
                           ) : currentAnalysis?.status === 'processing' ? (
-                            <div className="flex items-center text-yellow-400">
+                            <div className="flex items-center text-yellow-600">
                               <i className="fas fa-spinner fa-spin mr-1"></i>
-                              <span className="text-xs">处理中</span>
+                              <span className="text-xs font-medium">处理中</span>
                             </div>
                           ) : currentAnalysis?.status === 'failed' ? (
-                            <div className="flex items-center text-red-400">
+                            <div className="flex items-center text-red-600">
                               <i className="fas fa-exclamation-circle mr-1"></i>
-                              <span className="text-xs">失败</span>
+                              <span className="text-xs font-medium">失败</span>
                             </div>
                           ) : (
-                            <div className="flex items-center text-gray-400">
+                            <div className="flex items-center text-gray-500">
                               <i className="fas fa-clock mr-1"></i>
-                              <span className="text-xs">等待中</span>
+                              <span className="text-xs font-medium">等待中</span>
                             </div>
                           )}
                         </div>
@@ -1714,36 +1714,36 @@ const VideoAnalysis: React.FC = () => {
                     <div className="p-4 space-y-4 max-h-96 overflow-y-auto">
                       {/* 基本信息 */}
                       <div>
-                        <h4 className="text-sm font-medium text-gray-300 mb-2">基本信息</h4>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">基本信息</h4>
                         <div className="space-y-1 text-xs">
                           <div className="flex justify-between">
-                            <span className="text-gray-400">模型:</span>
-                            <span className="text-white">{currentDebugInfo.model_name || 'N/A'}</span>
+                            <span className="text-gray-500">模型:</span>
+                            <span className="text-gray-900">{currentDebugInfo.model_name || 'N/A'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-400">提供商:</span>
-                            <span className="text-white">{currentDebugInfo.api_provider || 'N/A'}</span>
+                            <span className="text-gray-500">提供商:</span>
+                            <span className="text-gray-900">{currentDebugInfo.api_provider || 'N/A'}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-400">请求ID:</span>
-                            <span className="text-white text-xs truncate">{currentDebugInfo.request_id || 'N/A'}</span>
+                            <span className="text-gray-500">请求ID:</span>
+                            <span className="text-gray-900 text-xs truncate">{currentDebugInfo.request_id || 'N/A'}</span>
                           </div>
                         </div>
                       </div>
 
                       {/* 时间信息 */}
                       <div>
-                        <h4 className="text-sm font-medium text-gray-300 mb-2">时间信息</h4>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">时间信息</h4>
                         <div className="space-y-1 text-xs">
                           <div className="flex justify-between">
-                            <span className="text-gray-400">调用时间:</span>
-                            <span className="text-white">
+                            <span className="text-gray-500">调用时间:</span>
+                            <span className="text-gray-900">
                               {currentDebugInfo.api_call_time ? new Date(currentDebugInfo.api_call_time).toLocaleTimeString() : 'N/A'}
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-400">耗时:</span>
-                            <span className={`${currentDebugInfo.api_duration && currentDebugInfo.api_duration > 10 ? 'text-red-400' : 'text-green-400'}`}>
+                            <span className="text-gray-500">耗时:</span>
+                            <span className={`${currentDebugInfo.api_duration && currentDebugInfo.api_duration > 10 ? 'text-red-500' : 'text-green-600'}`}>
                               {currentDebugInfo.api_duration ? `${currentDebugInfo.api_duration.toFixed(3)}秒` : 'N/A'}
                             </span>
                           </div>
@@ -1752,34 +1752,34 @@ const VideoAnalysis: React.FC = () => {
 
                       {/* Token使用情况 */}
                       <div>
-                        <h4 className="text-sm font-medium text-gray-300 mb-2">Token 使用</h4>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Token 使用</h4>
                         <div className="space-y-1 text-xs">
                           <div className="flex justify-between">
-                            <span className="text-gray-400">输入:</span>
-                            <span className="text-blue-400">{currentDebugInfo.prompt_tokens || 0}</span>
+                            <span className="text-gray-500">输入:</span>
+                            <span className="text-blue-600">{currentDebugInfo.prompt_tokens || 0}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-400">输出:</span>
-                            <span className="text-green-400">{currentDebugInfo.completion_tokens || 0}</span>
+                            <span className="text-gray-500">输出:</span>
+                            <span className="text-green-600">{currentDebugInfo.completion_tokens || 0}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-400">总计:</span>
-                            <span className="text-purple-400">{currentDebugInfo.total_tokens || 0}</span>
+                            <span className="text-gray-500">总计:</span>
+                            <span className="text-purple-600">{currentDebugInfo.total_tokens || 0}</span>
                           </div>
                         </div>
                         
                         {/* Token使用可视化 */}
                         {currentDebugInfo.total_tokens && currentDebugInfo.total_tokens > 0 && (
                           <div className="mt-2">
-                            <div className="flex h-1 bg-gray-600 rounded overflow-hidden">
+                            <div className="flex h-1 bg-gray-200 rounded overflow-hidden">
                               <div 
-                                className="bg-blue-400"
+                                className="bg-blue-500"
                                 style={{
                                   width: `${((currentDebugInfo.prompt_tokens || 0) / currentDebugInfo.total_tokens) * 100}%`
                                 }}
                               ></div>
                               <div 
-                                className="bg-green-400"
+                                className="bg-green-500"
                                 style={{
                                   width: `${((currentDebugInfo.completion_tokens || 0) / currentDebugInfo.total_tokens) * 100}%`
                                 }}
@@ -1791,26 +1791,26 @@ const VideoAnalysis: React.FC = () => {
                       
                       {/* 性能指标 */}
                       <div>
-                        <h4 className="text-sm font-medium text-gray-300 mb-2">性能指标</h4>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">性能指标</h4>
                         <div className="space-y-1 text-xs">
                           <div className="flex justify-between">
-                            <span className="text-gray-400">处理时间:</span>
-                            <span className={`${currentDebugInfo.processing_time && currentDebugInfo.processing_time > 30 ? 'text-red-400' : 'text-green-400'}`}>
+                            <span className="text-gray-500">处理时间:</span>
+                            <span className={`${currentDebugInfo.processing_time && currentDebugInfo.processing_time > 30 ? 'text-red-500' : 'text-green-600'}`}>
                               {currentDebugInfo.processing_time ? `${currentDebugInfo.processing_time.toFixed(2)}秒` : 'N/A'}
                             </span>
                           </div>
                           {currentDebugInfo.confidence_score && (
                             <div className="flex justify-between">
-                              <span className="text-gray-400">置信度:</span>
-                              <span className={`${currentDebugInfo.confidence_score > 0.8 ? 'text-green-400' : currentDebugInfo.confidence_score > 0.6 ? 'text-yellow-400' : 'text-red-400'}`}>
+                              <span className="text-gray-500">置信度:</span>
+                              <span className={`${currentDebugInfo.confidence_score > 0.8 ? 'text-green-600' : currentDebugInfo.confidence_score > 0.6 ? 'text-yellow-600' : 'text-red-500'}`}>
                                 {(currentDebugInfo.confidence_score * 100).toFixed(1)}%
                               </span>
                             </div>
                           )}
                           {currentDebugInfo.transmission_method && (
                             <div className="flex justify-between">
-                              <span className="text-gray-400">传输方式:</span>
-                              <span className="text-cyan-400">{currentDebugInfo.transmission_method}</span>
+                              <span className="text-gray-500">传输方式:</span>
+                              <span className="text-cyan-600">{currentDebugInfo.transmission_method}</span>
                             </div>
                           )}
                         </div>
@@ -1818,33 +1818,33 @@ const VideoAnalysis: React.FC = () => {
                       
                       {/* 视频信息说明 */}
                         <div>
-                          <h4 className="text-sm font-medium text-gray-300 mb-2">视频处理说明</h4>
-                          <div className="bg-gray-900 rounded p-2 text-xs">
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">视频处理说明</h4>
+                          <div className="bg-gray-100 rounded p-2 text-xs border border-gray-200">
                             {(currentDebugInfo.model_name?.toLowerCase().includes('glm-4.5v') || currentDebugInfo.model_name?.toLowerCase().includes('glm-4v')) && currentDebugInfo.transmission_method !== 'base64' ? (
                               <>
-                                <div className="text-green-400 mb-1">
+                                <div className="text-green-600 mb-1">
                                   <i className="fas fa-video mr-1"></i>
                                   AI分析基于视频实际内容
                                 </div>
-                                <div className="text-gray-400 text-xs leading-relaxed">
+                                <div className="text-gray-600 text-xs leading-relaxed">
                                   使用GLM-4.5V视频理解模型，AI可以直接观看和分析视频的实际内容，
                                   包括画面、动作、场景、文字等视觉信息，提供更准确的分析结果。
                                 </div>
                               </>
                             ) : currentDebugInfo.transmission_method === 'base64' ? (
                               <>
-                                <div className="text-purple-400 mb-1">
+                                <div className="text-purple-600 mb-1">
                                   <i className="fas fa-code mr-1"></i>
                                   AI分析基于Base64编码视频
                                 </div>
-                                <div className="text-gray-400 text-xs leading-relaxed">
+                                <div className="text-gray-600 text-xs leading-relaxed">
                                   视频文件通过Base64编码直接传输给AI模型进行分析，
                                   适合小文件（&lt;10MB），无需公网访问，安全性更高。
                                 </div>
                               </>
                             ) : (
                               <>
-                                <div className="text-yellow-400 mb-1">
+                                <div className="text-yellow-600 mb-1">
                                   <i className="fas fa-info-circle mr-1"></i>
                                   AI分析基于视频元数据
                                 </div>
@@ -1860,16 +1860,16 @@ const VideoAnalysis: React.FC = () => {
                         {/* API请求详情 */}
                         {currentDebugInfo.debug_info && (
                           <div>
-                            <h4 className="text-sm font-medium text-gray-300 mb-2">API请求详情</h4>
-                            <div className="bg-gray-900 rounded p-2 text-xs space-y-2">
+                            <h4 className="text-sm font-medium text-gray-700 mb-2">API请求详情</h4>
+                            <div className="bg-gray-100 rounded p-2 text-xs space-y-2 border border-gray-200">
                               {/* API URL */}
                               {currentDebugInfo.debug_info.api_url && (
                                 <div>
-                                  <div className="text-cyan-400 mb-1">
+                                  <div className="text-cyan-600 mb-1">
                                     <i className="fas fa-link mr-1"></i>
                                     API端点
                                   </div>
-                                  <div className="text-gray-300 font-mono text-xs break-all bg-gray-800 p-1 rounded">
+                                  <div className="text-gray-600 font-mono text-xs break-all bg-gray-200 p-1 rounded">
                                     {currentDebugInfo.debug_info.api_url}
                                   </div>
                                 </div>
@@ -1878,11 +1878,11 @@ const VideoAnalysis: React.FC = () => {
                               {/* cURL命令 */}
                               {currentDebugInfo.debug_info.curl_command && (
                                 <div>
-                                  <div className="text-green-400 mb-1">
+                                  <div className="text-green-600 mb-1">
                                     <i className="fas fa-terminal mr-1"></i>
                                     cURL命令
                                   </div>
-                                  <div className="text-gray-300 font-mono text-xs break-all bg-gray-800 p-2 rounded max-h-20 overflow-y-auto">
+                                  <div className="text-gray-600 font-mono text-xs break-all bg-gray-200 p-2 rounded max-h-20 overflow-y-auto">
                                     {currentDebugInfo.debug_info.curl_command}
                                   </div>
                                 </div>
@@ -1891,14 +1891,14 @@ const VideoAnalysis: React.FC = () => {
                               {/* 请求头 */}
                               {currentDebugInfo.debug_info.request_headers && (
                                 <div>
-                                  <div className="text-yellow-400 mb-1">
+                                  <div className="text-yellow-600 mb-1">
                                     <i className="fas fa-list mr-1"></i>
                                     请求头
                                   </div>
-                                  <div className="text-gray-300 font-mono text-xs bg-gray-800 p-2 rounded max-h-20 overflow-y-auto">
+                                  <div className="text-gray-600 font-mono text-xs bg-gray-200 p-2 rounded max-h-20 overflow-y-auto">
                                     {Object.entries(currentDebugInfo.debug_info.request_headers).map(([key, value]) => (
                                       <div key={key} className="mb-1">
-                                        <span className="text-blue-400">{key}:</span> <span className="text-gray-300">{String(value)}</span>
+                                        <span className="text-blue-600">{key}:</span> <span className="text-gray-700">{String(value)}</span>
                                       </div>
                                     ))}
                                   </div>
@@ -1908,11 +1908,11 @@ const VideoAnalysis: React.FC = () => {
                               {/* 请求体大小 */}
                               {currentDebugInfo.debug_info.request_data && (
                                 <div>
-                                  <div className="text-purple-400 mb-1">
+                                  <div className="text-purple-600 mb-1">
                                     <i className="fas fa-database mr-1"></i>
                                     请求体信息
                                   </div>
-                                  <div className="text-gray-300 text-xs">
+                                  <div className="text-gray-600 text-xs">
                                     <div>模型: {currentDebugInfo.debug_info.request_data.model || 'N/A'}</div>
                                     <div>最大Token: {currentDebugInfo.debug_info.request_data.max_tokens || 'N/A'}</div>
                                     <div>温度: {currentDebugInfo.debug_info.request_data.temperature || 'N/A'}</div>
@@ -1929,26 +1929,26 @@ const VideoAnalysis: React.FC = () => {
 
                         {/* 传输配置状态 */}
                         <div>
-                          <h4 className="text-sm font-medium text-gray-300 mb-2">传输配置</h4>
-                          <div className="bg-gray-900 rounded p-2 text-xs">
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">传输配置</h4>
+                          <div className="bg-gray-100 rounded p-2 text-xs border border-gray-200">
                             {currentDebugInfo.transmission_method === 'base64' ? (
                               <>
-                                <div className="text-purple-400 mb-1">
+                                <div className="text-purple-600 mb-1">
                                   <i className="fas fa-code mr-1"></i>
                                   Base64编码传输
                                 </div>
-                                <div className="text-gray-400 text-xs leading-relaxed">
+                                <div className="text-gray-600 text-xs leading-relaxed">
                                     视频文件被编码为Base64格式直接传输给AI模型，适合小文件（&lt;10MB），
                                     无需公网访问，安全性更高。
                                   </div>
                               </>
                             ) : currentDebugInfo.transmission_method === 'url' ? (
                               <>
-                                <div className="text-blue-400 mb-1">
+                                <div className="text-blue-600 mb-1">
                                   <i className="fas fa-globe mr-1"></i>
                                   {window.location.hostname === 'localhost' ? '本地开发环境' : '公网环境'}
                                 </div>
-                                <div className="text-gray-400 text-xs leading-relaxed">
+                                <div className="text-gray-600 text-xs leading-relaxed">
                                    {window.location.hostname === 'localhost' 
                                      ? 'GLM模型通过ngrok公网隧道访问视频文件，确保视频内容理解功能正常工作。' 
                                      : '已配置公网访问，GLM模型可直接访问视频文件进行内容分析。'}
@@ -1956,11 +1956,11 @@ const VideoAnalysis: React.FC = () => {
                                </>
                              ) : (
                                <>
-                                 <div className="text-gray-400 mb-1">
+                                 <div className="text-gray-500 mb-1">
                                    <i className="fas fa-question-circle mr-1"></i>
                                    未知传输方式
                                  </div>
-                                 <div className="text-gray-400 text-xs leading-relaxed">
+                                 <div className="text-gray-500 text-xs leading-relaxed">
                                    传输方式信息不可用。
                                  </div>
                                </>
@@ -2024,52 +2024,52 @@ const VideoAnalysis: React.FC = () => {
                 {selectedHistoryItem.status === 'completed' && (
                   <div className="mb-6">
                     <h4 className="text-lg font-medium mb-3">AI API 调试信息</h4>
-                    <div className="bg-gray-800 text-white rounded-lg overflow-hidden">
-                      <div className="px-4 py-2 bg-gray-900">
+                    <div className="bg-white border border-gray-200 text-gray-800 rounded-lg overflow-hidden shadow-sm">
+                      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center">
-                            <i className="fas fa-bug mr-2"></i>
-                            <span className="font-medium">调试信息</span>
+                            <i className="fas fa-bug text-gray-500 mr-2"></i>
+                            <span className="font-medium text-gray-900">调试信息</span>
                           </div>
-                          <div className="flex items-center text-green-400">
+                          <div className="flex items-center text-green-600">
                             <i className="fas fa-check-circle mr-1"></i>
-                            <span className="text-xs">已完成</span>
+                            <span className="text-xs font-medium">已完成</span>
                           </div>
                         </div>
                       </div>
                       <div className="p-4 space-y-4">
                         {/* 基本信息 */}
                         <div>
-                          <h5 className="text-sm font-medium text-gray-300 mb-2">基本信息</h5>
+                          <h5 className="text-sm font-medium text-gray-700 mb-2">基本信息</h5>
                           <div className="space-y-1 text-xs">
                             <div className="flex justify-between">
-                              <span className="text-gray-400">模型:</span>
-                              <span className="text-white">{selectedHistoryItem.model_name || 'N/A'}</span>
+                              <span className="text-gray-500">模型:</span>
+                              <span className="text-gray-900">{selectedHistoryItem.model_name || 'N/A'}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-gray-400">提供商:</span>
-                              <span className="text-white">{selectedHistoryItem.api_provider || 'N/A'}</span>
+                              <span className="text-gray-500">提供商:</span>
+                              <span className="text-gray-900">{selectedHistoryItem.api_provider || 'N/A'}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-gray-400">请求ID:</span>
-                              <span className="text-white text-xs truncate">{selectedHistoryItem.request_id || 'N/A'}</span>
+                              <span className="text-gray-500">请求ID:</span>
+                              <span className="text-gray-900 text-xs truncate">{selectedHistoryItem.request_id || 'N/A'}</span>
                             </div>
                           </div>
                         </div>
 
                         {/* 时间信息 */}
                         <div>
-                          <h5 className="text-sm font-medium text-gray-300 mb-2">时间信息</h5>
+                          <h5 className="text-sm font-medium text-gray-700 mb-2">时间信息</h5>
                           <div className="space-y-1 text-xs">
                             <div className="flex justify-between">
-                              <span className="text-gray-400">调用时间:</span>
-                              <span className="text-white">
+                              <span className="text-gray-500">调用时间:</span>
+                              <span className="text-gray-900">
                                 {selectedHistoryItem.api_call_time ? new Date(selectedHistoryItem.api_call_time).toLocaleTimeString() : 'N/A'}
                               </span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-gray-400">耗时:</span>
-                              <span className={`${selectedHistoryItem.api_duration && selectedHistoryItem.api_duration > 10 ? 'text-red-400' : 'text-green-400'}`}>
+                              <span className="text-gray-500">耗时:</span>
+                              <span className={`${selectedHistoryItem.api_duration && selectedHistoryItem.api_duration > 10 ? 'text-red-500' : 'text-green-600'}`}>
                                 {selectedHistoryItem.api_duration ? `${selectedHistoryItem.api_duration.toFixed(3)}秒` : 'N/A'}
                               </span>
                             </div>
@@ -2078,34 +2078,34 @@ const VideoAnalysis: React.FC = () => {
 
                         {/* Token使用情况 */}
                         <div>
-                          <h5 className="text-sm font-medium text-gray-300 mb-2">Token 使用</h5>
+                          <h5 className="text-sm font-medium text-gray-700 mb-2">Token 使用</h5>
                           <div className="space-y-1 text-xs">
                             <div className="flex justify-between">
-                              <span className="text-gray-400">输入:</span>
-                              <span className="text-blue-400">{selectedHistoryItem.prompt_tokens || 0}</span>
+                              <span className="text-gray-500">输入:</span>
+                              <span className="text-blue-600">{selectedHistoryItem.prompt_tokens || 0}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-gray-400">输出:</span>
-                              <span className="text-green-400">{selectedHistoryItem.completion_tokens || 0}</span>
+                              <span className="text-gray-500">输出:</span>
+                              <span className="text-green-600">{selectedHistoryItem.completion_tokens || 0}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-gray-400">总计:</span>
-                              <span className="text-purple-400">{selectedHistoryItem.total_tokens || 0}</span>
+                              <span className="text-gray-500">总计:</span>
+                              <span className="text-purple-600">{selectedHistoryItem.total_tokens || 0}</span>
                             </div>
                           </div>
                           
                           {/* Token使用可视化 */}
                           {selectedHistoryItem.total_tokens && selectedHistoryItem.total_tokens > 0 && (
                             <div className="mt-2">
-                              <div className="flex h-1 bg-gray-600 rounded overflow-hidden">
+                              <div className="flex h-1 bg-gray-200 rounded overflow-hidden">
                                 <div 
-                                  className="bg-blue-400"
+                                  className="bg-blue-500"
                                   style={{
                                     width: `${((selectedHistoryItem.prompt_tokens || 0) / selectedHistoryItem.total_tokens) * 100}%`
                                   }}
                                 ></div>
                                 <div 
-                                  className="bg-green-400"
+                                  className="bg-green-500"
                                   style={{
                                     width: `${((selectedHistoryItem.completion_tokens || 0) / selectedHistoryItem.total_tokens) * 100}%`
                                   }}
@@ -2117,32 +2117,32 @@ const VideoAnalysis: React.FC = () => {
                         
                         {/* 性能指标 */}
                         <div>
-                          <h5 className="text-sm font-medium text-gray-300 mb-2">性能指标</h5>
+                          <h5 className="text-sm font-medium text-gray-700 mb-2">性能指标</h5>
                           <div className="space-y-1 text-xs">
                             <div className="flex justify-between">
-                              <span className="text-gray-400">处理时间:</span>
-                              <span className={`${selectedHistoryItem.processing_time && selectedHistoryItem.processing_time > 30 ? 'text-red-400' : 'text-green-400'}`}>
+                              <span className="text-gray-500">处理时间:</span>
+                              <span className={`${selectedHistoryItem.processing_time && selectedHistoryItem.processing_time > 30 ? 'text-red-500' : 'text-green-600'}`}>
                                 {selectedHistoryItem.processing_time ? `${selectedHistoryItem.processing_time.toFixed(2)}秒` : 'N/A'}
                               </span>
                             </div>
                             {selectedHistoryItem.confidence_score && (
                               <div className="flex justify-between">
-                                <span className="text-gray-400">置信度:</span>
-                                <span className={`${selectedHistoryItem.confidence_score > 0.8 ? 'text-green-400' : selectedHistoryItem.confidence_score > 0.6 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                <span className="text-gray-500">置信度:</span>
+                                <span className={`${selectedHistoryItem.confidence_score > 0.8 ? 'text-green-600' : selectedHistoryItem.confidence_score > 0.6 ? 'text-yellow-600' : 'text-red-500'}`}>
                                   {(selectedHistoryItem.confidence_score * 100).toFixed(1)}%
                                 </span>
                               </div>
                             )}
                             {selectedHistoryItem.temperature && (
                               <div className="flex justify-between">
-                                <span className="text-gray-400">温度:</span>
-                                <span className="text-cyan-400">{selectedHistoryItem.temperature}</span>
+                                <span className="text-gray-500">温度:</span>
+                                <span className="text-cyan-600">{selectedHistoryItem.temperature}</span>
                               </div>
                             )}
                             {selectedHistoryItem.max_tokens && (
                               <div className="flex justify-between">
-                                <span className="text-gray-400">最大Token:</span>
-                                <span className="text-cyan-400">{selectedHistoryItem.max_tokens}</span>
+                                <span className="text-gray-500">最大Token:</span>
+                                <span className="text-cyan-600">{selectedHistoryItem.max_tokens}</span>
                               </div>
                             )}
                           </div>
