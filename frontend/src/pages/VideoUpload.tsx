@@ -119,6 +119,7 @@ const VideoUpload: React.FC = () => {
           item.id === fileItem.id ? { ...item, status: 'uploading', progress: 0 } : item
         )
       );
+      setTotalProgress(0);
       
       const formData = new FormData();
       formData.append('file', fileItem.file);
@@ -143,11 +144,16 @@ const VideoUpload: React.FC = () => {
         xhr.upload.onprogress = (event) => {
           if (!event.lengthComputable) return;
           const progress = Math.min(99, Math.round((event.loaded / event.total) * 100));
-          setFiles(prevFiles =>
-            prevFiles.map(item =>
+          setFiles(prevFiles => {
+            const nextFiles: FileItem[] = prevFiles.map(item =>
               item.id === fileItem.id ? { ...item, progress } : item
-            )
-          );
+            );
+            const overall = nextFiles.length > 0
+              ? nextFiles.reduce((sum, f) => sum + f.progress, 0) / nextFiles.length
+              : 0;
+            setTotalProgress(Math.round(overall));
+            return nextFiles;
+          });
         };
 
         xhr.onload = () => {
@@ -173,13 +179,18 @@ const VideoUpload: React.FC = () => {
       }
 
       // 上传成功
-      setFiles(prevFiles =>
-        prevFiles.map(item =>
+      setFiles(prevFiles => {
+        const nextFiles: FileItem[] = prevFiles.map(item =>
           item.id === fileItem.id 
             ? { ...item, status: 'completed', progress: 100 }
             : item
-        )
-      );
+        );
+        const overall = nextFiles.length > 0
+          ? nextFiles.reduce((sum, f) => sum + f.progress, 0) / nextFiles.length
+          : 0;
+        setTotalProgress(Math.round(overall));
+        return nextFiles;
+      });
       
       showNotification('success', `${fileItem.name} 上传完成`);
       
@@ -229,6 +240,7 @@ const VideoUpload: React.FC = () => {
 
   const handleUpload = async () => {
     if (files.length === 0) return;
+    if (isUploading) return;
     
     setIsUploading(true);
     setTotalProgress(0);
