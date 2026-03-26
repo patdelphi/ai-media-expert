@@ -799,7 +799,7 @@ const VideoAnalysis: React.FC = () => {
             ].map((item, index) => (
               <div key={item.step} className="flex items-center">
                 <div className={`flex items-center justify-center w-10 h-10 rounded-full ${
-                  currentStep >= item.step ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'
+                  currentStep >= item.step ? 'bg-blue-600 text-gray-900' : 'bg-gray-300 text-gray-600'
                 }`}>
                   <i className={`fas ${item.icon} ${item.step === 4 && currentStep === 4 ? 'fa-spin' : ''}`}></i>
                 </div>
@@ -831,7 +831,7 @@ const VideoAnalysis: React.FC = () => {
                 </div>
               ) : videos.length === 0 ? (
                 <div className="text-center py-12">
-                  <i className="fas fa-video text-4xl text-gray-400 mb-4"></i>
+                  <i className="fas fa-video text-4xl text-gray-500 mb-4"></i>
                   <p className="text-gray-600">暂无可用视频</p>
                   <p className="text-sm text-gray-500 mt-2">请先上传视频文件</p>
                 </div>
@@ -880,7 +880,7 @@ const VideoAnalysis: React.FC = () => {
                 <div className="mt-6 flex justify-end">
                   <button
                     onClick={() => setCurrentStep(2)}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    className="px-6 py-2 bg-blue-600 text-gray-900 rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     下一步
                   </button>
@@ -1200,7 +1200,7 @@ const VideoAnalysis: React.FC = () => {
                   <button
                     onClick={() => setCurrentStep(3)}
                     disabled={!selectedTemplate && !customPrompt}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                    className="px-6 py-2 bg-blue-600 text-gray-900 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                   >
                     下一步
                   </button>
@@ -1276,7 +1276,7 @@ const VideoAnalysis: React.FC = () => {
                 <button
                   onClick={startAnalysis}
                   disabled={!finalPrompt.trim() || !selectedAIConfig || loading}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  className="px-6 py-2 bg-blue-600 text-gray-900 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                 >
                   {loading ? (
                     <>
@@ -1344,7 +1344,7 @@ const VideoAnalysis: React.FC = () => {
                           </ReactMarkdown>
                         </div>
                         {/* 流式输入指示器 */}
-                        <div className="flex items-center mt-2 text-xs text-gray-400">
+                        <div className="flex items-center mt-2 text-xs text-gray-500">
                           <div className="w-1 h-4 bg-blue-500 animate-pulse mr-1"></div>
                           <span>正在生成内容...</span>
                         </div>
@@ -1603,18 +1603,18 @@ const VideoAnalysis: React.FC = () => {
                       )}
 
                       {/* 状态指示器 */}
-                      <div className="flex items-center justify-between pt-2 border-t border-gray-600">
-                        <span className="text-xs text-gray-400">实时监控</span>
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                        <span className="text-xs text-gray-500">实时监控</span>
                         <div className="flex items-center">
                           <div className={`w-2 h-2 rounded-full mr-1 ${
-                            currentDebugInfo.api_response_time ? 'bg-green-400' : 
-                            currentDebugInfo.api_call_time ? 'bg-yellow-400 animate-pulse' : 
+                            currentDebugInfo.api_response_time ? 'bg-green-500' : 
+                            currentDebugInfo.api_call_time ? 'bg-yellow-500 animate-pulse' : 
                             'bg-gray-400'
                           }`}></div>
                           <span className={`text-xs ${
-                            currentDebugInfo.api_response_time ? 'text-green-400' : 
-                            currentDebugInfo.api_call_time ? 'text-yellow-400' : 
-                            'text-gray-400'
+                            currentDebugInfo.api_response_time ? 'text-green-600' : 
+                            currentDebugInfo.api_call_time ? 'text-yellow-600' : 
+                            'text-gray-500'
                           }`}>
                             {currentDebugInfo.api_response_time ? '已完成' : 
                              currentDebugInfo.api_call_time ? '处理中' : '等待中'}
@@ -1636,14 +1636,14 @@ const VideoAnalysis: React.FC = () => {
                 <div className="flex space-x-3">
                   <button
                     onClick={() => exportResult(streamingResult, selectedVideo?.original_filename || 'analysis')}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    className="px-4 py-2 bg-green-600 text-gray-900 rounded-lg hover:bg-green-700 transition-colors"
                   >
                     <i className="fas fa-download mr-2"></i>
                     导出MD
                   </button>
                   <button
                     onClick={resetToStart}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    className="px-4 py-2 bg-blue-600 text-gray-900 rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     <i className="fas fa-plus mr-2"></i>
                     新建解析
@@ -1848,7 +1848,7 @@ const VideoAnalysis: React.FC = () => {
                                   <i className="fas fa-info-circle mr-1"></i>
                                   AI分析基于视频元数据
                                 </div>
-                                <div className="text-gray-400 text-xs leading-relaxed">
+                                <div className="text-gray-500 text-xs leading-relaxed">
                                   当前AI模型分析的是视频的元数据信息（文件名、时长、分辨率、格式等），
                                   而非视频的实际内容。建议使用GLM-4.5V模型获得真正的视频内容分析。
                                 </div>
@@ -1985,7 +1985,7 @@ const VideoAnalysis: React.FC = () => {
                 <h3 className="text-xl font-semibold">分析结果详情 - ID: {selectedHistoryItem.id}</h3>
                 <button
                   onClick={closeHistoryModal}
-                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                  className="text-gray-500 hover:text-gray-600 text-2xl"
                 >
                   ×
                 </button>
@@ -2199,7 +2199,7 @@ const VideoAnalysis: React.FC = () => {
               <div className="flex justify-end p-6 border-t bg-gray-50">
                 <button
                   onClick={closeHistoryModal}
-                  className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+                  className="px-4 py-2 bg-gray-500 text-gray-900 rounded hover:bg-gray-600 transition-colors"
                 >
                   关闭
                 </button>

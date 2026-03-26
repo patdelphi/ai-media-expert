@@ -202,7 +202,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
         {/* 关闭按钮 */}
         <button
           onClick={onClose}
-          className="absolute top-2 right-2 z-10 text-white hover:text-gray-300 text-2xl bg-black bg-opacity-50 rounded-full w-8 h-8 flex items-center justify-center"
+          className="absolute top-2 right-2 z-10 text-gray-900 hover:text-gray-700 text-2xl bg-black bg-opacity-50 rounded-full w-8 h-8 flex items-center justify-center"
         >
           <i className="fas fa-times"></i>
         </button>
@@ -227,7 +227,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
             <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-t-lg">
               <button
                 onClick={togglePlay}
-                className="text-white text-6xl hover:text-gray-300 transition-colors"
+                className="text-gray-900 text-6xl hover:text-gray-700 transition-colors"
               >
                 <i className="fas fa-play"></i>
               </button>
@@ -236,7 +236,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
         </div>
 
         {/* 简洁控制栏 */}
-        <div className="bg-gray-900 text-white p-3 rounded-b-lg">
+        <div className="bg-gray-50 text-gray-900 p-3 rounded-b-lg">
           {/* 进度条 */}
           <div className="mb-3">
             <input
@@ -247,7 +247,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
               onChange={handleProgressChange}
               className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
             />
-            <div className="flex justify-between text-xs text-gray-300 mt-1">
+            <div className="flex justify-between text-xs text-gray-700 mt-1">
               <span>{formatTime(currentTime)}</span>
               <span className="text-center flex-1 truncate px-2">{videoTitle}</span>
               <span>{formatTime(duration)}</span>
@@ -260,7 +260,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
               {/* 播放/暂停 */}
               <button
                 onClick={togglePlay}
-                className="text-xl text-white hover:text-gray-300"
+                className="text-xl text-gray-900 hover:text-gray-700"
               >
                 <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'}`}></i>
               </button>
@@ -269,7 +269,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
               <div className="flex items-center space-x-2">
                 <button
                   onClick={toggleMute}
-                  className="text-white hover:text-gray-300"
+                  className="text-gray-900 hover:text-gray-700"
                 >
                   <i className={`fas ${isMuted ? 'fa-volume-mute' : 'fa-volume-up'}`}></i>
                 </button>
@@ -287,7 +287,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
               {/* 循环播放切换 */}
               <button
                 onClick={toggleLoop}
-                className={`text-white hover:text-gray-300 ${isLooping ? 'text-blue-400' : ''}`}
+                className={`text-gray-900 hover:text-gray-700 ${isLooping ? 'text-blue-600' : ''}`}
                 title={isLooping ? '关闭循环播放' : '开启循环播放'}
               >
                 <i className="fas fa-redo"></i>
@@ -302,8 +302,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
                   onClick={() => handlePlaybackRateChange(rate)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     playbackRate === rate
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      ? 'bg-blue-600 text-gray-900'
+                      : 'bg-gray-700 text-gray-700 hover:bg-gray-600'
                   }`}
                 >
                   {rate}x

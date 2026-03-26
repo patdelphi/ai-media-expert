@@ -71,7 +71,7 @@ const DebugInfoPanel: React.FC<DebugInfoPanelProps> = ({
       <div className="fixed bottom-4 right-4 z-50">
         <button
           onClick={onToggle}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-blue-700 transition-colors"
+          className="bg-blue-600 text-gray-900 px-4 py-2 rounded-lg shadow-lg hover:bg-blue-700 transition-colors"
         >
           <i className="fas fa-bug mr-2"></i>
           调试信息
@@ -83,14 +83,14 @@ const DebugInfoPanel: React.FC<DebugInfoPanelProps> = ({
   return (
     <div className="fixed bottom-4 right-4 w-96 max-h-96 bg-white border border-gray-300 rounded-lg shadow-xl z-50 overflow-hidden">
       {/* 标题栏 */}
-      <div className="bg-gray-800 text-white px-4 py-2 flex justify-between items-center">
+      <div className="bg-white border border-gray-200 shadow-sm text-gray-900 px-4 py-2 flex justify-between items-center">
         <div className="flex items-center">
           <i className="fas fa-bug mr-2"></i>
           <span className="font-medium">AI API 调试信息</span>
         </div>
         <button
           onClick={onToggle}
-          className="text-gray-300 hover:text-white transition-colors"
+          className="text-gray-700 hover:text-gray-900 transition-colors"
         >
           <i className="fas fa-times"></i>
         </button>
