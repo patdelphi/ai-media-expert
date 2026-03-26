@@ -21,6 +21,7 @@ const VideoUpload: React.FC = () => {
   const [editingFile, setEditingFile] = useState<FileItem | null>(null);
   const [customTime, setCustomTime] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadXhrsRef = useRef<Record<string, XMLHttpRequest>>({});
 
   // 检查认证状态
   if (isLoading) {
@@ -128,26 +129,45 @@ const VideoUpload: React.FC = () => {
       const token = localStorage.getItem('access_token');
 
       console.log('发送请求到:', uploadUrl);
-      
-      const response = await fetch(uploadUrl, {
-        method: 'POST',
-        body: formData,
-        mode: 'cors',
-        credentials: 'omit',
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      const result = await new Promise<any>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        uploadXhrsRef.current[fileItem.id] = xhr;
+
+        xhr.open('POST', uploadUrl, true);
+        if (token) {
+          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        }
+        xhr.responseType = 'json';
+        xhr.timeout = 30 * 60 * 1000;
+
+        xhr.upload.onprogress = (event) => {
+          if (!event.lengthComputable) return;
+          const progress = Math.min(99, Math.round((event.loaded / event.total) * 100));
+          setFiles(prevFiles =>
+            prevFiles.map(item =>
+              item.id === fileItem.id ? { ...item, progress } : item
+            )
+          );
+        };
+
+        xhr.onload = () => {
+          const status = xhr.status;
+          if (status < 200 || status >= 300) {
+            const text = typeof xhr.response === 'string' ? xhr.response : xhr.responseText;
+            reject(new Error(`HTTP ${status}: ${text || '上传失败'}`));
+            return;
+          }
+          resolve(xhr.response ?? xhr.responseText);
+        };
+
+        xhr.onerror = () => reject(new Error('网络错误'));
+        xhr.ontimeout = () => reject(new Error('上传超时'));
+
+        xhr.send(formData);
       });
 
-      console.log('响应状态:', response.status, response.statusText);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('HTTP错误响应:', errorText);
-        throw new Error(`HTTP ${response.status}: ${response.statusText}\n${errorText}`);
-      }
-
-      const result = await response.json();
       console.log('上传响应:', result);
-      
+
       if (result?.code !== 200) {
         throw new Error(result?.message || result?.error || '上传失败');
       }
@@ -178,6 +198,11 @@ const VideoUpload: React.FC = () => {
             : item
         )
       );
+    } finally {
+      const xhr = uploadXhrsRef.current[fileItem.id];
+      if (xhr) {
+        delete uploadXhrsRef.current[fileItem.id];
+      }
     }
   };
 
