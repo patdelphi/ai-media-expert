@@ -4,6 +4,7 @@
 """
 
 import os
+import threading
 import uuid
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db
 from app.core.config import settings
 from app.core.app_logging import api_logger
+from app.core.database import SessionLocal
 from app.models.user import User
 from app.models.video import Video
 from app.schemas.common import ResponseModel
@@ -34,6 +36,157 @@ class SimpleUploadResponse:
         self.filename = filename
         self.file_size = file_size
         self.message = message
+
+
+def _postprocess_upload(uploaded_file_id: int, video_id: int, saved_file_path: str) -> None:
+    db = SessionLocal()
+    try:
+        from app.models.uploaded_file import UploadedFile
+        from app.services.video_metadata import VideoMetadataExtractor
+
+        uploaded_file = db.query(UploadedFile).filter(UploadedFile.id == uploaded_file_id).first()
+        video = db.query(Video).filter(Video.id == video_id).first()
+        if not uploaded_file and not video:
+            return
+
+        extractor = VideoMetadataExtractor()
+        meta = extractor.extract_comprehensive_metadata(saved_file_path)
+
+        format_info = meta.get('format_info', {})
+        video_streams = meta.get('video_streams', [])
+        audio_streams = meta.get('audio_streams', [])
+
+        format_name = format_info.get('format_name')
+        if isinstance(format_name, str) and format_name:
+            format_name = format_name.split(',')[0]
+
+        def _safe_int(value):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
+        def _calc_video_ratio(width: int | None, height: int | None) -> str | None:
+            if not width or not height:
+                return None
+            def gcd(a: int, b: int) -> int:
+                while b:
+                    a, b = b, a % b
+                return a
+            common_divisor = gcd(width, height)
+            simplified_width = width // common_divisor
+            simplified_height = height // common_divisor
+            if simplified_width > 50 or simplified_height > 50:
+                standard_ratios = [
+                    (16, 9), (9, 16), (4, 3), (3, 4), (1, 1),
+                    (21, 9), (9, 21), (5, 4), (4, 5)
+                ]
+                current_ratio = width / height
+                best_match = None
+                min_diff = float('inf')
+                for w, h in standard_ratios:
+                    ratio = w / h
+                    diff = abs(current_ratio - ratio)
+                    if diff < min_diff:
+                        min_diff = diff
+                        best_match = (w, h)
+                if best_match and min_diff < 0.1:
+                    simplified_width, simplified_height = best_match
+            return f"{simplified_width}:{simplified_height}"
+
+        def _calc_aspect_ratio(width: int | None, height: int | None) -> str | None:
+            if not width or not height:
+                return None
+            ratio = round(width / height, 2)
+            return f"{ratio:.2f}:1"
+
+        def _calc_fps(frame_rate: str | None) -> str | None:
+            if not frame_rate:
+                return None
+            if "/" in frame_rate:
+                try:
+                    num_str, den_str = frame_rate.split("/", 1)
+                    num = float(num_str)
+                    den = float(den_str)
+                    if den == 0:
+                        return None
+                    return f"{num / den:.2f}"
+                except ValueError:
+                    return None
+            try:
+                return f"{float(frame_rate):.2f}"
+            except ValueError:
+                return None
+
+        duration = format_info.get('duration')
+        bit_rate = format_info.get('bit_rate')
+
+        if uploaded_file:
+            uploaded_file.duration = duration
+            uploaded_file.format_name = format_name
+            uploaded_file.bit_rate = bit_rate
+
+            if video_streams:
+                vs = video_streams[0]
+                width = _safe_int(vs.get('width'))
+                height = _safe_int(vs.get('height'))
+                uploaded_file.width = width
+                uploaded_file.height = height
+                uploaded_file.video_codec = vs.get('codec_name')
+                uploaded_file.frame_rate = _calc_fps(vs.get('r_frame_rate'))
+                uploaded_file.aspect_ratio = _calc_aspect_ratio(width, height)
+                uploaded_file.video_ratio = _calc_video_ratio(width, height)
+
+            if audio_streams:
+                ast = audio_streams[0]
+                uploaded_file.audio_codec = ast.get('codec_name')
+                uploaded_file.sample_rate = _safe_int(ast.get('sample_rate'))
+                uploaded_file.channels = _safe_int(ast.get('channels'))
+
+        if video:
+            video.duration = duration
+            video.format = format_name
+            video.bitrate = bit_rate
+
+            if video_streams:
+                vs = video_streams[0]
+                width = _safe_int(vs.get('width'))
+                height = _safe_int(vs.get('height'))
+                video.resolution = f"{width}x{height}" if width and height else None
+                fps_value = _calc_fps(vs.get('r_frame_rate'))
+                if fps_value is not None:
+                    try:
+                        video.fps = float(fps_value)
+                    except ValueError:
+                        pass
+                video.codec = vs.get('codec_name')
+                video.video_codec = vs.get('codec_name')
+
+            if audio_streams:
+                video.audio_codec = audio_streams[0].get('codec_name')
+
+        db.commit()
+
+        try:
+            from app.tasks.video_tasks import process_uploaded_video
+
+            process_uploaded_video.delay(video_id)
+        except Exception as e:
+            api_logger.error(
+                "Failed to enqueue video post-processing",
+                video_id=video_id,
+                error=str(e)
+            )
+    except Exception as e:
+        db.rollback()
+        api_logger.error(
+            "Simple upload postprocess failed",
+            video_id=video_id,
+            uploaded_file_id=uploaded_file_id,
+            error=str(e)
+        )
+    finally:
+        db.close()
 
 
 @router.post("/simple", response_model=ResponseModel[dict])
@@ -108,79 +261,10 @@ async def simple_upload(
                     )
                 f.write(chunk)
 
-        # 提取视频元数据
-        from app.services.video_metadata import VideoMetadataExtractor
-        extractor = VideoMetadataExtractor()
-        meta = extractor.extract_comprehensive_metadata(str(file_path))
-        
-        format_info = meta.get('format_info', {})
-        video_streams = meta.get('video_streams', [])
-        audio_streams = meta.get('audio_streams', [])
-        format_name = format_info.get('format_name')
-        if isinstance(format_name, str) and format_name:
-            format_name = format_name.split(',')[0]
-        
         # 录入数据库
         from app.models.uploaded_file import UploadedFile
         import datetime
-        
-        def _safe_int(value):
-            try:
-                return int(value)
-            except (TypeError, ValueError):
-                return None
-
-        def _calc_video_ratio(width: int | None, height: int | None) -> str | None:
-            if not width or not height:
-                return None
-            def gcd(a: int, b: int) -> int:
-                while b:
-                    a, b = b, a % b
-                return a
-            common_divisor = gcd(width, height)
-            simplified_width = width // common_divisor
-            simplified_height = height // common_divisor
-            if simplified_width > 50 or simplified_height > 50:
-                standard_ratios = [
-                    (16, 9), (9, 16), (4, 3), (3, 4), (1, 1),
-                    (21, 9), (9, 21), (5, 4), (4, 5)
-                ]
-                current_ratio = width / height
-                best_match = None
-                min_diff = float('inf')
-                for w, h in standard_ratios:
-                    ratio = w / h
-                    diff = abs(current_ratio - ratio)
-                    if diff < min_diff:
-                        min_diff = diff
-                        best_match = (w, h)
-                if best_match and min_diff < 0.1:
-                    simplified_width, simplified_height = best_match
-            return f"{simplified_width}:{simplified_height}"
-
-        def _calc_aspect_ratio(width: int | None, height: int | None) -> str | None:
-            if not width or not height:
-                return None
-            ratio = round(width / height, 2)
-            return f"{ratio:.2f}:1"
-
-        def _calc_fps(frame_rate: str | None) -> str | None:
-            if not frame_rate:
-                return None
-            if "/" in frame_rate:
-                try:
-                    num_str, den_str = frame_rate.split("/", 1)
-                    num = float(num_str)
-                    den = float(den_str)
-                    if den == 0:
-                        return None
-                    return f"{num / den:.2f}"
-                except ValueError:
-                    return None
-            try:
-                return f"{float(frame_rate):.2f}"
-            except ValueError:
-                return None
+        format_name = file_extension.lstrip(".")
 
         # 存入 uploaded_files 表（用于旧版历史记录等）
         new_uploaded_file = UploadedFile(
@@ -192,30 +276,11 @@ async def simple_upload(
             title=title or Path(file.filename).stem,
             description=description,
             file_path=str(file_path),
-            duration=format_info.get('duration'),
             format_name=format_name,
-            bit_rate=format_info.get('bit_rate'),
             created_at=datetime.datetime.now(),
             updated_at=datetime.datetime.now(),
             file_created_at=datetime.datetime.fromtimestamp(os.path.getctime(str(file_path)))
         )
-        
-        if video_streams:
-            vs = video_streams[0]
-            width = _safe_int(vs.get('width'))
-            height = _safe_int(vs.get('height'))
-            new_uploaded_file.width = width
-            new_uploaded_file.height = height
-            new_uploaded_file.video_codec = vs.get('codec_name')
-            new_uploaded_file.frame_rate = _calc_fps(vs.get('r_frame_rate'))
-            new_uploaded_file.aspect_ratio = _calc_aspect_ratio(width, height)
-            new_uploaded_file.video_ratio = _calc_video_ratio(width, height)
-
-        if audio_streams:
-            ast = audio_streams[0]
-            new_uploaded_file.audio_codec = ast.get('codec_name')
-            new_uploaded_file.sample_rate = _safe_int(ast.get('sample_rate'))
-            new_uploaded_file.channels = _safe_int(ast.get('channels'))
 
         db.add(new_uploaded_file)
         
@@ -230,45 +295,21 @@ async def simple_upload(
             status="uploaded",
             upload_status=UploadStatus.COMPLETED,
             uploaded_by=current_user.id,
-            duration=format_info.get('duration'),
             format=format_name,
-            bitrate=format_info.get('bit_rate'),
             created_at=datetime.datetime.now(),
             updated_at=datetime.datetime.now()
         )
-        
-        if video_streams:
-            vs = video_streams[0]
-            width = _safe_int(vs.get('width'))
-            height = _safe_int(vs.get('height'))
-            new_video.resolution = f"{width}x{height}" if width and height else None
-            fps_value = _calc_fps(vs.get('r_frame_rate'))
-            if fps_value is not None:
-                try:
-                    new_video.fps = float(fps_value)
-                except ValueError:
-                    pass
-                    
-            new_video.codec = vs.get('codec_name')
-            new_video.video_codec = vs.get('codec_name')
-            
-        if audio_streams:
-            new_video.audio_codec = audio_streams[0].get('codec_name')
             
         db.add(new_video)
         
         db.commit()
         db.refresh(new_video)
-        try:
-            from app.tasks.video_tasks import process_uploaded_video
-
-            process_uploaded_video.delay(new_video.id)
-        except Exception as e:
-            api_logger.error(
-                "Failed to enqueue video post-processing",
-                video_id=new_video.id,
-                error=str(e)
-            )
+        db.refresh(new_uploaded_file)
+        threading.Thread(
+            target=_postprocess_upload,
+            args=(new_uploaded_file.id, new_video.id, str(file_path)),
+            daemon=True
+        ).start()
 
         api_logger.info(
             "File saved successfully",
