@@ -373,7 +373,6 @@ class AIConfig(BaseModel):
             "id": self.id,
             "name": self.name,
             "provider": self.provider,
-            "api_key": self.api_key,
             "api_base": self.api_base,
             "model": self.model,
             "max_tokens": self.max_tokens,

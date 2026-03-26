@@ -1,0 +1,8 @@
+﻿# 示例 Cookie 文件（不要提交真实 cookie）
+
+此文件仅作为示例占位，用于抖音/平台相关的调试脚本（如需要）。
+
+请将你的真实 cookie 保存为根目录的 cookie.txt（该文件已被 .gitignore 忽略，不会提交到仓库）。
+
+示例（伪造）：
+sessionid=YOUR_SESSION_ID; csrftoken=YOUR_CSRF_TOKEN;

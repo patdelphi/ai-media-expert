@@ -255,7 +255,6 @@ class AIConfigBase(BaseModel):
     """AI配置基础模型"""
     name: str = Field(description="配置名称")
     provider: str = Field(description="AI提供商")
-    api_key: str = Field(description="API密钥")
     api_base: Optional[str] = Field(default=None, description="API基础URL")
     model: str = Field(description="模型名称")
     max_tokens: Optional[int] = Field(default=4000, description="最大令牌数")
@@ -265,7 +264,7 @@ class AIConfigBase(BaseModel):
 
 class AIConfigCreate(AIConfigBase):
     """AI配置创建模型"""
-    pass
+    api_key: str = Field(description="API密钥")
 
 
 class AIConfigUpdate(BaseModel):
@@ -283,6 +282,7 @@ class AIConfigUpdate(BaseModel):
 class AIConfigResponse(AIConfigBase):
     """AI配置响应模型"""
     id: int
+    api_key: Optional[str] = Field(default=None, description="API密钥（已脱敏）")
     created_at: datetime
     updated_at: datetime
     

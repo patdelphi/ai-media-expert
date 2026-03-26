@@ -45,14 +45,14 @@ if settings.database_url.startswith("sqlite"):
     engine = create_engine(
         settings.database_url,
         connect_args={"check_same_thread": False},
-        echo=settings.debug,
+        echo=False,
     )
     async_engine = None
 else:
     # PostgreSQL配置
     engine = create_engine(
         settings.database_url_sync,
-        echo=settings.debug,
+        echo=False,
         pool_size=10,
         max_overflow=20,
         pool_pre_ping=True,
@@ -61,7 +61,7 @@ else:
     # 异步引擎（如果需要）
     async_engine = create_async_engine(
         settings.database_url,
-        echo=settings.debug,
+        echo=False,
         pool_size=10,
         max_overflow=20,
         pool_pre_ping=True,

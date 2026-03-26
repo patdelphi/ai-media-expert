@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.app_logging import api_logger
+from app.core.security import decrypt_value
 from app.models.video import AIConfig
 from app.models.video_analysis import VideoAnalysis
 from app.utils.video_base64 import video_base64_encoder
@@ -128,8 +129,12 @@ class AIService:
             api_url = api_base
         
         # 构建请求头
+        api_key = ai_config.api_key
+        if api_key and api_key.startswith("enc:"):
+            api_key = decrypt_value(api_key[4:])
+
         headers = {
-            "Authorization": f"Bearer {ai_config.api_key}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
         
@@ -370,8 +375,12 @@ class AIService:
         api_url = f"{api_base.rstrip('/')}/v1/messages"
         
         # 构建请求头
+        api_key = ai_config.api_key
+        if api_key and api_key.startswith("enc:"):
+            api_key = decrypt_value(api_key[4:])
+
         headers = {
-            "x-api-key": ai_config.api_key,
+            "x-api-key": api_key,
             "Content-Type": "application/json",
             "anthropic-version": "2023-06-01"
         }

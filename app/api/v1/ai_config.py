@@ -1,17 +1,46 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 
+from app.api.deps import get_current_user, require_admin
 from app.core.database import get_db
+from app.core.security import decrypt_value, encrypt_value
 from app.models.video import AIConfig
 from app.schemas.video import AIConfigCreate, AIConfigUpdate, AIConfigResponse, AIConfigPublicResponse
 from app.schemas.common import ResponseModel
+from app.models.user import User
 
 router = APIRouter()
+
+def _encrypt_api_key(api_key: str) -> str:
+    if not api_key:
+        return api_key
+    if api_key.startswith("enc:"):
+        return api_key
+    return "enc:" + encrypt_value(api_key)
+
+
+def _decrypt_api_key(stored: str) -> str:
+    if not stored:
+        return stored
+    if stored.startswith("enc:"):
+        return decrypt_value(stored[4:])
+    return stored
+
+
+def _mask_api_key(stored: str) -> str:
+    plain = _decrypt_api_key(stored)
+    if not plain:
+        return ""
+    if len(plain) <= 8:
+        return "****"
+    return f"{plain[:3]}****{plain[-4:]}"
+
 
 @router.post("/", response_model=ResponseModel[AIConfigResponse])
 async def create_ai_config(
     config: AIConfigCreate,
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """创建AI配置"""
@@ -21,25 +50,32 @@ async def create_ai_config(
     if existing:
         raise HTTPException(status_code=400, detail="配置名称已存在")
     
-    db_config = AIConfig(**config.dict())
+    config_dict = config.dict()
+    config_dict["api_key"] = _encrypt_api_key(config_dict["api_key"])
+    db_config = AIConfig(**config_dict)
     db.add(db_config)
     db.commit()
     db.refresh(db_config)
-    
+
+    resp = AIConfigResponse.model_validate(db_config)
+    resp.api_key = _mask_api_key(db_config.api_key)
     return ResponseModel(
         code=200,
         message="AI配置创建成功",
-        data=AIConfigResponse.from_orm(db_config)
+        data=resp
     )
 
 @router.get("/", response_model=ResponseModel[List[AIConfigPublicResponse]])
 async def get_ai_configs(
     include_inactive: bool = False,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取AI配置列表（公开信息，不包含API密钥）"""
     
     query = db.query(AIConfig)
+    if include_inactive and current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
     if not include_inactive:
         query = query.filter(AIConfig.is_active == True)
     
@@ -53,6 +89,7 @@ async def get_ai_configs(
 @router.get("/full", response_model=ResponseModel[List[AIConfigResponse]])
 async def get_ai_configs_full(
     include_inactive: bool = False,
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """获取AI配置完整信息（包含API密钥，仅管理员使用）"""
@@ -62,15 +99,21 @@ async def get_ai_configs_full(
         query = query.filter(AIConfig.is_active == True)
     
     configs = query.order_by(AIConfig.created_at.desc()).all()
+    data: List[AIConfigResponse] = []
+    for config in configs:
+        resp = AIConfigResponse.model_validate(config)
+        resp.api_key = _mask_api_key(config.api_key)
+        data.append(resp)
     return ResponseModel(
         code=200,
         message="AI配置完整信息获取成功",
-        data=[AIConfigResponse.from_orm(config) for config in configs]
+        data=data
     )
 
 @router.get("/{config_id}", response_model=ResponseModel[AIConfigResponse])
 async def get_ai_config(
     config_id: int,
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """获取单个AI配置详情"""
@@ -79,16 +122,19 @@ async def get_ai_config(
     if not config:
         raise HTTPException(status_code=404, detail="AI配置不存在")
     
+    resp = AIConfigResponse.model_validate(config)
+    resp.api_key = _mask_api_key(config.api_key)
     return ResponseModel(
         code=200,
         message="AI配置获取成功",
-        data=AIConfigResponse.from_orm(config)
+        data=resp
     )
 
 @router.put("/{config_id}", response_model=ResponseModel[AIConfigResponse])
 async def update_ai_config(
     config_id: int,
     config_update: AIConfigUpdate,
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """更新AI配置"""
@@ -107,21 +153,30 @@ async def update_ai_config(
             raise HTTPException(status_code=400, detail="配置名称已存在")
     
     # 更新字段
-    for field, value in config_update.dict(exclude_unset=True).items():
+    update_data = config_update.dict(exclude_unset=True)
+    if "api_key" in update_data:
+        if update_data["api_key"]:
+            update_data["api_key"] = _encrypt_api_key(update_data["api_key"])
+        else:
+            update_data.pop("api_key")
+    for field, value in update_data.items():
         setattr(config, field, value)
     
     db.commit()
     db.refresh(config)
     
+    resp = AIConfigResponse.model_validate(config)
+    resp.api_key = _mask_api_key(config.api_key)
     return ResponseModel(
         code=200,
         message="AI配置更新成功",
-        data=AIConfigResponse.from_orm(config)
+        data=resp
     )
 
 @router.delete("/{config_id}", response_model=ResponseModel)
 async def delete_ai_config(
     config_id: int,
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """删除AI配置"""
@@ -142,6 +197,7 @@ async def delete_ai_config(
 @router.post("/{config_id}/test", response_model=ResponseModel)
 async def test_ai_config(
     config_id: int,
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """测试AI配置连接"""
@@ -158,8 +214,9 @@ async def test_ai_config(
         start_time = time.time()
         
         # 构建测试请求
+        api_key = _decrypt_api_key(config.api_key)
         headers = {
-            "Authorization": f"Bearer {config.api_key}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
         
