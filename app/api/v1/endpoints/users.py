@@ -38,6 +38,17 @@ def get_user_profile(
     )
 
 
+@router.get("/me", response_model=ResponseModel[UserResponse])
+def get_user_me(
+    current_user: User = Depends(get_current_user)
+) -> Any:
+    return ResponseModel(
+        code=200,
+        message="User profile retrieved successfully",
+        data=UserResponse.model_validate(current_user)
+    )
+
+
 @router.put("/profile", response_model=ResponseModel[UserResponse])
 def update_user_profile(
     user_update: UserUpdate,
@@ -81,6 +92,15 @@ def update_user_profile(
     )
 
 
+@router.put("/me", response_model=ResponseModel[UserResponse])
+def update_user_me(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> Any:
+    return update_user_profile(user_update=user_update, current_user=current_user, db=db)
+
+
 @router.post("/change-password", response_model=ResponseModel[dict])
 def change_password(
     password_data: PasswordChange,
@@ -119,6 +139,15 @@ def change_password(
         message="Password changed successfully",
         data={"message": "Password has been updated"}
     )
+
+
+@router.put("/me/password", response_model=ResponseModel[dict])
+def change_password_me(
+    password_data: PasswordChange,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> Any:
+    return change_password(password_data=password_data, current_user=current_user, db=db)
 
 
 @router.delete("/account", response_model=ResponseModel[dict])

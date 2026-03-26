@@ -92,21 +92,21 @@ async def simple_upload(
         unique_filename = f"{uuid.uuid4()}{file_extension}"
         file_path = UPLOAD_DIR / unique_filename
         
-        # 读取文件内容
-        file_content = await file.read()
-        file_size = len(file_content)
-        
         # 检查文件大小（500MB限制）
         max_size = 500 * 1024 * 1024  # 500MB
-        if file_size > max_size:
-            raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail="File size exceeds 500MB limit"
-            )
-        
-        # 保存文件
+        file_size = 0
         with open(file_path, "wb") as f:
-            f.write(file_content)
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                file_size += len(chunk)
+                if file_size > max_size:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail="File size exceeds 500MB limit"
+                    )
+                f.write(chunk)
 
         # 提取视频元数据
         from app.services.video_metadata import VideoMetadataExtractor
@@ -116,12 +116,72 @@ async def simple_upload(
         format_info = meta.get('format_info', {})
         video_streams = meta.get('video_streams', [])
         audio_streams = meta.get('audio_streams', [])
+        format_name = format_info.get('format_name')
+        if isinstance(format_name, str) and format_name:
+            format_name = format_name.split(',')[0]
         
         # 录入数据库
         from app.models.uploaded_file import UploadedFile
         import datetime
-        import os
         
+        def _safe_int(value):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
+        def _calc_video_ratio(width: int | None, height: int | None) -> str | None:
+            if not width or not height:
+                return None
+            def gcd(a: int, b: int) -> int:
+                while b:
+                    a, b = b, a % b
+                return a
+            common_divisor = gcd(width, height)
+            simplified_width = width // common_divisor
+            simplified_height = height // common_divisor
+            if simplified_width > 50 or simplified_height > 50:
+                standard_ratios = [
+                    (16, 9), (9, 16), (4, 3), (3, 4), (1, 1),
+                    (21, 9), (9, 21), (5, 4), (4, 5)
+                ]
+                current_ratio = width / height
+                best_match = None
+                min_diff = float('inf')
+                for w, h in standard_ratios:
+                    ratio = w / h
+                    diff = abs(current_ratio - ratio)
+                    if diff < min_diff:
+                        min_diff = diff
+                        best_match = (w, h)
+                if best_match and min_diff < 0.1:
+                    simplified_width, simplified_height = best_match
+            return f"{simplified_width}:{simplified_height}"
+
+        def _calc_aspect_ratio(width: int | None, height: int | None) -> str | None:
+            if not width or not height:
+                return None
+            ratio = round(width / height, 2)
+            return f"{ratio:.2f}:1"
+
+        def _calc_fps(frame_rate: str | None) -> str | None:
+            if not frame_rate:
+                return None
+            if "/" in frame_rate:
+                try:
+                    num_str, den_str = frame_rate.split("/", 1)
+                    num = float(num_str)
+                    den = float(den_str)
+                    if den == 0:
+                        return None
+                    return f"{num / den:.2f}"
+                except ValueError:
+                    return None
+            try:
+                return f"{float(frame_rate):.2f}"
+            except ValueError:
+                return None
+
         # 存入 uploaded_files 表（用于旧版历史记录等）
         new_uploaded_file = UploadedFile(
             user_id=current_user.id,
@@ -133,7 +193,7 @@ async def simple_upload(
             description=description,
             file_path=str(file_path),
             duration=format_info.get('duration'),
-            format_name=format_info.get('format_name'),
+            format_name=format_name,
             bit_rate=format_info.get('bit_rate'),
             created_at=datetime.datetime.now(),
             updated_at=datetime.datetime.now(),
@@ -142,17 +202,20 @@ async def simple_upload(
         
         if video_streams:
             vs = video_streams[0]
-            new_uploaded_file.width = vs.get('width')
-            new_uploaded_file.height = vs.get('height')
+            width = _safe_int(vs.get('width'))
+            height = _safe_int(vs.get('height'))
+            new_uploaded_file.width = width
+            new_uploaded_file.height = height
             new_uploaded_file.video_codec = vs.get('codec_name')
-            new_uploaded_file.frame_rate = vs.get('r_frame_rate')
-            new_uploaded_file.aspect_ratio = vs.get('display_aspect_ratio')
+            new_uploaded_file.frame_rate = _calc_fps(vs.get('r_frame_rate'))
+            new_uploaded_file.aspect_ratio = _calc_aspect_ratio(width, height)
+            new_uploaded_file.video_ratio = _calc_video_ratio(width, height)
 
         if audio_streams:
             ast = audio_streams[0]
             new_uploaded_file.audio_codec = ast.get('codec_name')
-            new_uploaded_file.sample_rate = ast.get('sample_rate')
-            new_uploaded_file.channels = ast.get('channels')
+            new_uploaded_file.sample_rate = _safe_int(ast.get('sample_rate'))
+            new_uploaded_file.channels = _safe_int(ast.get('channels'))
 
         db.add(new_uploaded_file)
         
@@ -168,7 +231,7 @@ async def simple_upload(
             upload_status=UploadStatus.COMPLETED,
             uploaded_by=current_user.id,
             duration=format_info.get('duration'),
-            format=format_info.get('format_name'),
+            format=format_name,
             bitrate=format_info.get('bit_rate'),
             created_at=datetime.datetime.now(),
             updated_at=datetime.datetime.now()
@@ -176,13 +239,15 @@ async def simple_upload(
         
         if video_streams:
             vs = video_streams[0]
-            new_video.resolution = f"{vs.get('width')}x{vs.get('height')}" if vs.get('width') else None
-            
-            fps_str = vs.get('r_frame_rate', '0/1')
-            if '/' in fps_str:
-                num, den = fps_str.split('/')
-                if int(den) > 0:
-                    new_video.fps = int(num) / int(den)
+            width = _safe_int(vs.get('width'))
+            height = _safe_int(vs.get('height'))
+            new_video.resolution = f"{width}x{height}" if width and height else None
+            fps_value = _calc_fps(vs.get('r_frame_rate'))
+            if fps_value is not None:
+                try:
+                    new_video.fps = float(fps_value)
+                except ValueError:
+                    pass
                     
             new_video.codec = vs.get('codec_name')
             new_video.video_codec = vs.get('codec_name')
@@ -193,6 +258,7 @@ async def simple_upload(
         db.add(new_video)
         
         db.commit()
+        db.refresh(new_video)
         try:
             from app.tasks.video_tasks import process_uploaded_video
 
