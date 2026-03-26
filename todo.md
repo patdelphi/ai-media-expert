@@ -26,12 +26,12 @@
  
 - [x] 盘点根目录 `"test_*.py"` / `"debug_*.py"`：标记为手工工具并从 pytest 默认收集中排除（已新增清单 `"scripts/manual_tools.md"`，并在 pytest 忽略）
 - [x] 去除未使用依赖：基于导入与运行链路，拆分“必需依赖”和“可选依赖”（已拆分到 optional-dependencies：`ai/ui/metrics/migrations/...`）
-- [ ] 文档口径统一：补齐启动端口/是否挂载 UI 等不一致描述
+- [x] 文档口径统一：补齐启动端口/是否挂载 UI 等不一致描述（已更新 `"README.md"`/`"README_SERVICES.md"`/`"Docs/README.md"`）
  
 ### P3：质量与CI（保证长期可维护）
  
-- [ ] 新功能/重构补齐测试：以 API（下载/分析/上传）为主线增加单测/集成测试
-- [ ] 增加类型检查与 lint（仅幂等校验）：保证本地/CI 一致
+- [x] 新功能/重构补齐测试：以 API（下载/分析/上传）为主线增加单测/集成测试（已补 `/health`、`/`、简化上传、下载任务 CRUD）
+- [x] 增加类型检查与 lint（仅幂等校验）：保证本地/CI 一致（已加入 CI：`compileall + flake8(E9/F*) + pytest`）
  
 ## 执行约束
  

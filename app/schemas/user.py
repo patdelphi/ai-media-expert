@@ -6,7 +6,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.schemas.auth import UserResponse
 from app.schemas.common import PaginatedResponse
@@ -44,7 +44,7 @@ class AdminUserCreate(BaseModel):
     is_active: bool = Field(default=True, description="是否激活")
     is_verified: bool = Field(default=False, description="是否验证")
     
-    @validator('username')
+    @field_validator("username")
     def validate_username(cls, v):
         if v is not None:
             import re
@@ -52,7 +52,7 @@ class AdminUserCreate(BaseModel):
                 raise ValueError('Username can only contain letters, numbers, underscores and hyphens')
         return v
     
-    @validator('password')
+    @field_validator("password")
     def validate_password(cls, v):
         if v is not None:
             if len(v) < 8:
@@ -65,7 +65,7 @@ class AdminUserCreate(BaseModel):
                 raise ValueError('Password must contain both letters and numbers')
         return v
     
-    @validator('role')
+    @field_validator("role")
     def validate_role(cls, v):
         allowed_roles = ['user', 'premium', 'admin']
         if v not in allowed_roles:
@@ -82,7 +82,7 @@ class AdminUserUpdate(BaseModel):
     is_active: Optional[bool] = Field(default=None, description="是否激活")
     is_verified: Optional[bool] = Field(default=None, description="是否验证")
     
-    @validator('username')
+    @field_validator("username")
     def validate_username(cls, v):
         if v is not None:
             import re
@@ -90,7 +90,7 @@ class AdminUserUpdate(BaseModel):
                 raise ValueError('Username can only contain letters, numbers, underscores and hyphens')
         return v
     
-    @validator('role')
+    @field_validator("role")
     def validate_role(cls, v):
         if v is not None:
             allowed_roles = ['user', 'premium', 'admin']
@@ -112,7 +112,7 @@ class UserSearchParams(BaseModel):
     is_active: Optional[bool] = Field(default=None, description="状态筛选")
     is_verified: Optional[bool] = Field(default=None, description="验证状态筛选")
     
-    @validator('role')
+    @field_validator("role")
     def validate_role(cls, v):
         if v is not None:
             allowed_roles = ['user', 'premium', 'admin']

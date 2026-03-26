@@ -5,7 +5,7 @@
 from datetime import datetime, date
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, HttpUrl, validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 
 class VideoBase(BaseModel):
@@ -100,14 +100,14 @@ class DownloadTaskCreate(BaseModel):
     priority: int = Field(default=5, ge=1, le=10, description="优先级")
     options: Optional[Dict[str, Any]] = Field(default=None, description="额外选项")
     
-    @validator('quality')
+    @field_validator("quality")
     def validate_quality(cls, v):
         allowed_qualities = ['best', 'worst', '720p', '1080p', '480p', '360p', '240p']
         if v not in allowed_qualities:
             raise ValueError(f'Quality must be one of: {", ".join(allowed_qualities)}')
         return v
     
-    @validator('format_preference')
+    @field_validator("format_preference")
     def validate_format(cls, v):
         allowed_formats = ['mp4', 'avi', 'mkv', 'mov', 'flv', 'webm']
         if v not in allowed_formats:
@@ -153,7 +153,7 @@ class AnalysisTaskCreate(BaseModel):
     analysis_type: str = Field(default="full", description="分析类型")
     config: Optional[Dict[str, Any]] = Field(default=None, description="分析配置")
     
-    @validator('analysis_type')
+    @field_validator("analysis_type")
     def validate_analysis_type(cls, v):
         allowed_types = ['visual', 'audio', 'content', 'full']
         if v not in allowed_types:
@@ -216,7 +216,7 @@ class VideoTagCreate(BaseModel):
     confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="置信度")
     created_by: str = Field(default="user", description="创建者")
     
-    @validator('created_by')
+    @field_validator("created_by")
     def validate_created_by(cls, v):
         allowed_creators = ['system', 'user', 'ai']
         if v not in allowed_creators:
@@ -248,7 +248,7 @@ class BatchTagOperation(BaseModel):
     operation: str = Field(description="操作类型")
     confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="置信度")
     
-    @validator('operation')
+    @field_validator("operation")
     def validate_operation(cls, v):
         allowed_operations = ['add', 'remove', 'replace']
         if v not in allowed_operations:
@@ -317,7 +317,7 @@ class AnalysisRequest(BaseModel):
     max_frames: Optional[int] = Field(default=10, description="最大帧数")
     confidence_threshold: Optional[float] = Field(default=0.7, description="置信度阈值")
     
-    @validator('analysis_types')
+    @field_validator("analysis_types")
     def validate_analysis_types(cls, v):
         allowed_types = ['visual', 'audio', 'content', 'quality']
         for analysis_type in v:

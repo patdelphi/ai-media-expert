@@ -20,6 +20,9 @@ jobs:
       - name: Type Check
         run: |
           python -m compileall app
+      - name: Lint
+        run: |
+          python -m flake8 app
       - name: Test
         run: |
           python -m pytest -q

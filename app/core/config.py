@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import List, Optional
 
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -105,21 +105,21 @@ class Settings(BaseSettings):
     rate_limit_requests: int = Field(default=100, env="RATE_LIMIT_REQUESTS")
     rate_limit_period: int = Field(default=60, env="RATE_LIMIT_PERIOD")  # 秒
     
-    @validator("allowed_video_extensions", pre=True)
+    @field_validator("allowed_video_extensions", mode="before")
     def parse_video_extensions(cls, v):
         """解析视频扩展名列表"""
         if isinstance(v, str):
             return [ext.strip() for ext in v.split(",")]
         return v
     
-    @validator("cors_origins", pre=True)
+    @field_validator("cors_origins", mode="before")
     def parse_cors_origins(cls, v):
         """解析CORS源列表"""
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",")]
         return v
     
-    @validator("allowed_hosts", pre=True)
+    @field_validator("allowed_hosts", mode="before")
     def parse_allowed_hosts(cls, v):
         """解析允许的主机列表"""
         if isinstance(v, str):

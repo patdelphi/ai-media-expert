@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import List, Optional
 from enum import Enum
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class UploadStatus(str, Enum):
@@ -39,7 +39,7 @@ class InitUploadRequest(BaseModel):
     title: Optional[str] = Field(default=None, max_length=500, description="视频标题")
     description: Optional[str] = Field(default=None, description="视频描述")
     
-    @validator('filename')
+    @field_validator("filename")
     def validate_filename(cls, v):
         # 检查文件扩展名
         allowed_extensions = ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.mkv', '.m4v']
@@ -86,7 +86,7 @@ class UploadControlRequest(BaseModel):
     upload_session_id: str = Field(description="上传会话ID")
     action: str = Field(description="操作类型：pause, resume, cancel")
     
-    @validator('action')
+    @field_validator("action")
     def validate_action(cls, v):
         allowed_actions = ['pause', 'resume', 'cancel']
         if v not in allowed_actions:

@@ -6,7 +6,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class TagBase(BaseModel):
@@ -15,7 +15,7 @@ class TagBase(BaseModel):
     color: Optional[str] = Field(default=None, description="标签颜色（十六进制）")
     is_active: bool = Field(default=True, description="是否激活")
     
-    @validator('color')
+    @field_validator("color")
     def validate_color(cls, v):
         if v is not None:
             if not v.startswith('#') or len(v) != 7:
@@ -38,7 +38,7 @@ class TagUpdate(BaseModel):
     color: Optional[str] = Field(default=None)
     is_active: Optional[bool] = Field(default=None)
     
-    @validator('color')
+    @field_validator("color")
     def validate_color(cls, v):
         if v is not None:
             if not v.startswith('#') or len(v) != 7:

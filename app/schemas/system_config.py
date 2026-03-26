@@ -6,7 +6,7 @@
 from datetime import datetime
 from typing import Optional, Any, Dict
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class SystemConfigBase(BaseModel):
@@ -21,7 +21,7 @@ class SystemConfigBase(BaseModel):
     validation_rule: Optional[str] = Field(default=None, description="验证规则")
     default_value: Optional[str] = Field(default=None, description="默认值")
     
-    @validator('key')
+    @field_validator("key")
     def validate_key(cls, v):
         if not v or not v.strip():
             raise ValueError('Configuration key cannot be empty')
@@ -31,14 +31,14 @@ class SystemConfigBase(BaseModel):
             raise ValueError('Configuration key can only contain letters, numbers, underscores and dots')
         return v.strip()
     
-    @validator('data_type')
+    @field_validator("data_type")
     def validate_data_type(cls, v):
         allowed_types = ['string', 'integer', 'float', 'boolean', 'json', 'text']
         if v not in allowed_types:
             raise ValueError(f'Data type must be one of: {", ".join(allowed_types)}')
         return v
     
-    @validator('category')
+    @field_validator("category")
     def validate_category(cls, v):
         if not v or not v.strip():
             raise ValueError('Category cannot be empty')
@@ -62,7 +62,7 @@ class SystemConfigUpdate(BaseModel):
     default_value: Optional[str] = Field(default=None, description="默认值")
     is_encrypted: Optional[bool] = Field(default=None, description="是否加密存储")
     
-    @validator('data_type')
+    @field_validator("data_type")
     def validate_data_type(cls, v):
         if v is not None:
             allowed_types = ['string', 'integer', 'float', 'boolean', 'json', 'text']
@@ -70,7 +70,7 @@ class SystemConfigUpdate(BaseModel):
                 raise ValueError(f'Data type must be one of: {", ".join(allowed_types)}')
         return v
     
-    @validator('category')
+    @field_validator("category")
     def validate_category(cls, v):
         if v is not None and (not v or not v.strip()):
             raise ValueError('Category cannot be empty')
@@ -139,7 +139,7 @@ class SystemConfigExport(BaseModel):
     include_encrypted: bool = Field(default=False, description="是否包含加密配置")
     format: str = Field(default="json", description="导出格式")
     
-    @validator('format')
+    @field_validator("format")
     def validate_format(cls, v):
         allowed_formats = ['json', 'yaml', 'env']
         if v not in allowed_formats:
@@ -154,7 +154,7 @@ class SystemConfigImport(BaseModel):
     overwrite: bool = Field(default=False, description="是否覆盖已存在的配置")
     category: Optional[str] = Field(default=None, description="导入到指定分类")
     
-    @validator('format')
+    @field_validator("format")
     def validate_format(cls, v):
         allowed_formats = ['json', 'yaml', 'env']
         if v not in allowed_formats:

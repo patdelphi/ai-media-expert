@@ -6,7 +6,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class VideoAnalysisBase(BaseModel):
@@ -34,7 +34,7 @@ class VideoAnalysisUpdate(BaseModel):
     error_message: Optional[str] = Field(default=None, description="错误信息")
     error_code: Optional[str] = Field(default=None, description="错误代码")
     
-    @validator('status')
+    @field_validator("status")
     def validate_status(cls, v):
         if v is not None:
             allowed_statuses = ['pending', 'processing', 'completed', 'failed', 'cancelled']
@@ -165,7 +165,7 @@ class AnalysisStartRequest(BaseModel):
     ai_config_id: int = Field(description="AI配置ID")
     transmission_method: Optional[str] = Field(default="url", description="视频传输方式: url, base64, upload")
     
-    @validator('transmission_method')
+    @field_validator("transmission_method")
     def validate_transmission_method(cls, v):
         if v is not None:
             allowed_methods = ['url', 'base64', 'upload']

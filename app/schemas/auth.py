@@ -6,7 +6,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserBase(BaseModel):
@@ -15,7 +15,7 @@ class UserBase(BaseModel):
     username: Optional[str] = Field(default=None, min_length=3, max_length=50, description="用户名")
     full_name: Optional[str] = Field(default=None, max_length=100, description="全名")
     
-    @validator('username')
+    @field_validator("username")
     def validate_username(cls, v):
         if v is not None:
             # 用户名只能包含字母、数字、下划线和连字符
@@ -29,7 +29,7 @@ class UserCreate(UserBase):
     """用户创建模型"""
     password: str = Field(min_length=8, max_length=100, description="密码")
     
-    @validator('password')
+    @field_validator("password")
     def validate_password(cls, v):
         # 密码强度验证
         if len(v) < 8:
@@ -51,7 +51,7 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, max_length=100)
     avatar_url: Optional[str] = Field(default=None)
     
-    @validator('username')
+    @field_validator("username")
     def validate_username(cls, v):
         if v is not None:
             import re
@@ -103,7 +103,7 @@ class PasswordChange(BaseModel):
     current_password: str = Field(description="当前密码")
     new_password: str = Field(min_length=8, max_length=100, description="新密码")
     
-    @validator('new_password')
+    @field_validator("new_password")
     def validate_new_password(cls, v):
         # 密码强度验证
         if len(v) < 8:
@@ -128,7 +128,7 @@ class PasswordResetConfirm(BaseModel):
     token: str = Field(description="重置令牌")
     new_password: str = Field(min_length=8, max_length=100, description="新密码")
     
-    @validator('new_password')
+    @field_validator("new_password")
     def validate_new_password(cls, v):
         if len(v) < 8:
             raise ValueError('Password must be at least 8 characters long')
