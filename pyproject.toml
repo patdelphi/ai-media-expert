@@ -23,11 +23,8 @@ dependencies = [
     # Web框架
     "fastapi>=0.104.1",
     "uvicorn[standard]>=0.24.0",
-    "gradio>=4.8.0",
     # 数据库和ORM
     "sqlalchemy>=2.0.23",
-    "alembic>=1.13.1",
-    "psycopg2-binary>=2.9.9",
     # 缓存和任务队列
     "redis>=5.0.1",
     "celery>=5.3.4",
@@ -43,22 +40,12 @@ dependencies = [
     "yt-dlp>=2023.12.30",
     "opencv-python>=4.8.1",
     "pillow>=10.1.0",
-    "ffmpeg-python>=0.2.0",
-    # AI和机器学习
-    "torch>=2.1.2",
-    "transformers>=4.36.2",
-    "openai-whisper>=20231117",
-    "ultralytics>=8.0.206",
     # 文件处理
     "aiofiles>=23.2.1",
-    "python-magic>=0.4.27",
     # 日志和监控
     "structlog>=23.2.0",
-    "prometheus-client>=0.19.0",
     # 工具库
     "httpx>=0.25.2",
-    "click>=8.1.7",
-    "rich>=13.7.0",
     "moviepy>=2.2.1",
     "exifread>=3.5.1",
     "pymediainfo>=7.0.1",
@@ -74,6 +61,43 @@ dev = [
     "flake8>=6.1.0",
     "mypy>=1.7.1",
     "pre-commit>=3.6.0",
+]
+
+ai = [
+    "torch>=2.1.2",
+    "transformers>=4.36.2",
+    "openai-whisper>=20231117",
+    "ultralytics>=8.0.206",
+]
+
+ui = [
+    "gradio>=4.8.0",
+]
+
+metrics = [
+    "prometheus-client>=0.19.0",
+]
+
+migrations = [
+    "alembic>=1.13.1",
+]
+
+file-magic = [
+    "python-magic>=0.4.27",
+]
+
+ffmpeg-py = [
+    "ffmpeg-python>=0.2.0",
+]
+
+cli = [
+    "click>=8.1.7",
+    "rich>=13.7.0",
+]
+
+postgres = [
+    "psycopg2-binary>=2.9.9",
+    "asyncpg>=0.29.0",
 ]
 
 [project.scripts]
@@ -130,11 +154,12 @@ strict_equality = true
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-ra -q --strict-markers --strict-config"
+addopts = "-ra -q --strict-markers --strict-config --ignore-glob=test_*.py --ignore-glob=debug_*.py"
 testpaths = ["app/tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+norecursedirs = ["frontend", "docs", "scripts", "migrations", ".venv", "venv"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",

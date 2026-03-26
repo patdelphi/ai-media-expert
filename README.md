@@ -1,12 +1,12 @@
-# 🎬 AI新媒体专家系统
+﻿# 🎬 AI新媒体专家系统
 
 一个基于AI的智能视频下载和内容分析平台，提供视频下载、内容分析、字幕处理等专业服务。
 
 ## 🎯 项目状态
 
-✅ **前端开发完成** - 基于 React + TypeScript + Vite 的现代化前端应用已完成开发
-🔄 **后端开发中** - FastAPI + SQLAlchemy 后端架构搭建中
-📋 **功能模块** - 6个核心功能模块全部实现
+- ✅ **前端已可用** - React + TypeScript + Vite
+- ✅ **后端 API 已可用** - FastAPI + SQLAlchemy
+- ✅ **基础工程化** - pytest 可稳定运行（自动化测试仅收集 `app/tests`）
 
 ## ✨ 主要功能
 
@@ -25,10 +25,9 @@
 - **多模态分析**: 视觉、音频、内容全方位分析
 
 ### 🌐 用户界面
-- **Web界面**: 基于Gradio的现代化Web界面
-- **API接口**: RESTful API支持第三方集成
-- **实时监控**: 任务进度和系统状态实时更新
-- **批量操作**: 支持批量下载和分析
+- **Web界面**: 前后端分离（前端 React，后端提供 REST API）
+- **API接口**: RESTful API 支持第三方集成
+- **批量操作**: 支持批量下载和分析（部分能力按后端实现进度为准）
 
 ## 🚀 快速开始
 
@@ -42,7 +41,7 @@ npm install
 npm run dev
 ```
 
-访问 http://localhost:3000 查看应用
+访问 http://localhost:5173 查看应用（以 Vite 输出为准）
 
 **前端特性：**
 - ✅ 现代化UI设计，简洁优雅
@@ -55,9 +54,8 @@ npm run dev
 ### 后端服务（开发中）
 
 #### 环境要求
-- Python 3.8+
-- PostgreSQL 12+
-- Redis 6+
+- Python 3.9+
+- Redis（可选：用于 Celery broker/result backend）
 - FFmpeg (用于视频处理)
 - 8GB+ RAM (推荐)
 - 100GB+ 可用磁盘空间
@@ -72,12 +70,16 @@ cd ai-media-expert
 
 2. **安装依赖**
 ```bash
-# 使用uv (推荐)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv pip install -e .
-
-# 或使用pip
 pip install -e .
+```
+
+可选安装（按需开启重型能力）：
+```bash
+# 开发工具
+pip install -e ".[dev]"
+
+# AI 相关（重型依赖）
+pip install -e ".[ai]"
 ```
 
 3. **配置环境**
@@ -113,9 +115,9 @@ python -m app.main
 ```
 
 6. **访问界面**
-- Web界面: http://localhost:8000/ui
-- API文档: http://localhost:8000/docs
-- 系统监控: http://localhost:8000/health
+- 前端: http://localhost:5173
+- API 文档: http://localhost:8000/docs
+- 健康检查: http://localhost:8000/health
 
 ## 📖 使用指南
 
@@ -181,6 +183,10 @@ print(response.json())
 | `MAX_CONCURRENT_DOWNLOADS` | 最大并发下载数 | `5` |
 | `DEVICE` | AI模型运行设备 | `cpu` |
 | `LOG_LEVEL` | 日志级别 | `INFO` |
+
+## 🧰 手工脚本
+
+根目录存在若干 `"test_*.py"` / `"debug_*.py"` 手工验证脚本，默认不纳入 pytest 自动化测试。清单见 ["manual_tools.md"](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/scripts/manual_tools.md)。
 
 ## 🐳 Docker部署
 

@@ -1,4 +1,4 @@
-# AI新媒体专家系统 - 服务启动指南
+﻿# AI新媒体专家系统 - 服务启动指南
 
 ## 概述
 
@@ -81,7 +81,7 @@ python -m uvicorn app.app:app --host 0.0.0.0 --port 8000 --reload
 
 ### 2. 启动Celery工作进程
 ```bash
-python -m celery -A app.tasks.celery_app worker --loglevel=info
+python -m celery -A app.tasks.celery worker --loglevel=info
 ```
 
 ### 3. 启动前端开发服务器
@@ -96,10 +96,10 @@ npm run dev
 ### 检查服务是否运行
 ```bash
 # 检查后端API
-curl http://localhost:8000/health
+python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health').read().decode())"
 
 # 检查前端服务
-curl http://localhost:5173
+python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:5173').read().decode()[:200])"
 ```
 
 ### 查看进程
