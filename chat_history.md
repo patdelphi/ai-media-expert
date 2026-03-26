@@ -316,6 +316,26 @@
 
 ---
 
+## 2026-03-26 P3：消除弃用告警与测试输出整理
+
+### 用户问题
+- 后面还有哪些计划要执行
+- 继续，不要一直问我，直至完成
+
+### 已执行内容
+- Pydantic v2 迁移补齐：将 Settings 的 `Field(..., env=...)` 迁移为 `SettingsConfigDict + validation_alias`，并将剩余 `class Config` 迁移为 `ConfigDict`。
+- FastAPI 参数弃用修复：将 `Query(..., regex=...)` 改为 `pattern=...`。
+- SQLAlchemy 弃用修复：`declarative_base` 改为 `sqlalchemy.orm.declarative_base`，并用统一的 `utcnow()` 替换 `datetime.utcnow()` 默认值。
+- ORM 警告修复：为 `Video.uploader` 增加 `overlaps`，消除关系冲突告警。
+
+### 验证结果
+- `pytest`：通过（无 warnings summary）
+
+### 记录时间
+- 2026-03-26
+
+---
+
 ## 2026-03-25 提交与优化方案请求
 
 ### 用户问题

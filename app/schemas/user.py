@@ -6,7 +6,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.schemas.auth import UserResponse
 from app.schemas.common import PaginatedResponse
@@ -25,8 +25,7 @@ class UserListItem(BaseModel):
     last_login_at: Optional[datetime]
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserListResponse(PaginatedResponse[UserListItem]):

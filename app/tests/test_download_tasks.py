@@ -6,7 +6,7 @@
 import pytest
 import asyncio
 from unittest.mock import Mock, patch, AsyncMock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from app.tasks.download_tasks import (
@@ -17,6 +17,9 @@ from app.tasks.download_tasks import (
 from app.models.video import DownloadTask
 from app.core.database import get_db
 from app.services.download_api_client import get_download_api_client
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class TestDownloadTasks:
@@ -60,7 +63,7 @@ class TestDownloadTasks:
             url='https://www.youtube.com/watch?v=test',
             platform='youtube',
             status='pending',
-            created_at=datetime.utcnow()
+            created_at=utcnow()
         )
     
     @patch('app.tasks.download_tasks.asyncio.run')
@@ -175,13 +178,13 @@ class TestDownloadTasks:
                 id='failed-1',
                 status='failed',
                 file_path='/path/to/failed1.mp4',
-                created_at=datetime.utcnow() - timedelta(days=2)
+                created_at=utcnow() - timedelta(days=2)
             ),
             Mock(
                 id='failed-2',
                 status='failed',
                 file_path='/path/to/failed2.mp4',
-                created_at=datetime.utcnow() - timedelta(days=3)
+                created_at=utcnow() - timedelta(days=3)
             )
         ]
         mock_db.query.return_value.filter.return_value.all.return_value = failed_tasks
@@ -214,13 +217,13 @@ class TestDownloadTasks:
             id='failed-1',
             status='failed',
             file_path='/path/to/failed1.mp4',
-            created_at=datetime.utcnow() - timedelta(days=2)
+            created_at=utcnow() - timedelta(days=2)
         )
         completed_task = Mock(
             id='completed-1',
             status='completed',
             file_path='/path/to/completed1.mp4',
-            created_at=datetime.utcnow() - timedelta(days=1)
+            created_at=utcnow() - timedelta(days=1)
         )
         mock_db.query.return_value.filter.return_value.all.return_value = [failed_task]
         

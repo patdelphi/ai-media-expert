@@ -3,13 +3,16 @@
 定义用户、会话等认证相关的数据模型。
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
 
 from app.core.database import BaseModel
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class User(BaseModel):
@@ -83,7 +86,7 @@ class UserSession(BaseModel):
     # 会话状态
     is_active = Column(Boolean, default=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
-    last_activity_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_activity_at = Column(DateTime, default=utcnow, nullable=False)
     
     # 关联关系
     user = relationship("User", back_populates="user_sessions")
@@ -93,7 +96,7 @@ class UserSession(BaseModel):
     
     def is_expired(self) -> bool:
         """检查会话是否已过期"""
-        return datetime.utcnow() > self.expires_at
+        return utcnow() > self.expires_at
     
     def to_dict(self):
         """转换为字典"""

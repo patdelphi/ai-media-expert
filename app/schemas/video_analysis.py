@@ -6,7 +6,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class VideoAnalysisBase(BaseModel):
@@ -78,8 +78,7 @@ class VideoAnalysisResponse(VideoAnalysisBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class VideoAnalysisListResponse(BaseModel):
@@ -96,8 +95,7 @@ class VideoAnalysisListResponse(BaseModel):
     created_at: datetime
     completed_at: Optional[datetime] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 
@@ -113,8 +111,7 @@ class PromptTemplateResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TagGroupResponse(BaseModel):
@@ -127,8 +124,7 @@ class TagGroupResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class VideoFileInfo(BaseModel):
@@ -143,8 +139,7 @@ class VideoFileInfo(BaseModel):
     format_name: Optional[str] = None
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AnalysisStreamChunk(BaseModel):

@@ -5,7 +5,7 @@
 from datetime import datetime, date
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 
 class VideoBase(BaseModel):
@@ -53,8 +53,7 @@ class VideoListResponse(BaseModel):
     is_analyzed: bool
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class VideoResponse(BaseModel):
@@ -87,8 +86,7 @@ class VideoResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DownloadTaskCreate(BaseModel):
@@ -142,8 +140,7 @@ class DownloadTaskResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AnalysisTaskCreate(BaseModel):
@@ -180,8 +177,7 @@ class AnalysisTaskResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TagCreate(BaseModel):
@@ -205,8 +201,7 @@ class TagResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class VideoTagCreate(BaseModel):
@@ -237,8 +232,7 @@ class VideoTagResponse(BaseModel):
     # 关联的标签信息
     tag: Optional[TagResponse] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BatchTagOperation(BaseModel):
@@ -292,8 +286,7 @@ class AIConfigResponse(AIConfigBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AIConfigPublicResponse(BaseModel):
@@ -305,8 +298,7 @@ class AIConfigPublicResponse(BaseModel):
     is_active: bool
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # 分析请求和响应schemas

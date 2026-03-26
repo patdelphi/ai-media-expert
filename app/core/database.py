@@ -4,17 +4,20 @@
 """
 
 from datetime import datetime
+from datetime import timezone
 from typing import AsyncGenerator
 
 from sqlalchemy import Column, DateTime, Integer, create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.core.config import settings
 
 # 创建基础模型类
 Base = declarative_base()
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class BaseModel(Base):
@@ -25,8 +28,8 @@ class BaseModel(Base):
     __abstract__ = True
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     
     def to_dict(self):
         """转换为字典"""

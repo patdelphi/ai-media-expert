@@ -5,7 +5,7 @@
 
 from typing import Any, Generic, Optional, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # 泛型类型变量
 DataType = TypeVar('DataType')
@@ -20,10 +20,9 @@ class ResponseModel(BaseModel, Generic[DataType]):
     message: str = Field(description="响应消息")
     data: Optional[DataType] = Field(default=None, description="响应数据")
     
-    class Config:
-        json_encoders = {
-            # 可以在这里添加自定义的JSON编码器
-        }
+    model_config = ConfigDict(
+        json_encoders={},
+    )
 
 
 class PaginationParams(BaseModel):

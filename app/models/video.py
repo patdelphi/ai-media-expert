@@ -82,7 +82,7 @@ class Video(BaseModel):
     analysis_tasks = relationship("AnalysisTask", back_populates="video")
     video_tags = relationship("VideoTag", back_populates="video")
     user = relationship("User", back_populates="videos", foreign_keys=[uploaded_by])
-    uploader = relationship("User", foreign_keys=[uploaded_by])
+    uploader = relationship("User", foreign_keys=[uploaded_by], overlaps="user,videos")
     
     def __repr__(self):
         return f"<Video(id={self.id}, title='{self.title[:50]}...', platform='{self.platform}')>"

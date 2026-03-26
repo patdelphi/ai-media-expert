@@ -17,8 +17,8 @@ async def get_videos(
     search: Optional[str] = Query(None),
     platform: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
-    sort_by: str = Query("created_at", regex="^(created_at|title|file_size|duration)$"),
-    sort_order: str = Query("desc", regex="^(asc|desc)$"),
+    sort_by: str = Query("created_at", pattern="^(created_at|title|file_size|duration)$"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db)
 ):
     """获取视频列表"""

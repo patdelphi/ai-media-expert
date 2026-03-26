@@ -6,7 +6,7 @@
 from datetime import datetime
 from typing import Optional, Any, Dict
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SystemConfigBase(BaseModel):
@@ -93,8 +93,7 @@ class SystemConfigResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SystemConfigPublicResponse(BaseModel):
@@ -108,8 +107,7 @@ class SystemConfigPublicResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SystemConfigBatchUpdate(BaseModel):

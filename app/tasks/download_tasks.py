@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, List, Any, Union
 from pathlib import Path
 import asyncio
@@ -23,6 +23,9 @@ from app.core.config import settings
 from app.core.app_logging import get_logger
 
 download_logger = get_logger("download_tasks")
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 @celery_app.task(bind=True, name="download_video")
@@ -42,7 +45,7 @@ def download_video_task(self, task_id: Union[int, str]) -> Dict:
                 raise Exception(f"Download task {task_id} not found")
 
             task.status = "processing"
-            task.started_at = datetime.utcnow()
+            task.started_at = utcnow()
             task.progress = 0
             db.commit()
 
@@ -68,7 +71,7 @@ def download_video_task(self, task_id: Union[int, str]) -> Dict:
                 task.status = "failed"
                 task.error_message = str(e)
                 task.error_code = "TASK_ERROR"
-                task.completed_at = datetime.utcnow()
+                task.completed_at = utcnow()
                 db.commit()
 
             download_logger.error(
@@ -124,7 +127,7 @@ async def _download_video_async(task: DownloadTask, db: Session) -> Dict:
         downloaded_path = await api_client.download_file(download_url, str(output_path))
 
         task.status = "completed"
-        task.completed_at = datetime.utcnow()
+        task.completed_at = utcnow()
         task.progress = 100
         task.file_path = str(downloaded_path)
         db.commit()
@@ -149,7 +152,7 @@ async def _download_video_async(task: DownloadTask, db: Session) -> Dict:
         task.status = "failed"
         task.error_message = str(e)
         task.error_code = "DOWNLOAD_ERROR"
-        task.completed_at = datetime.utcnow()
+        task.completed_at = utcnow()
         db.commit()
         
         download_logger.error(
@@ -187,7 +190,7 @@ def batch_download_videos_task(self, task_ids: List[Union[int, str]]) -> Dict:
 def cleanup_failed_downloads_task() -> Dict:
     with SessionLocal() as db:
         try:
-            cutoff_date = datetime.utcnow() - timedelta(days=7)
+            cutoff_date = utcnow() - timedelta(days=7)
             failed_tasks = (
                 db.query(DownloadTask)
                 .filter(
@@ -332,7 +335,7 @@ def cleanup_old_tasks() -> Dict:
     
     try:
         # 清理7天前的已完成任务
-        cutoff_date = datetime.utcnow() - timedelta(days=7)
+        cutoff_date = utcnow() - timedelta(days=7)
         
         old_tasks = db.query(DownloadTask).filter(
             DownloadTask.status.in_(["completed", "failed"]),

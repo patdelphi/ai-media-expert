@@ -5,9 +5,12 @@
 
 from sqlalchemy import Column, String, Integer, Float, DateTime, Text, Boolean, ForeignKey, Index
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.database import Base
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class DownloadHistory(Base):
@@ -44,7 +47,7 @@ class DownloadHistory(Base):
     download_speed = Column(Float, nullable=True)  # 平均下载速度（KB/s）
     
     # 时间信息
-    started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=False, default=utcnow)
     completed_at = Column(DateTime, nullable=True)
     download_duration = Column(Integer, nullable=True)  # 下载耗时（秒）
     
@@ -63,8 +66,8 @@ class DownloadHistory(Base):
     comment_count = Column(Integer, nullable=True)
     
     # 系统字段
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     is_deleted = Column(Boolean, default=False, nullable=False)
     
     # 关联关系
@@ -112,8 +115,8 @@ class DownloadStatistics(Base):
     max_download_speed = Column(Float, default=0.0, nullable=False)  # 最大下载速度（KB/s）
     
     # 系统字段
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     
     # 关联关系
     user = relationship("User")
@@ -155,8 +158,8 @@ class PlatformStatistics(Base):
     last_download_at = Column(DateTime, nullable=True)  # 最后一次下载时间
     
     # 系统字段
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     
     def __repr__(self):
         return f"<PlatformStatistics(platform={self.platform}, total_downloads={self.total_downloads})>"
@@ -179,8 +182,8 @@ class DownloadTag(Base):
     usage_count = Column(Integer, default=0, nullable=False)
     
     # 系统字段
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     
     # 关联关系
     user = relationship("User")
@@ -206,7 +209,7 @@ class DownloadHistoryTag(Base):
     tag_id = Column(String, ForeignKey("download_tags.id"), nullable=False, index=True)
     
     # 系统字段
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
     
     # 关联关系
     history = relationship("DownloadHistory")
