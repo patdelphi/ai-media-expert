@@ -5,7 +5,7 @@
 
 import asyncio
 import json
-from typing import Dict, List, Optional, Any
+from typing import Callable, Dict, List, Optional, Any
 from pathlib import Path
 from urllib.parse import urljoin
 from urllib.parse import urlparse, parse_qs
@@ -16,6 +16,46 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.app_logging import download_logger
+
+
+def detect_platform(url: str) -> str:
+    if "douyin.com" in url or "iesdouyin.com" in url:
+        return "douyin"
+    if "tiktok.com" in url:
+        return "tiktok"
+    if "bilibili.com" in url:
+        return "bilibili"
+    if "youtube.com" in url or "youtu.be" in url:
+        return "youtube"
+    return "unknown"
+
+
+def select_best_quality(items: List[Dict[str, Any]], quality: str = "best") -> Optional[Dict[str, Any]]:
+    if not items:
+        return None
+
+    if quality and quality not in {"best", "worst"}:
+        for item in items:
+            if (item.get("quality") or "").lower() == quality.lower():
+                return item
+
+    def score(item: Dict[str, Any]) -> int:
+        q = str(item.get("quality") or "")
+        digits = "".join(ch for ch in q if ch.isdigit())
+        if digits:
+            return int(digits)
+        res = str(item.get("resolution") or "")
+        if "x" in res:
+            try:
+                w, h = res.lower().split("x", 1)
+                return int(w) * int(h)
+            except Exception:
+                return 0
+        return 0
+
+    if quality == "worst":
+        return min(items, key=score)
+    return max(items, key=score)
 
 
 class DownloadAPIConfig(BaseModel):
@@ -204,15 +244,32 @@ class DownloadAPIClient:
         video_info = await self.parse_video_info(url=url, minimal=minimal)
         return video_info.model_dump()
 
-    async def download_file(self, url: str, output_path: str) -> str:
+    async def download_file(
+        self,
+        url: str,
+        output_path: str,
+        progress_callback: Optional[Callable[[int, Optional[int]], None]] = None,
+    ) -> str:
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
 
         async with self.client.stream("GET", url) as response:
             response.raise_for_status()
+            total = None
+            try:
+                content_length = response.headers.get("Content-Length")
+                if content_length is not None:
+                    total = int(content_length)
+            except Exception:
+                total = None
+
+            downloaded = 0
             async with aiofiles.open(output, "wb") as f:
                 async for chunk in response.aiter_bytes():
                     await f.write(chunk)
+                    downloaded += len(chunk)
+                    if progress_callback:
+                        progress_callback(downloaded, total)
 
         return str(output)
     
@@ -264,16 +321,7 @@ class DownloadAPIClient:
         Returns:
             str: 平台名称
         """
-        if "douyin.com" in url or "iesdouyin.com" in url:
-            return "douyin"
-        elif "tiktok.com" in url:
-            return "tiktok"
-        elif "bilibili.com" in url:
-            return "bilibili"
-        elif "youtube.com" in url or "youtu.be" in url:
-            return "youtube"
-        else:
-            return "unknown"
+        return detect_platform(url)
     
     def _get_best_resolution(self, video_urls: List[Dict]) -> Optional[str]:
         """获取最佳分辨率

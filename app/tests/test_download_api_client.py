@@ -6,13 +6,14 @@
 import pytest
 import asyncio
 from unittest.mock import Mock, patch, AsyncMock
-import aiohttp
-from aiohttp import ClientSession, ClientTimeout
+from pathlib import Path
 
 from app.services.download_api_client import (
     DownloadAPIClient,
     get_download_api_client,
-    close_download_api_client
+    close_download_api_client,
+    detect_platform,
+    select_best_quality,
 )
 
 
@@ -131,24 +132,103 @@ class TestDownloadAPIClient:
     @pytest.mark.asyncio
     async def test_download_file_success(self, client):
         """测试文件下载成功"""
-        # 由于DownloadAPIClient没有download_file方法，跳过此测试
-        pytest.skip("download_file method not implemented")
+        class DummyResponse:
+            def __init__(self, chunks):
+                self._chunks = chunks
+                self.headers = {"Content-Length": str(sum(len(c) for c in chunks))}
+
+            def raise_for_status(self):
+                return None
+
+            async def aiter_bytes(self):
+                for c in self._chunks:
+                    yield c
+
+        class DummyStream:
+            def __init__(self, response):
+                self._response = response
+
+            async def __aenter__(self):
+                return self._response
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        chunks = [b"abc", b"defg"]
+        response = DummyResponse(chunks)
+
+        with patch.object(client.client, "stream", return_value=DummyStream(response)):
+            out = Path("downloads") / "test_download.bin"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                path = await client.download_file("http://example.com/file.bin", str(out))
+                assert Path(path).exists()
+                assert Path(path).read_bytes() == b"".join(chunks)
+            finally:
+                if out.exists():
+                    out.unlink()
     
     @pytest.mark.asyncio
     async def test_download_file_with_progress_callback(self, client):
         """测试带进度回调的文件下载"""
-        # 由于DownloadAPIClient没有download_file方法，跳过此测试
-        pytest.skip("download_file method not implemented")
+        class DummyResponse:
+            def __init__(self, chunks):
+                self._chunks = chunks
+                self.headers = {"Content-Length": str(sum(len(c) for c in chunks))}
+
+            def raise_for_status(self):
+                return None
+
+            async def aiter_bytes(self):
+                for c in self._chunks:
+                    yield c
+
+        class DummyStream:
+            def __init__(self, response):
+                self._response = response
+
+            async def __aenter__(self):
+                return self._response
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        chunks = [b"a", b"bb", b"ccc"]
+        response = DummyResponse(chunks)
+        calls = []
+
+        def cb(downloaded, total):
+            calls.append((downloaded, total))
+
+        with patch.object(client.client, "stream", return_value=DummyStream(response)):
+            out = Path("downloads") / "test_progress.bin"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                await client.download_file("http://example.com/file.bin", str(out), progress_callback=cb)
+            finally:
+                if out.exists():
+                    out.unlink()
+
+        assert calls
+        assert calls[-1][0] == sum(len(c) for c in chunks)
+        assert calls[-1][1] == sum(len(c) for c in chunks)
     
     def test_detect_platform(self):
         """测试平台检测功能"""
-        # 由于detect_platform函数不存在，跳过此测试
-        pytest.skip("detect_platform function not implemented")
+        assert detect_platform("https://www.douyin.com/video/123") == "douyin"
+        assert detect_platform("https://www.tiktok.com/@u/video/123") == "tiktok"
+        assert detect_platform("https://www.youtube.com/watch?v=abc") == "youtube"
     
     def test_select_best_quality(self):
         """测试最佳质量选择"""
-        # 由于select_best_quality函数不存在，跳过此测试
-        pytest.skip("select_best_quality function not implemented")
+        items = [
+            {"url": "a", "quality": "360p"},
+            {"url": "b", "quality": "1080p"},
+            {"url": "c", "quality": "720p"},
+        ]
+        assert select_best_quality(items, "best")["url"] == "b"
+        assert select_best_quality(items, "worst")["url"] == "a"
+        assert select_best_quality(items, "720p")["url"] == "c"
     
     @pytest.mark.asyncio
     async def test_client_session_management(self):

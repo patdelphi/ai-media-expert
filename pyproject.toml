@@ -150,7 +150,7 @@ strict_equality = true
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-ra -q --strict-markers --strict-config --ignore-glob=test_*.py --ignore-glob=debug_*.py"
+addopts = "-ra -q --strict-markers --strict-config -m \"not integration\" --ignore-glob=test_*.py --ignore-glob=debug_*.py"
 testpaths = ["app/tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
