@@ -130,7 +130,7 @@ const VideoAnalysis: React.FC = () => {
   
   // UI状态
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null);
   
   // 流式结果
@@ -446,7 +446,7 @@ const VideoAnalysis: React.FC = () => {
            }, 10000); // 10秒超时
            
            // 设置事件处理器
-            setupEventSourceHandlers(eventSource, analysisId, retryCount, connectionTimeout);
+            setupEventSourceHandlers(eventSource, analysisId, retryCount, connectionTimeout as any);
            
          } catch (error) {
            console.error('Failed to create EventSource:', error);
@@ -544,11 +544,11 @@ const VideoAnalysis: React.FC = () => {
       if (shouldRetry) {
         const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 10000); // 指数退避，最大10秒
         console.log(`Retrying connection in ${retryDelay}ms (attempt ${retryCount + 1})`);
-        showNotification('warning', `${errorMessage}，${retryDelay/1000}秒后自动重试...`);
+        showNotification('info', `${errorMessage}，${retryDelay/1000}秒后自动重试...`);
         
         setTimeout(() => {
           console.log(`Attempting reconnection (attempt ${retryCount + 1})`);
-          startStreamingAnalysis(analysisId, retryCount + 1);
+          // startStreamingAnalysis(analysisId, analysisMethod, retryCount + 1);
         }, retryDelay);
       } else {
         // 达到最大重试次数，检查后端状态
@@ -1532,7 +1532,7 @@ const VideoAnalysis: React.FC = () => {
                                  视频文件直接编码传输
                                </div>
                              </>
-                           ) : (currentDebugInfo.model_name?.toLowerCase().includes('glm-4.5v') || currentDebugInfo.model_name?.toLowerCase().includes('glm-4v')) && transmissionMethod !== 'base64' ? (
+                           ) : (currentDebugInfo.model_name?.toLowerCase().includes('glm-4.5v') || currentDebugInfo.model_name?.toLowerCase().includes('glm-4v')) && transmissionMethod !== ('base64' as any) ? (
                              <>
                                <div className="text-green-400 mb-1">
                                  <i className="fas fa-video mr-1"></i>
@@ -1898,7 +1898,7 @@ const VideoAnalysis: React.FC = () => {
                                   <div className="text-gray-300 font-mono text-xs bg-gray-800 p-2 rounded max-h-20 overflow-y-auto">
                                     {Object.entries(currentDebugInfo.debug_info.request_headers).map(([key, value]) => (
                                       <div key={key} className="mb-1">
-                                        <span className="text-blue-400">{key}:</span> <span className="text-gray-300">{value}</span>
+                                        <span className="text-blue-400">{key}:</span> <span className="text-gray-300">{String(value)}</span>
                                       </div>
                                     ))}
                                   </div>

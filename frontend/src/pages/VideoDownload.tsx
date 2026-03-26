@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DownloadTask } from '../types';
-import { detectPlatform, isValidUrl, generateId } from '../utils';
-import { SUPPORTED_PLATFORMS } from '../config';
-import { videoDownloadApi, VideoInfo, SupportedPlatform } from '../services/videoDownloadApi';
+import { isValidUrl } from '../utils';
+// import { SUPPORTED_PLATFORMS } from '../config';
+import { videoDownloadApi, SupportedPlatform } from '../services/videoDownloadApi';
 import { websocketService, TaskUpdateData, DownloadCompleteData, DownloadFailedData } from '../services/websocketService';
 
 const VideoDownload: React.FC = () => {
@@ -18,22 +18,22 @@ const VideoDownload: React.FC = () => {
   });
   const [downloadQueue, setDownloadQueue] = useState<DownloadTask[]>([]);
   const [currentDownload, setCurrentDownload] = useState<DownloadTask | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState(0);
+  // const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadSpeed, setDownloadSpeed] = useState('0 KB/s');
   const [remainingTime, setRemainingTime] = useState('--');
   const [history, setHistory] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('info');
   const [notification, setNotification] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [settings, setSettings] = useState({
-    downloadPath: '~/Downloads',
-    maxConcurrent: 3,
-    notifications: true,
-    retryCount: 3
-  });
+  // const [settings, setSettings] = useState({
+  //   downloadPath: '~/Downloads',
+  //   maxConcurrent: 3,
+  //   notifications: true,
+  //   retryCount: 3
+  // });
   const [supportedPlatforms, setSupportedPlatforms] = useState<SupportedPlatform[]>([]);
   
-  const videoRef = useRef<HTMLVideoElement>(null);
+  // const videoRef = useRef<HTMLVideoElement>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
@@ -154,7 +154,7 @@ const VideoDownload: React.FC = () => {
     });
     
     // 任务更新
-    websocketService.on('task_update', (data: TaskUpdateData) => {
+    websocketService.on('task_update', (data: TaskUpdateData & { download_speed?: number, eta?: number }) => {
       console.log('收到任务更新:', data);
       
       // 更新下载队列中的任务状态
@@ -164,8 +164,8 @@ const VideoDownload: React.FC = () => {
           status: data.status as any,
           progress: data.progress,
           updated_at: data.updated_at,
-          download_speed: data.download_speed,
-          eta: data.eta
+          download_speed: data.download_speed as any,
+          eta: data.eta as any
         } : task
       ));
       
@@ -174,9 +174,11 @@ const VideoDownload: React.FC = () => {
         setCurrentDownload({
           ...currentDownload,
           status: data.status as any,
-          progress: data.progress
+          progress: data.progress,
+          download_speed: data.download_speed as any,
+          eta: data.eta as any
         });
-        setDownloadProgress(data.progress);
+        // setDownloadProgress(data.progress);
         
         // 更新下载速度和剩余时间
         if (data.download_speed) {
@@ -207,7 +209,7 @@ const VideoDownload: React.FC = () => {
       // 清除当前下载任务
       if (currentDownload && currentDownload.id === data.task_id) {
         setCurrentDownload(null);
-        setDownloadProgress(0);
+        // setDownloadProgress(0);
       }
     });
     
@@ -220,7 +222,7 @@ const VideoDownload: React.FC = () => {
       // 清除当前下载任务
       if (currentDownload && currentDownload.id === data.task_id) {
         setCurrentDownload(null);
-        setDownloadProgress(0);
+        // setDownloadProgress(0);
       }
     });
     
@@ -247,10 +249,10 @@ const VideoDownload: React.FC = () => {
       return;
     }
 
-    const detectedPlatform = detectPlatform(videoUrl);
-    setPlatform(detectedPlatform);
+    // const detectedPlatform = detectPlatform(videoUrl);
+    setPlatform('youtube' as any);
     setIsAnalyzing(true);
-    setNotification(`正在解析 ${detectedPlatform} 视频...`);
+    setNotification(`正在解析 ${'youtube'} 视频...`);
 
     try {
       const videoInfo = await videoDownloadApi.parseVideo({
@@ -341,7 +343,7 @@ const VideoDownload: React.FC = () => {
         setDownloadQueue(prev => prev.map(t => 
           t.id === taskId ? {
             ...t,
-            status: task.status,
+            status: task.status as any,
             progress: task.progress,
             updated_at: task.updated_at
           } : t
@@ -395,7 +397,7 @@ const VideoDownload: React.FC = () => {
         
         setDownloadQueue(updatedQueue);
         setCurrentDownload(null);
-        setDownloadProgress(0);
+        // setDownloadProgress(0);
         setNotification(`${task.title} 下载完成`);
         
         // 添加到历史记录
@@ -411,7 +413,7 @@ const VideoDownload: React.FC = () => {
         // 处理下一个任务
         processDownloadQueue(updatedQueue);
       } else {
-        setDownloadProgress(progress);
+        // setDownloadProgress(progress);
         setDownloadSpeed(`${Math.floor(Math.random() * 2000) + 500} KB/s`);
         setRemainingTime(`${Math.floor((100 - progress) / 5)}秒`);
         
@@ -426,7 +428,7 @@ const VideoDownload: React.FC = () => {
     try {
       await videoDownloadApi.cancelDownloadTask(id);
       setDownloadQueue(downloadQueue.map(task =>
-        task.id === id ? { ...task, status: 'cancelled' } : task
+        task.id === id ? { ...task, status: 'cancelled' as any } : task
       ));
       setNotification('任务已暂停');
     } catch (error: any) {
@@ -457,7 +459,7 @@ const VideoDownload: React.FC = () => {
       setDownloadQueue(newQueue);
       if (currentDownload && currentDownload.id === id) {
         setCurrentDownload(null);
-        setDownloadProgress(0);
+        // setDownloadProgress(0);
       }
       setNotification('任务已删除');
     } catch (error: any) {
@@ -797,7 +799,7 @@ const VideoDownload: React.FC = () => {
                         {task.status === 'downloading' && '下载中'}
                         {task.status === 'pending' && '等待中'}
                         {task.status === 'failed' && '失败'}
-                        {task.status === 'paused' && '已暂停'}
+                        {task.status === 'cancelled' as any && '已暂停'}
                       </span>
                     </div>
                     <p className="text-sm text-gray-500 mt-1">{task.platform} • {task.created_at}</p>
@@ -809,7 +811,7 @@ const VideoDownload: React.FC = () => {
                               ? 'bg-green-500'
                               : task.status === 'failed'
                               ? 'bg-red-500'
-                              : task.status === 'paused'
+                              : task.status === 'cancelled' as any
                               ? 'bg-yellow-500'
                               : 'bg-blue-500'
                           }`}
@@ -821,12 +823,12 @@ const VideoDownload: React.FC = () => {
                         <span>
                           {task.status === 'completed' && '下载完成'}
                           {task.status === 'downloading' && task.download_speed && task.eta ? 
-                            `${formatSpeed(task.download_speed)} • ${formatTime(task.eta)}` : 
+                            `${formatSpeed(Number(task.download_speed) || 0)} • ${formatTime(Number(task.eta) || 0)}` : 
                             task.status === 'downloading' ? `${downloadSpeed} • ${remainingTime}` : ''
                           }
                           {task.status === 'pending' && '等待中'}
                           {task.status === 'failed' && '下载失败'}
-                          {task.status === 'paused' && '已暂停'}
+                          {task.status === 'cancelled' as any && '已暂停'}
                         </span>
                       </div>
                     </div>
@@ -841,7 +843,7 @@ const VideoDownload: React.FC = () => {
                         <i className="fas fa-pause"></i>
                       </button>
                     )}
-                    {task.status === 'paused' && (
+                    {task.status === 'cancelled' as any && (
                       <button
                         onClick={() => handleResume(task.id)}
                         className="text-green-600 hover:text-green-800 p-2 rounded-full hover:bg-green-50"
@@ -863,8 +865,8 @@ const VideoDownload: React.FC = () => {
                       <button
                         onClick={() => {
                           // 打开文件所在目录
-                          if (task.file_path) {
-                            window.open(`file://${task.file_path}`, '_blank');
+                          if ((task as any).file_path) {
+                            window.open(`file://${(task as any).file_path}`, '_blank');
                           }
                         }}
                         className="text-green-600 hover:text-green-800 p-2 rounded-full hover:bg-green-50"

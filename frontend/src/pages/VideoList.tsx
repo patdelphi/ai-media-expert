@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Video } from '../types';
-import { formatFileSize, formatDate, formatRelativeTime } from '../utils';
+import { formatFileSize, formatRelativeTime } from '../utils';
 
 const VideoList: React.FC = () => {
   const [videos, setVideos] = useState<Video[]>([
@@ -102,11 +102,13 @@ const VideoList: React.FC = () => {
       const aValue = a[sortConfig.key];
       const bValue = b[sortConfig.key];
 
-      if (aValue < bValue) {
-        return sortConfig.direction === 'asc' ? -1 : 1;
-      }
-      if (aValue > bValue) {
-        return sortConfig.direction === 'asc' ? 1 : -1;
+      if (aValue !== undefined && bValue !== undefined) {
+        if (aValue < bValue) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
       }
       return 0;
     });

@@ -65,15 +65,15 @@ export interface UploadTask {
 
 class VideoUploadService {
   private uploadTasks: Map<string, UploadTask> = new Map();
-  private maxConcurrentUploads = 3;
-  private chunkSize = 1024 * 1024; // 1MB
+  // private maxConcurrentUploads = 3;
+  // private chunkSize = 1024 * 1024; // 1MB
   private progressCallbacks: Map<string, (progress: UploadProgress) => void> = new Map();
   private speedCalculationInterval = 1000; // 1秒
 
   /**
    * 添加上传任务
    */
-  async addUploadTask(file: File, title?: string, description?: string): Promise<string> {
+  async addUploadTask(file: File): Promise<string> {
     const taskId = this.generateTaskId();
     
     const videoFile: VideoFile = {
@@ -111,63 +111,63 @@ class VideoUploadService {
   /**
    * 初始化上传会话
    */
-  private async initializeUpload(taskId: string, title?: string, description?: string): Promise<void> {
-    const task = this.uploadTasks.get(taskId);
-    if (!task) throw new Error('Upload task not found');
+  // private async initializeUpload(taskId: string, title?: string, description?: string): Promise<void> {
+  //   const task = this.uploadTasks.get(taskId);
+  //   if (!task) throw new Error('Upload task not found');
 
-    try {
-      const response = await apiService.post('/upload/init', {
-        filename: task.file.name,
-        file_size: task.file.size,
-        chunk_size: this.chunkSize,
-        title,
-        description
-      });
+  //   try {
+  //     const response = await apiService.post('/upload/init', {
+  //       filename: task.file.name,
+  //       file_size: task.file.size,
+  //       chunk_size: this.chunkSize,
+  //       title,
+  //       description
+  //     });
 
-      // 检查响应数据结构
-      if (!response || typeof response !== 'object') {
-        throw new Error('Invalid response format');
-      }
+  //     // 检查响应数据结构
+  //     if (!response || typeof response !== 'object') {
+  //       throw new Error('Invalid response format');
+  //     }
 
-      if (response.code === 200 && response.data) {
-        const sessionData = response.data;
+  //     if (response.code === 200 && response.data) {
+  //       const sessionData = response.data;
         
-        // 验证必要字段
-        if (!sessionData.upload_session_id || !sessionData.video_id || !sessionData.total_chunks) {
-          throw new Error('Missing required session data');
-        }
+  //       // 验证必要字段
+  //       if (!sessionData.upload_session_id || !sessionData.video_id || !sessionData.total_chunks) {
+  //         throw new Error('Missing required session data');
+  //       }
         
-        task.session = {
-          uploadSessionId: sessionData.upload_session_id,
-          videoId: sessionData.video_id,
-          chunkSize: sessionData.chunk_size || this.chunkSize,
-          totalChunks: sessionData.total_chunks,
-          uploadedChunks: sessionData.uploaded_chunks || [],
-          uploadUrl: sessionData.upload_url || '/api/v1/upload/chunk'
-        };
+  //       task.session = {
+  //         uploadSessionId: sessionData.upload_session_id,
+  //         videoId: sessionData.video_id,
+  //         chunkSize: sessionData.chunk_size || this.chunkSize,
+  //         totalChunks: sessionData.total_chunks,
+  //         uploadedChunks: sessionData.uploaded_chunks || [],
+  //         uploadUrl: sessionData.upload_url || '/api/v1/upload/chunk'
+  //       };
 
-        task.progress.videoId = sessionData.video_id;
-        task.progress.uploadSessionId = sessionData.upload_session_id;
-        task.progress.totalChunks = sessionData.total_chunks;
+  //       task.progress.videoId = sessionData.video_id;
+  //       task.progress.uploadSessionId = sessionData.upload_session_id;
+  //       task.progress.totalChunks = sessionData.total_chunks;
 
-        // 初始化分片状态
-        const uploadedChunks = sessionData.uploaded_chunks || [];
-        for (let i = 0; i < sessionData.total_chunks; i++) {
-          task.chunks.set(i, uploadedChunks.includes(i));
-        }
+  //       // 初始化分片状态
+  //       const uploadedChunks = sessionData.uploaded_chunks || [];
+  //       for (let i = 0; i < sessionData.total_chunks; i++) {
+  //         task.chunks.set(i, uploadedChunks.includes(i));
+  //       }
 
-        this.updateTaskProgress(taskId);
-      } else {
-        const errorMessage = response.message || 'Failed to initialize upload';
-        throw new Error(errorMessage);
-      }
-    } catch (error: any) {
-      task.status = UploadStatus.FAILED;
-      task.error = error.message || 'Failed to initialize upload';
-      this.updateTaskProgress(taskId);
-      throw error;
-    }
-  }
+  //       this.updateTaskProgress(taskId);
+  //     } else {
+  //       const errorMessage = response.message || 'Failed to initialize upload';
+  //       throw new Error(errorMessage);
+  //     }
+  //   } catch (error: any) {
+  //     task.status = UploadStatus.FAILED;
+  //     task.error = error.message || 'Failed to initialize upload';
+  //     this.updateTaskProgress(taskId);
+  //     throw error;
+  //   }
+  // }
 
   /**
    * 开始上传
@@ -240,118 +240,101 @@ class VideoUploadService {
   /**
    * 上传分片（已弃用，保留用于兼容性）
    */
-  private async uploadChunks(taskId: string): Promise<void> {
-    const task = this.uploadTasks.get(taskId);
-    if (!task || !task.session) return;
+  // private async uploadChunks(taskId: string): Promise<void> {
+  //   const task = this.uploadTasks.get(taskId);
+  //   if (!task || !task.session) return;
 
-    const { session } = task; // 移除未使用的 file 变量
-    const uploadPromises: Promise<void>[] = [];
+  //   const { session } = task; // 移除未使用的 file 变量
+  //   const uploadPromises: Promise<void>[] = [];
 
-    // 找出未上传的分片
-    const pendingChunks: number[] = [];
-    for (let i = 0; i < session.totalChunks; i++) {
-      if (!task.chunks.get(i)) {
-        pendingChunks.push(i);
-      }
-    }
+  //   // 找出未上传的分片
+  //   const pendingChunks: number[] = [];
+  //   for (let i = 0; i < session.totalChunks; i++) {
+  //     if (!task.chunks.get(i)) {
+  //       pendingChunks.push(i);
+  //     }
+  //   }
 
-    // 并发上传分片
-    let chunkIndex = 0;
-    const uploadNextChunk = async (): Promise<void> => {
-      while (chunkIndex < pendingChunks.length && task.status === UploadStatus.UPLOADING) {
-        const currentChunk = pendingChunks[chunkIndex++];
-        task.activeUploads.add(currentChunk);
+  //   // 并发上传分片
+  //   let chunkIndex = 0;
+  //   const uploadNextChunk = async (): Promise<void> => {
+  //     while (chunkIndex < pendingChunks.length && task.status === UploadStatus.UPLOADING) {
+  //       const currentChunk = pendingChunks[chunkIndex++];
+  //       task.activeUploads.add(currentChunk);
         
-        try {
-          await this.uploadChunk(taskId, currentChunk);
-        } catch (error) {
-          console.error(`Chunk ${currentChunk} failed:`, error);
-          throw error;
-        } finally {
-          task.activeUploads.delete(currentChunk);
-        }
-      }
-    };
+  //       try {
+  //         await this.uploadChunk(taskId, currentChunk);
+  //       } catch (error) {
+  //         console.error(`Chunk ${currentChunk} failed:`, error);
+  //         throw error;
+  //       } finally {
+  //         task.activeUploads.delete(currentChunk);
+  //       }
+  //     }
+  //   };
 
-    // 启动并发上传
-    const concurrentUploads = Math.min(this.maxConcurrentUploads, pendingChunks.length);
-    for (let i = 0; i < concurrentUploads; i++) {
-      uploadPromises.push(uploadNextChunk());
-    }
+  //   // 启动并发上传
+  //   const concurrentUploads = Math.min(this.maxConcurrentUploads, pendingChunks.length);
+  //   for (let i = 0; i < concurrentUploads; i++) {
+  //     uploadPromises.push(uploadNextChunk());
+  //   }
 
-    // 等待所有分片上传完成
-    try {
-      await Promise.all(uploadPromises);
+  //   // 等待所有分片上传完成
+  //   try {
+  //     await Promise.all(uploadPromises);
       
-      if (task.status === UploadStatus.UPLOADING) {
-        // 检查是否所有分片都已上传
-        const allUploaded = Array.from(task.chunks.values()).every(uploaded => uploaded);
-        if (allUploaded) {
-          task.status = UploadStatus.COMPLETED;
-          task.progress.status = UploadStatus.COMPLETED;
-          task.progress.progress = 100;
-          this.updateTaskProgress(taskId);
-        }
-      }
-    } catch (error: any) {
-      if (task.status === UploadStatus.UPLOADING) {
-        task.status = UploadStatus.FAILED;
-        task.error = error.message || 'Upload failed';
-        this.updateTaskProgress(taskId);
-      }
-    }
-  }
+  //     if (task.status === UploadStatus.UPLOADING) {
+  //       // 检查是否所有分片都已上传
+  //       const allUploaded = Array.from(task.chunks.values()).every(uploaded => uploaded);
+  //       if (allUploaded) {
+  //         task.status = UploadStatus.COMPLETED;
+  //         task.progress.status = UploadStatus.COMPLETED;
+  //         task.progress.progress = 100;
+  //         this.updateTaskProgress(taskId);
+  //       }
+  //     }
+  //   } catch (error: any) {
+  //     if (task.status === UploadStatus.UPLOADING) {
+  //       task.status = UploadStatus.FAILED;
+  //       task.error = error.message || 'Upload failed';
+  //       this.updateTaskProgress(taskId);
+  //     }
+  //   }
+  // }
 
   /**
    * 上传单个分片
    */
-  private async uploadChunk(taskId: string, chunkIndex: number): Promise<void> {
-    const task = this.uploadTasks.get(taskId);
-    if (!task || !task.session) return;
+  // private async uploadChunk(taskId: string, chunkIndex: number): Promise<void> {
+  //   const task = this.uploadTasks.get(taskId);
+  //   if (!task || !task.session) return;
 
-    const { session, file } = task;
+  //   const start = chunkIndex * task.session.chunkSize;
+  //   const end = Math.min(start + task.session.chunkSize, task.file.size);
+  //   const chunk = task.file.slice(start, end);
 
-    try {
-      // 计算分片数据
-      const start = chunkIndex * session.chunkSize;
-      const end = Math.min(start + session.chunkSize, file.file.size);
-      const chunkData = file.file.slice(start, end);
+  //   const formData = new FormData();
+  //   formData.append('file', chunk);
+  //   formData.append('upload_id', task.session.uploadId);
+  //   formData.append('chunk_index', chunkIndex.toString());
+  //   formData.append('total_chunks', task.session.totalChunks.toString());
 
-      // 创建FormData
-      const formData = new FormData();
-      formData.append('upload_session_id', session.uploadSessionId);
-      formData.append('chunk_index', chunkIndex.toString());
-      formData.append('total_chunks', session.totalChunks.toString());
-      
-      // 创建File对象而不是Blob
-      const chunkFile = new File([chunkData], `chunk_${chunkIndex}`, {
-        type: 'application/octet-stream'
-      });
-      formData.append('chunk_file', chunkFile);
+  //   try {
+  //     const response = await fetch(`${API_BASE_URL}/upload/chunk`, {
+  //       method: 'POST',
+  //       body: formData,
+  //     });
 
-      // 上传分片
-      const response = await apiService.post('/upload/chunk', formData);
+  //     if (!response.ok) throw new Error(`Failed to upload chunk ${chunkIndex}`);
 
-      if (response.code === 200) {
-        // 标记分片为已上传
-        task.chunks.set(chunkIndex, true);
-        task.uploadedBytes += chunkData.size;
-        
-        // 更新进度
-        const uploadedCount = Array.from(task.chunks.values()).filter(uploaded => uploaded).length;
-        task.progress.uploadedChunks = uploadedCount;
-        task.progress.progress = (uploadedCount / session.totalChunks) * 100;
-        
-        this.updateTaskProgress(taskId);
-      } else {
-        throw new Error(response.message || 'Chunk upload failed');
-      }
-    } catch (error: any) {
-      // 分片上传失败，可以重试
-      console.error(`Chunk ${chunkIndex} upload failed:`, error);
-      throw error;
-    }
-  }
+  //     task.chunks.set(chunkIndex, true);
+  //     task.uploadedBytes += chunk.size;
+  //     task.progress.progress = (task.uploadedBytes / task.file.size) * 100;
+  //     this.updateTaskProgress(taskId);
+  //   } catch (error) {
+  //     throw error;
+  //   }
+  // }
 
   /**
    * 暂停上传

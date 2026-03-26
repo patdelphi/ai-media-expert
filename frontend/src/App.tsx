@@ -3,7 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import UserMenu from './components/UserMenu';
-import { BreadcrumbItem } from './types';
+// import { BreadcrumbItem } from './types';
 
 // 页面组件导入
 import Dashboard from './pages/Dashboard';
@@ -17,13 +17,14 @@ import Register from './pages/Register';
 
 const App: React.FC = () => {
   const location = useLocation();
-  const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  // 暂时屏蔽未使用的状态，避免 TS 报错
+  // const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [currentPath, setCurrentPath] = useState<BreadcrumbItem[]>([
-    { label: '首页', path: '/' },
-    { label: '数据看板', path: '/dashboard' },
-    { label: '概览仪表盘', path: '/dashboard/overview' }
-  ]);
+  // const [currentPath, setCurrentPath] = useState<BreadcrumbItem[]>([
+  //   { label: '首页', path: '/' },
+  //   { label: '数据看板', path: '/dashboard' },
+  //   { label: '概览仪表盘', path: '/dashboard/overview' }
+  // ]);
 
   // 检查是否为认证页面
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
@@ -32,28 +33,28 @@ const App: React.FC = () => {
     setIsSidebarCollapsed(!isSidebarCollapsed);
   };
 
-  const handleMenuHover = (menu: string) => {
-    setActiveMenu(menu);
-  };
+  // const handleMenuHover = (menu: string) => {
+  //   setActiveMenu(menu);
+  // };
 
-  const handleMenuLeave = () => {
-    setActiveMenu(null);
-  };
+  // const handleMenuLeave = () => {
+  //   setActiveMenu(null);
+  // };
 
-  const getSubMenuItems = (menu: string): string[] => {
-    switch (menu) {
-      case '数据看板':
-        return ['概览仪表盘', '用户行为看板', '转化漏斗看板', '留存分析看板'];
-      case '视频管理':
-        return ['视频上传', '视频下载', '视频列表', '视频解析'];
-      case '系统设置':
-        return ['系统配置', '用户管理', '角色权限', '日志审计'];
-      case '帮助中心':
-        return ['文档中心', '常见问题', '视频教程', '联系我们'];
-      default:
-        return [];
-    }
-  };
+  // const getSubMenuItems = (menu: string): string[] => {
+  //   switch (menu) {
+  //     case '数据看板':
+  //       return ['概览仪表盘', '用户行为看板', '转化漏斗看板', '留存分析看板'];
+  //     case '视频管理':
+  //       return ['视频上传', '视频下载', '视频列表', '视频解析'];
+  //     case '系统设置':
+  //       return ['系统配置', '用户管理', '角色权限', '日志审计'];
+  //     case '帮助中心':
+  //       return ['文档中心', '常见问题', '视频教程', '联系我们'];
+  //     default:
+  //       return [];
+  //   }
+  // };
 
   // 如果是认证页面，只显示页面内容
   if (isAuthPage) {

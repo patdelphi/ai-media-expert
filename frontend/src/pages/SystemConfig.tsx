@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { systemConfigService, SystemConfig, ConfigCategory } from '../services/systemConfig';
@@ -17,7 +17,7 @@ import tagGroupService, {
   UpdateTagGroupRequest,
   CreateTagRequest
 } from '../services/tagGroup';
-import { SystemConfig as SystemConfigType } from '../types';
+// import { SystemConfig as SystemConfigType } from '../types';
 import { marked } from 'marked';
 
 // 预设标签颜色

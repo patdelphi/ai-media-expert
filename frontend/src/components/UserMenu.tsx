@@ -9,7 +9,7 @@ const UserMenu: React.FC = () => {
   const menuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  useClickOutside(menuRef, () => setIsOpen(false));
+  useClickOutside(menuRef as React.RefObject<HTMLElement>, () => setIsOpen(false));
 
   const handleLogout = async () => {
     try {

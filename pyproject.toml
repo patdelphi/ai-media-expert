@@ -21,16 +21,16 @@ classifiers = [
 
 dependencies = [
     # Web框架
-    "fastapi>=0.104.1",
-    "uvicorn[standard]>=0.24.0",
+    "fastapi>=0.135.2",
+    "uvicorn[standard]>=0.42.0",
     # 数据库和ORM
-    "sqlalchemy>=2.0.23",
+    "sqlalchemy>=2.0.48",
     # 缓存和任务队列
-    "redis>=5.0.1",
-    "celery>=5.3.4",
+    "redis>=7.1.1",
+    "celery>=5.6.2",
     # 数据验证和配置
-    "pydantic[email]>=2.5.2",
-    "pydantic-settings>=2.1.0",
+    "pydantic[email]>=2.12.5",
+    "pydantic-settings>=2.13.1",
     "python-dotenv>=1.0.0",
     # 认证和安全
     "python-jose[cryptography]>=3.3.0",
@@ -45,7 +45,7 @@ dependencies = [
     # 日志和监控
     "structlog>=23.2.0",
     # 工具库
-    "httpx>=0.25.2",
+    "httpx>=0.28.1",
     "moviepy>=2.2.1",
     "exifread>=3.5.1",
     "pymediainfo>=7.0.1",
@@ -53,13 +53,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.3",
+    "pytest>=8.4.1",
     "pytest-asyncio>=0.21.1",
     "pytest-cov>=4.1.0",
-    "black>=23.11.0",
+    "black>=25.1.0",
     "isort>=5.12.0",
-    "flake8>=6.1.0",
-    "mypy>=1.7.1",
+    "flake8>=7.3.0",
+    "mypy>=1.19.1",
     "pre-commit>=3.6.0",
 ]
 

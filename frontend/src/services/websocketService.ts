@@ -54,7 +54,7 @@ class WebSocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectInterval = 3000;
-  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private eventListeners: Map<string, EventListener[]> = new Map();
   private isConnecting = false;
   private shouldReconnect = true;

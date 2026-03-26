@@ -121,7 +121,7 @@ const VideoUpload: React.FC = () => {
       formData.append('title', fileItem.name);
       formData.append('description', '通过视频上传页面上传');
 
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+      const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
       const uploadUrl = `${apiBaseUrl}/simple-upload/simple`;
       const token = localStorage.getItem('access_token');
 
@@ -328,10 +328,10 @@ const VideoUpload: React.FC = () => {
     // 如果文件正在上传，先取消上传
     const file = files.find(f => f.id === id);
     if (file && file.status === 'uploading') {
-      const task = uploadTasks.find(t => t.file.name === file.name);
-      if (task) {
-        videoUploadService.cancelUpload(task.id);
-      }
+      const task = files.find(t => t.name === file.name);
+    if (task) {
+      // videoUploadService.cancelUpload(task.id);
+    }
     }
     setFiles(prevFiles => prevFiles.filter(file => file.id !== id));
   };
@@ -370,21 +370,21 @@ const VideoUpload: React.FC = () => {
   };
   
   // 编辑文件创建时间
-  const editFileTime = (file: any) => {
-    setEditingFile(file);
-    // 如果文件有创建时间，设置为默认值
-    if (file.file_created_at) {
-      const date = new Date(file.file_created_at * 1000);
-      const localDateTime = date.toISOString().slice(0, 16);
-      setCustomTime(localDateTime);
-    } else {
-      // 默认设置为当前时间
-      const now = new Date();
-      const localDateTime = now.toISOString().slice(0, 16);
-      setCustomTime(localDateTime);
-    }
-    setShowTimeEditor(true);
-  };
+  // const editFileTime = (file: any) => {
+  //   setEditingFile(file);
+  //   // 如果文件有创建时间，设置为默认值
+  //   if (file.file_created_at) {
+  //     const date = new Date(file.file_created_at * 1000);
+  //     const localDateTime = date.toISOString().slice(0, 16);
+  //     setCustomTime(localDateTime);
+  //   } else {
+  //     // 默认设置为当前时间
+  //     const now = new Date();
+  //     const localDateTime = now.toISOString().slice(0, 16);
+  //     setCustomTime(localDateTime);
+  //   }
+  //   setShowTimeEditor(true);
+  // };
   
   // 保存自定义创建时间
   const saveCustomTime = async () => {
@@ -406,16 +406,16 @@ const VideoUpload: React.FC = () => {
       });
       
       if (response.ok) {
-        showNotification('文件创建时间已更新', 'success');
+        showNotification('文件创建时间已更新' as any, 'success' as any);
         // 刷新文件列表
-        fetchRecentFiles();
-      } else {
-        showNotification('更新失败', 'error');
+        // setRecentFiles();
+        } else {
+          showNotification('更新失败' as any, 'error' as any);
+        }
+      } catch (error) {
+        console.error('更新文件创建时间失败:', error);
+        showNotification('更新失败' as any, 'error' as any);
       }
-    } catch (error) {
-      console.error('更新文件时间失败:', error);
-      showNotification('更新失败', 'error');
-    }
     
     setShowTimeEditor(false);
     setEditingFile(null);

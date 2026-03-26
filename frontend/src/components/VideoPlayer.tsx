@@ -26,7 +26,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [showControls, setShowControls] = useState(true);
+  // const [showControls, setShowControls] = useState(true);
   const [isLooping, setIsLooping] = useState(false); // 循环播放状态
 
   // 播放速度选项
