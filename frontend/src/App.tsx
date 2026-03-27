@@ -12,6 +12,8 @@ import VideoDownload from './pages/VideoDownload';
 import VideoList from './pages/VideoList';
 import VideoAnalysis from './pages/VideoAnalysis';
 import SystemConfig from './pages/SystemConfig';
+import Profile from './pages/Profile';
+import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Register from './pages/Register';
 
@@ -159,6 +161,16 @@ const App: React.FC = () => {
                 <Dashboard />
               </ProtectedRoute>
             } />
+            <Route path="/profile" element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings" element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            } />
             <Route path="/video/upload" element={
               <ProtectedRoute>
                 <VideoUpload />
@@ -187,68 +199,6 @@ const App: React.FC = () => {
           </Routes>
         </div>
       </main>
-
-      {/* 底部信息栏 */}
-      <footer className="bg-gray-800 text-white py-8">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-3 gap-8">
-            {/* 左侧 - 版权和状态 */}
-            <div>
-              <div className="flex items-center mb-4">
-                <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
-                <span className="text-sm">系统运行正常</span>
-              </div>
-              <p className="text-sm text-gray-400">
-                © 2024 AI媒体专家. 保留所有权利.
-              </p>
-            </div>
-
-            {/* 中部 - 链接 */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <h3 className="text-sm font-semibold mb-3">产品</h3>
-                <ul className="space-y-2">
-                  {['功能', '定价', '案例', '更新日志'].map((item) => (
-                    <li key={item}>
-                      <a href="#" className="text-sm text-gray-400 hover:text-white">
-                        {item}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold mb-3">支持</h3>
-                <ul className="space-y-2">
-                  {['帮助中心', '文档', 'API', '联系我们'].map((item) => (
-                    <li key={item}>
-                      <a href="#" className="text-sm text-gray-400 hover:text-white">
-                        {item}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            {/* 右侧 - 社交媒体 */}
-            <div>
-              <h3 className="text-sm font-semibold mb-3">关注我们</h3>
-              <div className="flex space-x-4">
-                {['github', 'twitter', 'linkedin'].map((platform) => (
-                  <a
-                    key={platform}
-                    href="#"
-                    className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center hover:bg-gray-600"
-                  >
-                    <i className={`fab fa-${platform}`}></i>
-                  </a>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </footer>
       </div>
     </AuthProvider>
   );

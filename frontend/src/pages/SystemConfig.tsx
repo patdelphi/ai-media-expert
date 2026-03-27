@@ -116,6 +116,7 @@ const SystemConfigPage: React.FC = () => {
     is_active: true,
     is_verified: false
   });
+  const [userPasswordConfirm, setUserPasswordConfirm] = useState('');
   const [userSearchForm, setUserSearchForm] = useState({
     search: '',
     role: '',
@@ -1043,6 +1044,7 @@ const SystemConfigPage: React.FC = () => {
       is_active: user.is_active,
       is_verified: user.is_verified
     });
+    setUserPasswordConfirm('');
     setShowUserEditForm(true);
   };
 
@@ -1051,6 +1053,23 @@ const SystemConfigPage: React.FC = () => {
     if (!editingUser) return;
     
     try {
+      if (userFormData.password) {
+        if (userFormData.password !== userPasswordConfirm) {
+          toast.error('两次输入的新密码不一致');
+          return;
+        }
+        if (userFormData.password.length < 8) {
+          toast.error('新密码至少 8 位');
+          return;
+        }
+        const hasLetter = /[A-Za-z]/.test(userFormData.password);
+        const hasDigit = /\d/.test(userFormData.password);
+        if (!hasLetter || !hasDigit) {
+          toast.error('新密码需同时包含字母和数字');
+          return;
+        }
+      }
+
       const updateData: AdminUserUpdateRequest = {
         email: userFormData.email || undefined,
         username: userFormData.username || undefined,
@@ -1130,6 +1149,7 @@ const SystemConfigPage: React.FC = () => {
       is_active: true,
       is_verified: false
     });
+    setUserPasswordConfirm('');
   };
 
   // 角色显示名称
@@ -2700,6 +2720,26 @@ const SystemConfigPage: React.FC = () => {
                     value={userFormData.full_name}
                     onChange={(e) => setUserFormData({ ...userFormData, full_name: e.target.value })}
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">新密码</label>
+                  <input
+                    type="password"
+                    value={userFormData.password}
+                    onChange={(e) => setUserFormData({ ...userFormData, password: e.target.value })}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="留空则不修改密码（至少 8 位，包含字母和数字）"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">确认新密码</label>
+                  <input
+                    type="password"
+                    value={userPasswordConfirm}
+                    onChange={(e) => setUserPasswordConfirm(e.target.value)}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="再次输入新密码"
                   />
                 </div>
                 <div>

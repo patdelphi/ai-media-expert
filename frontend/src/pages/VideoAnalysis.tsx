@@ -150,6 +150,7 @@ const VideoAnalysis: React.FC = () => {
   const [historyPageSize] = useState(10);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyPages, setHistoryPages] = useState(1);
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<'all' | 'completed' | 'failed'>('all');
   
   // UI状态
   const [loading, setLoading] = useState(false);
@@ -601,7 +602,7 @@ const VideoAnalysis: React.FC = () => {
         setStreamingResult(analysisData.analysis_result);
       }
       showNotification('success', '解析完成！');
-      loadAnalysisHistory(1);
+      loadAnalysisHistory(1, historyStatusFilter);
       return;
     }
 
@@ -660,9 +661,17 @@ const VideoAnalysis: React.FC = () => {
   };
 
   // 加载解析历史
-  const loadAnalysisHistory = async (page: number = 1) => {
+  const loadAnalysisHistory = async (page: number = 1, statusFilter: 'all' | 'completed' | 'failed' = historyStatusFilter) => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/?page=${page}&size=${historyPageSize}`);
+      const params = new URLSearchParams({
+        page: String(page),
+        size: String(historyPageSize),
+      });
+      if (statusFilter !== 'all') {
+        params.set('status_filter', statusFilter);
+      }
+
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/?${params.toString()}`);
       if (response.ok) {
         const result = await response.json();
         const data = result.data;
@@ -1113,64 +1122,87 @@ const VideoAnalysis: React.FC = () => {
               )}
               
               {/* 解析历史 */}
-              {analysisHistory.length > 0 && (
+              {(analysisHistory.length > 0 || historyTotal > 0) && (
                 <div className="mt-8 border-t pt-6">
-                  <h3 className="text-lg font-semibold mb-4">解析历史</h3>
-                  <div className="space-y-3">
-                    {analysisHistory.map((analysis) => (
-                      <div key={analysis.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-3 mb-2">
-                              <span className="font-medium text-gray-900">
-                                视频ID: {analysis.video_file_id}
-                              </span>
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                analysis.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                analysis.status === 'failed' ? 'bg-red-100 text-red-800' :
-                                analysis.status === 'processing' ? 'bg-blue-100 text-blue-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
-                                {analysis.status === 'completed' ? '已完成' :
-                                 analysis.status === 'failed' ? '失败' :
-                                 analysis.status === 'processing' ? '处理中' : '等待中'}
-                              </span>
-                            </div>
-                            {analysis.result_summary && (
-                              <p className="text-sm text-gray-600 mb-2">{analysis.result_summary}</p>
-                            )}
-                            <div className="flex items-center space-x-4 text-xs text-gray-500">
-                              <span>创建时间: {new Date(analysis.created_at).toLocaleString()}</span>
-                              {analysis.processing_time && (
-                                <span>处理时间: {analysis.processing_time.toFixed(1)}秒</span>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold">解析历史</h3>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-600">筛选</span>
+                      <select
+                        value={historyStatusFilter}
+                        onChange={(e) => {
+                          const next = e.target.value as 'all' | 'completed' | 'failed';
+                          setHistoryStatusFilter(next);
+                          loadAnalysisHistory(1, next);
+                        }}
+                        className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      >
+                        <option value="all">全部</option>
+                        <option value="completed">已完成</option>
+                        <option value="failed">失败</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {analysisHistory.length > 0 ? (
+                    <div className="space-y-3">
+                      {analysisHistory.map((analysis) => (
+                        <div key={analysis.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-3 mb-2">
+                                <span className="font-medium text-gray-900">
+                                  视频ID: {analysis.video_file_id}
+                                </span>
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  analysis.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                  analysis.status === 'failed' ? 'bg-red-100 text-red-800' :
+                                  analysis.status === 'processing' ? 'bg-blue-100 text-blue-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {analysis.status === 'completed' ? '已完成' :
+                                   analysis.status === 'failed' ? '失败' :
+                                   analysis.status === 'processing' ? '处理中' : '等待中'}
+                                </span>
+                              </div>
+                              {analysis.result_summary && (
+                                <p className="text-sm text-gray-600 mb-2">{analysis.result_summary}</p>
                               )}
-                              {analysis.confidence_score && (
-                                <span>置信度: {(analysis.confidence_score * 100).toFixed(1)}%</span>
-                              )}
+                              <div className="flex items-center space-x-4 text-xs text-gray-500">
+                                <span>创建时间: {new Date(analysis.created_at).toLocaleString()}</span>
+                                {analysis.processing_time && (
+                                  <span>处理时间: {analysis.processing_time.toFixed(1)}秒</span>
+                                )}
+                                {analysis.confidence_score && (
+                                  <span>置信度: {(analysis.confidence_score * 100).toFixed(1)}%</span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => viewHistoryDetails(analysis)}
-                              className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                            >
-                              <i className="fas fa-eye mr-1"></i>
-                              查看
-                            </button>
-                            {analysis.status === 'completed' && (
+                            <div className="flex space-x-2">
                               <button
-                                onClick={() => exportHistoryResult(analysis.id)}
-                                className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                                onClick={() => viewHistoryDetails(analysis)}
+                                className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
                               >
-                                <i className="fas fa-download mr-1"></i>
-                                导出
+                                <i className="fas fa-eye mr-1"></i>
+                                查看
                               </button>
-                            )}
+                              {analysis.status === 'completed' && (
+                                <button
+                                  onClick={() => exportHistoryResult(analysis.id)}
+                                  className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                                >
+                                  <i className="fas fa-download mr-1"></i>
+                                  导出
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500">暂无符合条件的解析记录</div>
+                  )}
 
                   {historyPages > 1 && (
                     <div className="mt-4 flex items-center justify-between">
@@ -1179,14 +1211,14 @@ const VideoAnalysis: React.FC = () => {
                       </div>
                       <div className="flex space-x-2">
                         <button
-                          onClick={() => loadAnalysisHistory(historyPage - 1)}
+                          onClick={() => loadAnalysisHistory(historyPage - 1, historyStatusFilter)}
                           disabled={historyPage <= 1}
                           className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
                         >
                           上一页
                         </button>
                         <button
-                          onClick={() => loadAnalysisHistory(historyPage + 1)}
+                          onClick={() => loadAnalysisHistory(historyPage + 1, historyStatusFilter)}
                           disabled={historyPage >= historyPages}
                           className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
                         >
