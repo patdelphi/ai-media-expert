@@ -797,10 +797,13 @@ const VideoUpload: React.FC = () => {
                       <i className="fas fa-video text-blue-600 text-lg"></i>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
+                      <p className="text-sm font-medium text-gray-900 truncate" title={file.name}>
                         {file.name}
                       </p>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-xs text-gray-500 mt-1 truncate" title={file.saved_name}>
+                        文件: {file.saved_name}
+                      </p>
+                      <p className="text-sm text-gray-500 mt-1">
                          {file.duration && (
                            <span>时长: {Math.floor(file.duration / 60)}:{Math.floor(file.duration % 60).toString().padStart(2, '0')}</span>
                          )}

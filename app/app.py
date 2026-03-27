@@ -11,6 +11,7 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.core.app_logging import setup_logging
+from app.core.db_manager import ensure_database_ready
 from app.api.v1 import api_router
 from app.middleware.exception_handler import ExceptionHandlerMiddleware
 
@@ -40,6 +41,13 @@ if uploads_dir.exists():
 
 # 包含API路由
 fastapi_app.include_router(api_router, prefix="/api/v1")
+
+@fastapi_app.on_event("startup")
+def startup_database_setup() -> None:
+    if settings.is_development:
+        ok = ensure_database_ready()
+        if not ok:
+            raise RuntimeError("Database is not ready")
 
 # 健康检查端点
 @fastapi_app.get("/health")

@@ -1061,8 +1061,11 @@ const VideoAnalysis: React.FC = () => {
                             <i className="fas fa-video text-blue-600 text-lg"></i>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">
+                            <p className="text-sm font-medium text-gray-900 truncate" title={video.title || video.original_filename}>
                               {video.title || video.original_filename}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1 truncate" title={video.saved_filename}>
+                              文件: {video.saved_filename}
                             </p>
                             <p className="text-xs text-gray-500">
                               {formatFileSize(video.file_size)}

@@ -631,3 +631,99 @@ pm run build 打包校验（0 errors）。
 
 ### 记录时间
 - 2026-03-27
+
+---
+
+## 2026-03-27 重启：前后端开发服务
+
+### 用户问题
+- 重启前后端服务
+
+### 已执行内容
+- 重启后端：`uvicorn app.app:app --host 0.0.0.0 --port 8000 --reload`
+- 重启前端：`frontend` 下 `npm run dev`（Vite）
+
+### 当前访问地址
+- 后端：http://localhost:8000
+- 前端：http://localhost:5173
+
+### 记录时间
+- 2026-03-27
+
+---
+
+## 2026-03-27 修复：后端无法登录（自动初始化数据库）
+
+### 用户问题
+- 后端有问题？无法登录
+
+### 原因
+- 服务启动未自动建表/初始化默认数据，导致 `users` 表或默认管理员不存在，登录会失败。
+
+### 已执行内容
+- 后端启动时（开发环境）自动执行数据库自检与初始化：建表并创建默认管理员。
+- 降低 SQLAlchemy 引擎日志级别，避免输出 SQL 语句（包含敏感字段）。
+- 本地调用 `/api/v1/auth/login` 验证返回 200。
+
+### 默认管理员（开发环境）
+- `admin@example.com` / `admin123`
+
+### 记录时间
+- 2026-03-27
+
+---
+
+## 2026-03-27 恢复：从 Git 历史找回误删的旧数据库
+
+### 用户问题
+- 为什么没有db了？之前的数据呢？？
+- 应该是最近几个commit时候删掉了，想办法恢复回来！
+
+### 已执行内容
+- 排查：发现 `ai_media_expert.db` 在提交 `0473d20`（"security: protect api keys and remove sensitive files"）时被作为敏感/无关文件从版本库移除了，移除前最近的有效版本在 `2d7d4ca` 中（大小约 1.2MB）。
+- 恢复：使用 `git checkout 2d7d4ca -- ai_media_expert.db` 找回了该文件，并覆盖了本地刚新建的空 DB。
+- 验证：重启后端服务，连接数据库验证旧数据存在（包含 3 个用户、11 个视频、88 条解析记录）。
+
+### 记录时间
+- 2026-03-27
+
+---
+
+## 2026-03-27 修复：前端视频列表仅显示 1 条（同步 uploaded_files 与磁盘文件）
+
+### 用户问题
+- uploads\\videos 目录里有9个视频，前端目前只能看见一个
+
+### 原因
+- 前端“最近上传视频列表”（`/api/v1/files/files`）和“可解析视频列表”（`/api/v1/video-analysis/videos`）都依赖数据库表 `uploaded_files` 的 `file_path`。
+- 恢复旧数据库后，`uploaded_files` 里多数记录对应的文件在磁盘上不存在/路径不匹配，后端会过滤掉这些记录，所以只剩 1 条可见。
+
+### 已执行内容
+- 编写脚本 `scripts/sync_uploaded_files_from_disk.py`，同步本地 `uploads/videos/*.mp4` 的 9 个物理文件到 `uploaded_files` 表。
+- 将旧记录中找不到物理文件的设为 `file_size=0`。
+- 将这些无主文件的 `user_id` 更新为 `admin`（id=1），使得其可通过数据隔离鉴权并在前端显示。
+
+### 记录时间
+- 2026-03-27
+
+---
+
+## 2026-03-27 优化：在视频列表中展示上传后的物理文件名
+
+### 用户问题
+- 视频列表里面，除了原视频标题，也要列出上传后的文件名，例如：d4a805c8-4999-49e7-abb9-88ee59c2072d.mp4
+
+### 已执行内容
+- **视频解析页** (`frontend/src/pages/VideoAnalysis.tsx`)：在视频列表项的标题下方增加一行显示 `video.saved_filename`，并添加 `truncate` 与悬浮提示 `title` 防破版。
+- **视频上传中心页** (`frontend/src/pages/VideoUpload.tsx`)：在“最近上传的文件”列表项的标题下方增加一行显示 `file.saved_name`，同样做了防破版处理。
+- 重新运行前端 `build`，校验通过。
+
+### 记录时间
+- 2026-03-27
+
+### 已执行内容
+- 新增同步脚本 [sync_uploaded_files_from_disk.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/scripts/sync_uploaded_files_from_disk.py)，将 `uploads/videos/*.mp4` 补齐/更新到 `uploaded_files`，并将缺失文件的旧记录标记为 `file_size=0` 以避免被列表接口统计/返回。
+- 验证：`/api/v1/files/files` 与 `/api/v1/video-analysis/videos` 均返回 9 条记录。
+
+### 记录时间
+- 2026-03-27

@@ -27,6 +27,61 @@
 - [x] 盘点根目录 `"test_*.py"` / `"debug_*.py"`：标记为手工工具并从 pytest 默认收集中排除（已新增清单 `"scripts/manual_tools.md"`，并在 pytest 忽略）
 - [x] 去除未使用依赖：基于导入与运行链路，拆分“必需依赖”和“可选依赖”（已拆分到 optional-dependencies：`ai/ui/metrics/migrations/...`）
 - [x] 文档口径统一：补齐启动端口/是否挂载 UI 等不一致描述（已更新 `"README.md"`/`"README_SERVICES.md"`/`"Docs/README.md"`）
+
+### P2：清理无用 debug / test 脚本（待你确认后执行）
+
+> 说明：以下文件均不在 `"app/tests"` 内，不会被 pytest 默认执行；它们主要是“手工调试/临时验证”。本轮目标是：把明显无用/重复/高风险的脚本删除或迁移出仓库根目录，减少噪音与误用风险。任何删除操作会在执行前再次向你确认。
+
+#### 建议删除（根目录）
+
+- [ ] `"debug_api.py"`
+- [ ] `"debug_videos_api.py"`
+- [ ] `"debug_download_api.py"`（包含手工构造 token/外部请求倾向，误用风险更高）
+- [ ] `"debug_realtime_api.py"`
+- [ ] `"debug_frontend_issue.py"`
+- [ ] `"test_curl_debug.py"`
+- [ ] `"test_direct_api.py"`
+- [ ] `"test_exception_middleware.py"`
+- [ ] `"test_simple_upload_debug.py"`
+- [ ] `"test_download_api_direct.py"`
+- [ ] `"test_download_api_final.py"`
+
+#### 建议删除（抖音专项手工验证，根目录）
+
+- [ ] `"test_douyin_abogus.py"`
+- [ ] `"test_douyin_cookie.py"`
+- [ ] `"test_douyin_debug.py"`
+- [ ] `"test_douyin_direct.py"`
+- [ ] `"test_douyin_headers.py"`
+- [ ] `"test_douyin_id_extraction.py"`
+- [ ] `"test_douyin_latest.py"`
+- [ ] `"test_douyin_new_link.py"`
+- [ ] `"test_douyin_recent.py"`
+- [ ] `"test_douyin_response.py"`
+- [ ] `"test_douyin_short_url.py"`
+- [ ] `"test_douyin_simple.py"`
+- [ ] `"test_douyin_video_fetch.py"`
+- [ ] `"test_douyin_with_new_cookie.py"`
+
+#### 建议保留或迁移（再确认）
+
+- [ ] `"test_video_download.py"`（在 `"TEST_REPORT.md"` 中有引用；如果你不再需要手工测试报告，可一起删除并同步文档）
+- [ ] `"test_frontend_integration.py"`（在 `"TEST_REPORT.md"` 中有引用；同上）
+- [ ] `"test_websocket.py"`（手工验证 ws）
+- [ ] `"test_hybrid_crawler.py"` / `"test_new_crawlers.py"`（手工验证爬虫/适配器导入与行为）
+
+#### 其它位置（可选清理）
+
+- [ ] `"scripts/test_video_info.py"`
+- [ ] `"scripts/test_exif_time.py"`
+- [ ] `"scripts/test_mp4_time.py"`
+- [ ] `"scripts/test_filename_time.py"`（演示脚本）
+- [ ] `"frontend/public/test_page.html"`（手工页面，可能会进入前端构建产物）
+
+#### 需要同步更新的文档（跟随删除/迁移自动更新）
+
+- [ ] `"scripts/manual_tools.md"`：删掉已移除文件条目
+- [ ] `"TEST_REPORT.md"`：若删除 `"test_video_download.py"` 或 `"test_frontend_integration.py"`，需要更新报告口径或删除报告
  
 ### P3：质量与CI（保证长期可维护）
  
