@@ -598,3 +598,36 @@ pm run build 打包校验（0 errors）。
 
 ### 记录时间
 - 2026-03-27
+
+---
+
+## 2026-03-27 Git：切换本地分支到 main 并快进同步
+
+### 用户问题
+- 切换本地分支为main
+
+### 已执行内容
+- 切换到本地 `"main"` 分支。
+- 将本地 `"main"` 以快进方式同步到 `"origin/main"` 最新（`git pull --ff-only`）。
+
+### 记录时间
+- 2026-03-27
+
+---
+
+## 2026-03-27 清理：删除无用 debug/test 脚本
+
+### 用户问题
+- 清理一下无用的test debug代码
+
+### 已执行内容
+- 删除一批根目录调试/手工验证脚本（`"debug_*.py"` / 部分 `"test_*.py"`），保留仍可能有价值的手工脚本（如 `"test_video_download.py"`、`"test_frontend_integration.py"` 等）。
+- 删除 `"frontend/public/test_page.html"`（遗留联调页面，避免进入前端构建产物）。
+- 更新 `"scripts/manual_tools.md"`：移除已删除文件条目。
+
+### 验证结果
+- `pytest`：通过
+- `frontend build`：通过
+
+### 记录时间
+- 2026-03-27
