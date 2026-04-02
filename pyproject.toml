@@ -2,7 +2,7 @@
 name = "ai-media-expert"
 version = "0.1.0"
 description = "AI新媒体专家系统 - 视频下载和分析平台"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     {name = "AI Media Expert Team", email = "team@ai-media-expert.com"}
 ]
@@ -42,6 +42,12 @@ dependencies = [
     "pillow>=10.1.0",
     # 文件处理
     "aiofiles>=23.2.1",
+    "aiohttp>=3.9.0",
+    # 爬虫依赖
+    "qrcode>=7.4",
+    "gmssl>=3.2.2",
+    # 重试
+    "tenacity>=8.2.0",
     # 日志和监控
     "structlog>=23.2.0",
     # 工具库
