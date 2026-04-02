@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { DownloadTask } from '../types';
 import { isValidUrl } from '../utils';
-// import { SUPPORTED_PLATFORMS } from '../config';
-import { videoDownloadApi, SupportedPlatform } from '../services/videoDownloadApi';
+import { videoDownloadApi, SupportedPlatform, DownloadTask } from '../services/videoDownloadApi';
 import { websocketService, TaskUpdateData, DownloadCompleteData, DownloadFailedData } from '../services/websocketService';
 
 const VideoDownload: React.FC = () => {

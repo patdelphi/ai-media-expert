@@ -8,17 +8,6 @@ export interface ApiResponse<T = any> {
   file_path?: string; // 文件上传时返回的文件路径
 }
 
-// 用户相关类型
-export interface User {
-  id: string;
-  username: string;
-  email: string;
-  avatar?: string;
-  role: 'admin' | 'user';
-  created_at: string;
-  updated_at: string;
-}
-
 // 视频相关类型
 export interface Video {
   id: string;
@@ -94,21 +83,6 @@ export interface FileItem {
   // 元数据
   encoder?: string;
   creation_time?: string;
-}
-
-// 下载任务相关类型
-export interface DownloadTask {
-  id: string;
-  url: string;
-  title: string;
-  platform: 'youtube' | 'bilibili' | 'tiktok' | 'other';
-  status: 'pending' | 'downloading' | 'completed' | 'failed';
-  progress: number;
-  file_size?: number;
-  download_speed?: string;
-  eta?: string;
-  created_at: string;
-  updated_at: string;
 }
 
 // 视频分析结果类型

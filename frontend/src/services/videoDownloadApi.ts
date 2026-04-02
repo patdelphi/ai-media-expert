@@ -35,6 +35,8 @@ export interface DownloadTask {
   updated_at: string;
   file_path?: string;
   error_message?: string;
+  download_speed?: string;
+  eta?: string;
 }
 
 // 视频信息接口
