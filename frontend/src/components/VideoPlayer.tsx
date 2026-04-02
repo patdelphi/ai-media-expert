@@ -53,8 +53,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
       // 自动开始播放
       videoRef.current.play().then(() => {
         setIsPlaying(true);
-      }).catch((error) => {
-        console.log('自动播放失败:', error);
+      }).catch(() => {
+        // 浏览器可能阻止自动播放
       });
     }
   }, [isOpen, isMuted, volume, isLooping]);
@@ -63,7 +63,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.playbackRate = playbackRate;
-      console.log('useEffect设置播放速度为:', playbackRate, '实际速度:', videoRef.current.playbackRate);
     }
   }, [playbackRate]);
   
@@ -73,12 +72,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
     if (!video) return;
     
     const handleLoadStart = () => {
-      console.log('视频开始加载，当前播放速度状态:', playbackRate);
+      // 视频开始加载
     };
-    
+
     const handleCanPlay = () => {
       video.playbackRate = playbackRate;
-      console.log('视频可以播放，重新设置播放速度为:', playbackRate, '实际速度:', video.playbackRate);
     };
     
     video.addEventListener('loadstart', handleLoadStart);
@@ -145,7 +143,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
 
   // 播放速度调节
   const handlePlaybackRateChange = (rate: number) => {
-    console.log('设置播放速度为:', rate);
     setPlaybackRate(rate);
     // 注意：实际的播放速度设置由useEffect处理
   };
@@ -169,9 +166,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ isOpen, onClose, videoUrl, vi
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
       setDuration(videoRef.current.duration);
-      // 确保播放速度正确设置
       videoRef.current.playbackRate = playbackRate;
-      console.log('视频加载完成，播放速度设置为:', playbackRate, '实际速度:', videoRef.current.playbackRate);
     }
   };
 
