@@ -727,3 +727,49 @@ pm run build 打包校验（0 errors）。
 
 ### 记录时间
 - 2026-03-27
+
+---
+
+## 2026-04-02 代码审查与清理
+
+### 用户请求
+Review 项目，列出问题和优化点，写在 todo 文档里。然后制定 plan 执行清理。
+
+### 执行过程
+
+#### 1. Code Review
+- 使用 3 个并行 agent 分别审查后端、前端、部署/测试
+- 发现最严重问题：后端 4 组重复端点（上传 3 套、分析 3 套、视频列表 2 套、下载 2 套）
+- 输出 `Docs/todo.md`，12 个章节约 40 个问题
+
+#### 2. 清理执行（4 Phase + 5 commits）
+
+**Phase 1 — 清理后端重复端点**
+- 修改 `app/api/v1/api.py`：删除旧模块 import 和路由注册
+- 删除 5 个冗余文件：`upload.py`, `videos.py`, `analysis.py`, `endpoints/analysis.py`, `endpoints/download.py`
+- 修复 `pyproject.toml`：`requires-python >=3.10`，补齐缺失依赖（aiohttp, qrcode, gmssl, tenacity）
+- commit: `refactor: remove duplicate endpoint files and fix missing deps`
+
+**Phase 2 — 修复 CORS**
+- `app/app.py`：`allow_origins=["*"]` → `allow_origins=settings.cors_origins`
+- commit: `fix: use settings.cors_origins instead of wildcard CORS`
+
+**Phase 3 — 前端清理死代码**
+- 删除未使用的 `DebugInfoPanel.tsx`
+- 清理 `App.tsx` 注释代码
+- 清理 `VideoPlayer.tsx` 6 处 console.log
+- commit: `chore: remove frontend dead code`
+
+**Phase 4 — 前端类型冲突修复**
+- 删除 `types/index.ts` 中重复的 User 和 DownloadTask 定义
+- `VideoDownload.tsx` 改为从 `videoDownloadApi.ts` 导入 DownloadTask
+- 补齐 DownloadTask 缺失字段（download_speed, eta）
+- commit: `fix: consolidate duplicate User and DownloadTask type definitions`
+
+**测试清理**
+- 删除针对已移除端点的过时测试 `test_download_endpoints.py`
+- commit: `test: remove obsolete test for deleted download endpoint`
+
+### 最终验证
+- 后端：28 passed, 0 failed
+- 前端：tsc --noEmit 零错误
