@@ -18,7 +18,7 @@ import tagGroupService, {
   CreateTagRequest
 } from '../services/tagGroup';
 // import { SystemConfig as SystemConfigType } from '../types';
-import { marked } from 'marked';
+import { renderSafeMarkdown } from '../utils/markdown';
 
 // 预设标签颜色
 const PRESET_TAG_COLORS = [
@@ -1840,7 +1840,7 @@ const SystemConfigPage: React.FC = () => {
                        >
                          <div className="prose prose-sm max-w-none">
                            {newTemplate.content ? (
-                             <div dangerouslySetInnerHTML={{ __html: marked(newTemplate.content) }} />
+                             <div dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(newTemplate.content) }} />
                            ) : (
                              <p className="text-gray-400 italic">在左侧输入内容，这里将显示预览效果</p>
                            )}
@@ -1912,7 +1912,7 @@ const SystemConfigPage: React.FC = () => {
                                   >
                                     <div className="prose prose-sm max-w-none">
                                       {editingTemplate.content ? (
-                                        <div dangerouslySetInnerHTML={{ __html: marked(editingTemplate.content) }} />
+                                        <div dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(editingTemplate.content) }} />
                                       ) : (
                                         <p className="text-gray-400 italic">在左侧输入内容，这里将显示预览效果</p>
                                       )}
@@ -1935,7 +1935,7 @@ const SystemConfigPage: React.FC = () => {
                                 )}
                               </div>
                               <div className="prose prose-sm max-w-none">
-                                <div dangerouslySetInnerHTML={{ __html: marked(template.content) }} />
+                                <div dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(template.content) }} />
                               </div>
                             </div>
                           )}

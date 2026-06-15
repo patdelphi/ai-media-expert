@@ -1,8 +1,8 @@
-import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { API_BASE_URL } from '../config';
 
 // API响应类型
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   code: number;
   message: string;
   data: T;
@@ -25,12 +25,36 @@ export interface ApiError {
   request_id?: string;
 }
 
-class ApiService {
+export interface TokenPayload {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+  user?: unknown;
+}
+
+interface RetryableAxiosRequestConfig extends AxiosRequestConfig {
+  _retry?: boolean;
+}
+
+export class ApiService {
   private api: AxiosInstance;
+  private refreshClient: AxiosInstance;
+  private refreshPromise: Promise<TokenPayload> | null = null;
+  readonly baseUrl: string;
 
   constructor() {
+    this.baseUrl = API_BASE_URL;
     this.api = axios.create({
-      baseURL: API_BASE_URL,
+      baseURL: this.baseUrl,
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    this.refreshClient = axios.create({
+      baseURL: this.baseUrl,
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
@@ -58,28 +82,31 @@ class ApiService {
         return response;
       },
       async (error) => {
-        const originalRequest = error.config;
+        const originalRequest = error.config as RetryableAxiosRequestConfig | undefined;
 
-        // 如果是401错误且不是刷新token的请求
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        // 如果是 401，则尝试通过独立 refresh client 刷新 token，避免递归进入同一拦截器。
+        if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
           originalRequest._retry = true;
 
           try {
-            // 尝试刷新token
             const refreshToken = localStorage.getItem('refresh_token');
             if (refreshToken) {
-              const response = await this.refreshToken(refreshToken);
-              const { access_token, refresh_token } = response.data;
+              const tokenPayload = await this.refreshAuthToken(refreshToken);
+              const { access_token, refresh_token } = tokenPayload;
               
               localStorage.setItem('access_token', access_token);
               localStorage.setItem('refresh_token', refresh_token);
+              if (tokenPayload.user) {
+                localStorage.setItem('user', JSON.stringify(tokenPayload.user));
+              }
               
-              // 重新发送原请求
-              originalRequest.headers.Authorization = `Bearer ${access_token}`;
+              originalRequest.headers = {
+                ...(originalRequest.headers || {}),
+                Authorization: `Bearer ${access_token}`,
+              };
               return this.api(originalRequest);
             }
           } catch (refreshError) {
-            // 刷新失败，清除token并跳转到登录页
             this.clearTokens();
             window.location.href = '/login';
             return Promise.reject(refreshError);
@@ -98,27 +125,39 @@ class ApiService {
     localStorage.removeItem('user');
   }
 
-  // 刷新token
-  private async refreshToken(refreshToken: string) {
-    return this.api.post('/auth/refresh', {
-      refresh_token: refreshToken,
-    });
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
+  async refreshAuthToken(refreshToken: string): Promise<TokenPayload> {
+    if (!this.refreshPromise) {
+      this.refreshPromise = this.refreshClient
+        .post<ApiResponse<TokenPayload>>('/auth/refresh', {
+          refresh_token: refreshToken,
+        })
+        .then((response) => response.data.data)
+        .finally(() => {
+          this.refreshPromise = null;
+        });
+    }
+
+    return this.refreshPromise;
   }
 
   // GET请求
-  async get<T = any>(url: string, params?: any): Promise<ApiResponse<T>> {
+  async get<T = unknown>(url: string, params?: unknown): Promise<ApiResponse<T>> {
     const response = await this.api.get(url, { params });
     return response.data;
   }
 
   // POST请求
-  async post<T = any>(url: string, data?: any): Promise<ApiResponse<T>> {
+  async post<T = unknown>(url: string, data?: unknown): Promise<ApiResponse<T>> {
     const response = await this.api.post(url, data);
     return response.data;
   }
 
   // POST表单请求（multipart/form-data）
-  async postForm<T = any>(url: string, formData: FormData): Promise<ApiResponse<T>> {
+  async postForm<T = unknown>(url: string, formData: FormData): Promise<ApiResponse<T>> {
     const response = await this.api.post(url, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -128,7 +167,7 @@ class ApiService {
   }
 
   // PUT请求
-  async put<T = any>(url: string, data?: any): Promise<ApiResponse<T>> {
+  async put<T = unknown>(url: string, data?: unknown): Promise<ApiResponse<T>> {
     const response = await this.api.put(url, data);
     return response.data;
   }
@@ -140,13 +179,13 @@ class ApiService {
   }
 
   // PATCH请求
-  async patch<T = any>(url: string, data?: any): Promise<ApiResponse<T>> {
+  async patch<T = unknown>(url: string, data?: unknown): Promise<ApiResponse<T>> {
     const response = await this.api.patch(url, data);
     return response.data;
   }
 
   // 上传文件
-  async upload<T = any>(
+  async upload<T = unknown>(
     url: string,
     file: File,
     onProgress?: (progress: number) => void

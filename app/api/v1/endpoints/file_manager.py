@@ -3,14 +3,18 @@
 提供文件列表、删除、下载等管理功能。
 """
 
-import os
+from __future__ import annotations
+
 from pathlib import Path
-from typing import List, Dict, Any
-from fastapi import APIRouter, HTTPException, Response, Depends
+from typing import Any, Dict
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from app.core.database import get_db
+
+from app.api.deps import get_current_user, get_db
 from app.models.uploaded_file import UploadedFile
+from app.models.user import User
 
 router = APIRouter()
 
@@ -19,12 +23,44 @@ UPLOAD_DIR = Path("uploads/videos")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _is_admin(user: User) -> bool:
+    return user.is_superuser or user.role == "admin"
+
+
+def _owned_file_query(db: Session, current_user: User):
+    if _is_admin(current_user):
+        return db.query(UploadedFile)
+    return db.query(UploadedFile).filter(UploadedFile.user_id == str(current_user.id))
+
+
+def _get_owned_file_by_saved_name(db: Session, current_user: User, saved_filename: str) -> UploadedFile:
+    uploaded_file = _owned_file_query(db, current_user).filter(
+        UploadedFile.saved_filename == saved_filename
+    ).first()
+    if not uploaded_file:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文件不存在")
+    return uploaded_file
+
+
+def _ensure_path_in_upload_dir(file_path: Path) -> Path:
+    resolved = file_path.resolve()
+    upload_root = UPLOAD_DIR.resolve()
+    try:
+        resolved.relative_to(upload_root)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="非法文件路径")
+    return resolved
+
+
 @router.get("/files")
-async def list_files(db: Session = Depends(get_db)) -> Dict[str, Any]:
+async def list_files(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
     """获取文件列表"""
     try:
         # 从数据库获取文件信息
-        db_files = db.query(UploadedFile).order_by(UploadedFile.created_at.desc()).all()
+        db_files = _owned_file_query(db, current_user).order_by(UploadedFile.created_at.desc()).all()
         
         files = []
         for db_file in db_files:
@@ -32,6 +68,7 @@ async def list_files(db: Session = Depends(get_db)) -> Dict[str, Any]:
             file_path = Path(db_file.file_path)
             if file_path.exists():
                 files.append({
+                    "id": db_file.id,
                     "name": db_file.original_filename,  # 使用原始文件名
                     "saved_name": db_file.saved_filename,  # 保存的文件名
                     "size": db_file.file_size,
@@ -76,18 +113,16 @@ async def list_files(db: Session = Depends(get_db)) -> Dict[str, Any]:
 
 
 @router.get("/files/{filename}")
-async def download_file(filename: str, db: Session = Depends(get_db)):
+async def download_file(
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """下载文件"""
     try:
         # 从数据库查找文件记录
-        db_file = db.query(UploadedFile).filter(
-            UploadedFile.original_filename == filename
-        ).first()
-        
-        if not db_file:
-            raise HTTPException(status_code=404, detail="文件不存在")
-        
-        file_path = Path(db_file.file_path)
+        db_file = _get_owned_file_by_saved_name(db, current_user, filename)
+        file_path = _ensure_path_in_upload_dir(Path(db_file.file_path))
         
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="文件不存在")
@@ -108,26 +143,38 @@ async def download_file(filename: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/files/{filename}")
-async def delete_file(filename: str, db: Session = Depends(get_db)) -> Dict[str, Any]:
+async def delete_file(
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
     """删除文件"""
     try:
         # 从数据库查找文件记录
-        db_file = db.query(UploadedFile).filter(
-            UploadedFile.original_filename == filename
-        ).first()
-        
-        if not db_file:
-            raise HTTPException(status_code=404, detail="文件不存在")
-        
-        file_path = Path(db_file.file_path)
-        
-        # 删除物理文件
+        db_file = _get_owned_file_by_saved_name(db, current_user, filename)
+        if _is_admin(current_user) and str(db_file.user_id) != str(current_user.id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足")
+
+        file_path = _ensure_path_in_upload_dir(Path(db_file.file_path))
+
+        trash_dir = UPLOAD_DIR / ".trash"
+        trash_dir.mkdir(parents=True, exist_ok=True)
+        trash_path = trash_dir / f"{db_file.saved_filename}"
+
+        moved_to_trash = False
         if file_path.exists():
-            file_path.unlink()
+            file_path.replace(trash_path)
+            moved_to_trash = True
         
         # 删除数据库记录
         db.delete(db_file)
         db.commit()
+
+        if moved_to_trash and trash_path.exists():
+            try:
+                trash_path.unlink()
+            except OSError:
+                pass
         
         return {
             "success": True,
@@ -136,8 +183,20 @@ async def delete_file(filename: str, db: Session = Depends(get_db)) -> Dict[str,
         }
         
     except HTTPException:
+        db.rollback()
+        if "moved_to_trash" in locals() and moved_to_trash and trash_path.exists():
+            try:
+                trash_path.replace(file_path)
+            except OSError:
+                pass
         raise
     except Exception as e:
+        db.rollback()
+        if "moved_to_trash" in locals() and moved_to_trash and trash_path.exists():
+            try:
+                trash_path.replace(file_path)
+            except OSError:
+                pass
         raise HTTPException(status_code=500, detail=f"删除文件失败: {str(e)}")
 
 
@@ -145,14 +204,13 @@ async def delete_file(filename: str, db: Session = Depends(get_db)) -> Dict[str,
 async def update_file_time(
     filename: str,
     request: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """更新文件创建时间"""
     try:
         # 查找文件记录
-        db_file = db.query(UploadedFile).filter(
-            UploadedFile.saved_filename == filename
-        ).first()
+        db_file = _get_owned_file_by_saved_name(db, current_user, filename)
         
         if not db_file:
             return {
@@ -182,9 +240,14 @@ async def update_file_time(
 
 
 @router.get("/stats")
-async def get_stats() -> Dict[str, Any]:
+async def get_stats(
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
     """获取文件统计信息"""
     try:
+        if not _is_admin(current_user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足")
+
         files = []
         total_size = 0
         video_count = 0

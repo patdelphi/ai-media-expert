@@ -10,22 +10,13 @@
 
 ### test
 
-- `"test_douyin_abogus.py"`
-- `"test_douyin_cookie.py"`
-- `"test_douyin_debug.py"`
-- `"test_douyin_direct.py"`
-- `"test_douyin_headers.py"`
-- `"test_douyin_id_extraction.py"`
-- `"test_douyin_latest.py"`
-- `"test_douyin_new_link.py"`
-- `"test_douyin_recent.py"`
-- `"test_douyin_response.py"`
-- `"test_douyin_short_url.py"`
-- `"test_douyin_simple.py"`
-- `"test_douyin_video_fetch.py"`
-- `"test_douyin_with_new_cookie.py"`
 - `"test_frontend_integration.py"`
 - `"test_hybrid_crawler.py"`
 - `"test_new_crawlers.py"`
 - `"test_video_download.py"`
 - `"test_websocket.py"`
+
+## 已清理
+
+- 已删除未纳入自动化、且无业务引用的抖音专项实验脚本：`"test_douyin_*.py"`
+- 已删除时间提取演示脚本：`"scripts/test_video_info.py"`、`"scripts/test_exif_time.py"`、`"scripts/test_mp4_time.py"`、`"scripts/test_filename_time.py"`

@@ -434,9 +434,9 @@ class VideoUploadService {
     if (!task || !task.session) return null;
 
     try {
-      const response = await apiService.get(`/upload/progress/${task.session.uploadSessionId}`);
-      if (response.data.code === 200) {
-        const progressData = response.data.data;
+      const response = await apiService.get<UploadProgress>(`/upload/progress/${task.session.uploadSessionId}`);
+      if (response.code === 200) {
+        const progressData = response.data;
         task.progress = { ...task.progress, ...progressData };
         return task.progress;
       }

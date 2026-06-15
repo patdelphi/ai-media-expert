@@ -80,7 +80,7 @@ class VideoDownloadApi {
    * 解析视频信息
    */
   async parseVideo(request: VideoParseRequest): Promise<VideoInfo> {
-    const response = await apiService.post('/video-download/parse', request);
+    const response = await apiService.post<VideoInfo>('/video-download/parse', request);
     return response.data;
   }
 
@@ -93,7 +93,12 @@ class VideoDownloadApi {
     title: string;
     platform: string;
   }> {
-    const response = await apiService.post('/video-download/download', request);
+    const response = await apiService.post<{
+      task_id: string;
+      status: string;
+      title: string;
+      platform: string;
+    }>('/video-download/download', request);
     return response.data;
   }
 
@@ -108,7 +113,10 @@ class VideoDownloadApi {
     tasks: DownloadTask[];
     total: number;
   }> {
-    const response = await apiService.get('/video-download/tasks', params);
+    const response = await apiService.get<{
+      tasks: DownloadTask[];
+      total: number;
+    }>('/video-download/tasks', params);
     return response.data;
   }
 
@@ -116,7 +124,7 @@ class VideoDownloadApi {
    * 获取下载任务详情
    */
   async getDownloadTask(taskId: string): Promise<DownloadTask> {
-    const response = await apiService.get(`/video-download/tasks/${taskId}`);
+    const response = await apiService.get<DownloadTask>(`/video-download/tasks/${taskId}`);
     return response.data;
   }
 
@@ -124,7 +132,7 @@ class VideoDownloadApi {
    * 取消下载任务
    */
   async cancelDownloadTask(taskId: string): Promise<{ task_id: string }> {
-    const response = await apiService.post(`/video-download/tasks/${taskId}/cancel`);
+    const response = await apiService.post<{ task_id: string }>(`/video-download/tasks/${taskId}/cancel`);
     return response.data;
   }
 
@@ -132,7 +140,7 @@ class VideoDownloadApi {
    * 重试下载任务
    */
   async retryDownloadTask(taskId: string): Promise<{ task_id: string }> {
-    const response = await apiService.post(`/video-download/tasks/${taskId}/retry`);
+    const response = await apiService.post<{ task_id: string }>(`/video-download/tasks/${taskId}/retry`);
     return response.data;
   }
 
@@ -140,7 +148,7 @@ class VideoDownloadApi {
    * 删除下载任务
    */
   async deleteDownloadTask(taskId: string): Promise<{ task_id: string }> {
-    const response = await apiService.delete(`/video-download/tasks/${taskId}`);
+    const response = await apiService.delete<{ task_id: string }>(`/video-download/tasks/${taskId}`);
     return response.data;
   }
 
@@ -151,7 +159,10 @@ class VideoDownloadApi {
     platforms: SupportedPlatform[];
     total: number;
   }> {
-    const response = await apiService.get('/video-download/platforms');
+    const response = await apiService.get<{
+      platforms: SupportedPlatform[];
+      total: number;
+    }>('/video-download/platforms');
     return response.data;
   }
 }

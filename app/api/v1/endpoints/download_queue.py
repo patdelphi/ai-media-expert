@@ -17,7 +17,7 @@ from app.core.app_logging import download_logger
 router = APIRouter()
 
 
-@router.get("/queue", response_model=ResponseModel[PaginatedResponse[dict]])
+@router.get("", response_model=ResponseModel[PaginatedResponse[dict]])
 def get_download_queue(
     pagination: PaginationParams = Depends(),
     status_filter: Optional[str] = Query(None, description="队列状态筛选"),
@@ -130,7 +130,7 @@ def get_download_queue(
         )
 
 
-@router.get("/queue/summary", response_model=ResponseModel[dict])
+@router.get("/summary", response_model=ResponseModel[dict])
 def get_queue_summary(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -241,7 +241,7 @@ def get_queue_summary(
         )
 
 
-@router.put("/queue/{queue_id}/priority", response_model=ResponseModel[dict])
+@router.put("/{queue_id}/priority", response_model=ResponseModel[dict])
 def update_queue_priority(
     queue_id: int,
     new_priority: int = Query(..., description="新的优先级", ge=1, le=10),
@@ -322,7 +322,7 @@ def update_queue_priority(
         )
 
 
-@router.delete("/queue/{queue_id}", response_model=ResponseModel[dict])
+@router.delete("/{queue_id}", response_model=ResponseModel[dict])
 def cancel_queue_item(
     queue_id: int,
     current_user: User = Depends(get_current_user),

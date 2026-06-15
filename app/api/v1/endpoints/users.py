@@ -72,7 +72,7 @@ def update_user_profile(
             )
     
     # 更新用户信息
-    update_data = user_update.dict(exclude_unset=True)
+    update_data = user_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(current_user, field, value)
     
@@ -280,7 +280,7 @@ def create_user(
     email = user_data.email or f"temp_{db.query(User).count() + 1}@temp.local"
     
     # 创建用户
-    user_dict = user_data.dict(exclude_unset=True)
+    user_dict = user_data.model_dump(exclude_unset=True)
     user_dict["email"] = email
     
     # 处理密码
@@ -382,7 +382,7 @@ def update_user(
             )
     
     # 更新用户信息
-    update_data = user_update.dict(exclude_unset=True)
+    update_data = user_update.model_dump(exclude_unset=True)
     if "password" in update_data and update_data["password"]:
         user.hashed_password = get_password_hash(update_data.pop("password"))
     for field, value in update_data.items():

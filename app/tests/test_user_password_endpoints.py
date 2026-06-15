@@ -1,148 +1,129 @@
-from datetime import datetime
+from datetime import datetime, UTC
 from unittest.mock import Mock
 
-import httpx
 import pytest
 from sqlalchemy.orm import Session
 
-from app.api import deps
-from app.app import app
-from app.core.security import get_password_hash, verify_password
+from fastapi import HTTPException
+
 from app.models.user import User
+from app.api.v1.endpoints.users import change_password, update_user
+from app.schemas.auth import PasswordChange
+from app.schemas.user import AdminUserUpdate
 
 
-@pytest.mark.asyncio
-async def test_change_password_success() -> None:
+def _fake_hash(password: str) -> str:
+    return f"hashed:{password}"
+
+
+def _fake_verify(plain_password: str, hashed_password: str) -> bool:
+    return hashed_password == _fake_hash(plain_password)
+
+
+def _utcnow() -> datetime:
+    """统一生成 UTC 时间，避免废弃 API 警告。"""
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+def test_change_password_success(monkeypatch: pytest.MonkeyPatch) -> None:
     old_password = "Oldpass123"
     new_password = "Newpass123"
 
-    user = User(email="test@example.com", hashed_password=get_password_hash(old_password))
+    from app.api.v1.endpoints import users as users_endpoints
+
+    monkeypatch.setattr(users_endpoints, "get_password_hash", _fake_hash)
+    monkeypatch.setattr(users_endpoints, "verify_password", _fake_verify)
+
+    user = User(email="test@example.com", hashed_password=_fake_hash(old_password))
     user.id = 1
     user.is_active = True
     user.is_verified = True
     user.role = "user"
-    user.created_at = datetime.utcnow()
-    user.updated_at = datetime.utcnow()
+    user.created_at = _utcnow()
+    user.updated_at = _utcnow()
 
     db = Mock(spec=Session)
 
-    def override_get_current_user() -> User:
-        return user
-
-    def override_get_db() -> Session:
-        return db
-
-    app.dependency_overrides[deps.get_current_user] = override_get_current_user
-    app.dependency_overrides[deps.get_db] = override_get_db
-
-    try:
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            resp = await client.post(
-                "/api/v1/users/change-password",
-                json={"current_password": old_password, "new_password": new_password},
-            )
-
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body.get("code") == 200
-        assert verify_password(new_password, user.hashed_password) is True
-        assert db.commit.called is True
-    finally:
-        app.dependency_overrides.clear()
+    resp = change_password(
+        password_data=PasswordChange(current_password=old_password, new_password=new_password),
+        current_user=user,
+        db=db,
+    )
+    assert resp.code == 200
+    assert _fake_verify(new_password, user.hashed_password) is True
+    assert db.commit.called is True
 
 
-@pytest.mark.asyncio
-async def test_change_password_rejects_wrong_current_password() -> None:
+def test_change_password_rejects_wrong_current_password(monkeypatch: pytest.MonkeyPatch) -> None:
     old_password = "Oldpass123"
-    user = User(email="test@example.com", hashed_password=get_password_hash(old_password))
+
+    from app.api.v1.endpoints import users as users_endpoints
+
+    monkeypatch.setattr(users_endpoints, "get_password_hash", _fake_hash)
+    monkeypatch.setattr(users_endpoints, "verify_password", _fake_verify)
+
+    user = User(email="test@example.com", hashed_password=_fake_hash(old_password))
     user.id = 1
     user.is_active = True
     user.is_verified = True
     user.role = "user"
-    user.created_at = datetime.utcnow()
-    user.updated_at = datetime.utcnow()
+    user.created_at = _utcnow()
+    user.updated_at = _utcnow()
 
     db = Mock(spec=Session)
 
-    def override_get_current_user() -> User:
-        return user
+    with pytest.raises(HTTPException) as exc:
+        change_password(
+            password_data=PasswordChange(
+                current_password="Wrongpass123",
+                new_password="Newpass123",
+            ),
+            current_user=user,
+            db=db,
+        )
 
-    def override_get_db() -> Session:
-        return db
-
-    app.dependency_overrides[deps.get_current_user] = override_get_current_user
-    app.dependency_overrides[deps.get_db] = override_get_db
-
-    try:
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            resp = await client.post(
-                "/api/v1/users/change-password",
-                json={"current_password": "Wrongpass123", "new_password": "Newpass123"},
-            )
-
-        assert resp.status_code == 400
-        assert verify_password(old_password, user.hashed_password) is True
-        assert db.commit.called is False
-    finally:
-        app.dependency_overrides.clear()
+    assert exc.value.status_code == 400
+    assert _fake_verify(old_password, user.hashed_password) is True
+    assert db.commit.called is False
 
 
-@pytest.mark.asyncio
-async def test_admin_update_user_can_set_password() -> None:
+def test_admin_update_user_can_set_password(monkeypatch: pytest.MonkeyPatch) -> None:
     old_password = "Oldpass123"
     new_password = "Newpass123"
 
-    target_user = User(email="target@example.com", hashed_password=get_password_hash(old_password))
+    from app.api.v1.endpoints import users as users_endpoints
+
+    monkeypatch.setattr(users_endpoints, "get_password_hash", _fake_hash)
+    monkeypatch.setattr(users_endpoints, "verify_password", _fake_verify)
+
+    target_user = User(email="target@example.com", hashed_password=_fake_hash(old_password))
     target_user.id = 2
     target_user.username = "target"
     target_user.is_active = True
     target_user.is_verified = True
     target_user.role = "user"
-    target_user.created_at = datetime.utcnow()
-    target_user.updated_at = datetime.utcnow()
+    target_user.created_at = _utcnow()
+    target_user.updated_at = _utcnow()
 
     admin_user = User(email="admin@example.com", hashed_password="x")
     admin_user.id = 99
     admin_user.is_active = True
     admin_user.is_verified = True
     admin_user.role = "admin"
-    admin_user.created_at = datetime.utcnow()
-    admin_user.updated_at = datetime.utcnow()
+    admin_user.created_at = _utcnow()
+    admin_user.updated_at = _utcnow()
 
     db = Mock(spec=Session)
     db.query.return_value.filter.return_value.first.return_value = target_user
 
-    def override_require_admin() -> User:
-        return admin_user
-
-    def override_get_db() -> Session:
-        return db
-
-    app.dependency_overrides[deps.require_admin] = override_require_admin
-    app.dependency_overrides[deps.get_db] = override_get_db
-
-    try:
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            resp = await client.put(
-                "/api/v1/users/2",
-                json={"password": new_password},
-            )
-
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body.get("code") == 200
-        assert verify_password(new_password, target_user.hashed_password) is True
-        assert db.commit.called is True
-        assert db.refresh.called is True
-    finally:
-        app.dependency_overrides.clear()
+    resp = update_user(
+        user_id=2,
+        user_update=AdminUserUpdate(password=new_password),
+        current_user=admin_user,
+        db=db,
+    )
+    assert resp.code == 200
+    assert _fake_verify(new_password, target_user.hashed_password) is True
+    assert db.commit.called is True
+    assert db.refresh.called is True
 

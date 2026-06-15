@@ -50,7 +50,7 @@ async def create_ai_config(
     if existing:
         raise HTTPException(status_code=400, detail="配置名称已存在")
     
-    config_dict = config.dict()
+    config_dict = config.model_dump()
     config_dict["api_key"] = _encrypt_api_key(config_dict["api_key"])
     db_config = AIConfig(**config_dict)
     db.add(db_config)
@@ -83,7 +83,7 @@ async def get_ai_configs(
     return ResponseModel(
         code=200,
         message="AI配置列表获取成功",
-        data=[AIConfigPublicResponse.from_orm(config) for config in configs]
+        data=[AIConfigPublicResponse.model_validate(config) for config in configs]
     )
 
 @router.get("/full", response_model=ResponseModel[List[AIConfigResponse]])
@@ -153,7 +153,7 @@ async def update_ai_config(
             raise HTTPException(status_code=400, detail="配置名称已存在")
     
     # 更新字段
-    update_data = config_update.dict(exclude_unset=True)
+    update_data = config_update.model_dump(exclude_unset=True)
     if "api_key" in update_data:
         if update_data["api_key"]:
             update_data["api_key"] = _encrypt_api_key(update_data["api_key"])
@@ -313,41 +313,61 @@ async def test_ai_config(
 @router.post("/{config_id}/activate", response_model=ResponseModel)
 async def activate_ai_config(
     config_id: int,
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """激活AI配置"""
-    
-    config = db.query(AIConfig).filter(AIConfig.id == config_id).first()
-    if not config:
-        raise HTTPException(status_code=404, detail="AI配置不存在")
-    
-    config.is_active = True
-    db.commit()
-    db.refresh(config)
-    
-    return ResponseModel(
-        code=200,
-        message="AI配置已激活",
-        data=None
-    )
+    try:
+        config = db.query(AIConfig).filter(AIConfig.id == config_id).first()
+        if not config:
+            raise HTTPException(status_code=404, detail="AI配置不存在")
+
+        config.is_active = True
+        db.commit()
+        db.refresh(config)
+
+        return ResponseModel(
+            code=200,
+            message="AI配置已激活",
+            data=None
+        )
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"AI配置激活失败: {str(exc)}",
+        )
 
 @router.post("/{config_id}/deactivate", response_model=ResponseModel)
 async def deactivate_ai_config(
     config_id: int,
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """停用AI配置"""
-    
-    config = db.query(AIConfig).filter(AIConfig.id == config_id).first()
-    if not config:
-        raise HTTPException(status_code=404, detail="AI配置不存在")
-    
-    config.is_active = False
-    db.commit()
-    db.refresh(config)
-    
-    return ResponseModel(
-        code=200,
-        message="AI配置已停用",
-        data=None
-    )
+    try:
+        config = db.query(AIConfig).filter(AIConfig.id == config_id).first()
+        if not config:
+            raise HTTPException(status_code=404, detail="AI配置不存在")
+
+        config.is_active = False
+        db.commit()
+        db.refresh(config)
+
+        return ResponseModel(
+            code=200,
+            message="AI配置已停用",
+            data=None
+        )
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"AI配置停用失败: {str(exc)}",
+        )

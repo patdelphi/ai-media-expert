@@ -64,7 +64,7 @@ class AuthService {
     formData.append('username', data.username);
     formData.append('password', data.password);
 
-    const response = await fetch(`${apiService['api'].defaults.baseURL}/auth/login`, {
+    const response = await fetch(`${apiService.getBaseUrl()}/auth/login`, {
       method: 'POST',
       body: formData,
     });
@@ -101,18 +101,19 @@ class AuthService {
 
   // 刷新token
   async refreshToken(refreshToken: string): Promise<ApiResponse<TokenResponse>> {
-    const response = await apiService.post('/auth/refresh', {
-      refresh_token: refreshToken,
-    });
+    const payload = await apiService.refreshAuthToken(refreshToken);
 
-    if (response.code === 200) {
-      const { access_token, refresh_token, user } = response.data;
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
-      localStorage.setItem('user', JSON.stringify(user));
+    localStorage.setItem('access_token', payload.access_token);
+    localStorage.setItem('refresh_token', payload.refresh_token);
+    if (payload.user) {
+      localStorage.setItem('user', JSON.stringify(payload.user));
     }
 
-    return response;
+    return {
+      code: 200,
+      message: 'Token refreshed successfully',
+      data: payload as TokenResponse,
+    };
   }
 
   // 获取当前用户信息

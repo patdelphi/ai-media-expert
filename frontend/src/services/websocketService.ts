@@ -91,8 +91,16 @@ class WebSocketService {
       
       this.isConnecting = true;
       
-      // 构建WebSocket URL
-      const wsUrl = API_BASE_URL.replace('http', 'ws') + `/websocket/ws/${userId}`;
+      // WebSocket 改为通过 token 认证，避免暴露用户 ID 并防止伪造连接。
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        this.isConnecting = false;
+        reject(new Error('缺少访问令牌，无法建立 WebSocket 连接'));
+        return;
+      }
+
+      const wsBaseUrl = API_BASE_URL.replace(/^http/, 'ws');
+      const wsUrl = `${wsBaseUrl}/websocket/ws?token=${encodeURIComponent(token)}`;
       
       try {
         this.ws = new WebSocket(wsUrl);

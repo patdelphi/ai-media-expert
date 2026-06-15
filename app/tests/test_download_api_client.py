@@ -130,8 +130,25 @@ class TestDownloadAPIClient:
             assert result is not None
     
     @pytest.mark.asyncio
-    async def test_download_file_success(self, client):
+    async def test_download_file_success(self, client, tmp_path):
         """测试文件下载成功"""
+        class DummyAioFile:
+            def __init__(self, path: Path):
+                self._file = open(path, "wb")
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                self._file.close()
+                return False
+
+            async def write(self, data: bytes):
+                self._file.write(data)
+
+        def dummy_open(path, mode="rb", *args, **kwargs):
+            return DummyAioFile(Path(path))
+
         class DummyResponse:
             def __init__(self, chunks):
                 self._chunks = chunks
@@ -157,20 +174,35 @@ class TestDownloadAPIClient:
         chunks = [b"abc", b"defg"]
         response = DummyResponse(chunks)
 
-        with patch.object(client.client, "stream", return_value=DummyStream(response)):
-            out = Path("downloads") / "test_download.bin"
-            out.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                path = await client.download_file("http://example.com/file.bin", str(out))
-                assert Path(path).exists()
-                assert Path(path).read_bytes() == b"".join(chunks)
-            finally:
-                if out.exists():
-                    out.unlink()
+        out = tmp_path / "test_download.bin"
+        with (
+            patch.object(client.client, "stream", return_value=DummyStream(response)),
+            patch("app.services.download_api_client.aiofiles.open", side_effect=dummy_open),
+        ):
+            path = await client.download_file("http://example.com/file.bin", str(out))
+            assert Path(path).exists()
+            assert Path(path).read_bytes() == b"".join(chunks)
     
     @pytest.mark.asyncio
-    async def test_download_file_with_progress_callback(self, client):
+    async def test_download_file_with_progress_callback(self, client, tmp_path):
         """测试带进度回调的文件下载"""
+        class DummyAioFile:
+            def __init__(self, path: Path):
+                self._file = open(path, "wb")
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                self._file.close()
+                return False
+
+            async def write(self, data: bytes):
+                self._file.write(data)
+
+        def dummy_open(path, mode="rb", *args, **kwargs):
+            return DummyAioFile(Path(path))
+
         class DummyResponse:
             def __init__(self, chunks):
                 self._chunks = chunks
@@ -200,14 +232,12 @@ class TestDownloadAPIClient:
         def cb(downloaded, total):
             calls.append((downloaded, total))
 
-        with patch.object(client.client, "stream", return_value=DummyStream(response)):
-            out = Path("downloads") / "test_progress.bin"
-            out.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                await client.download_file("http://example.com/file.bin", str(out), progress_callback=cb)
-            finally:
-                if out.exists():
-                    out.unlink()
+        out = tmp_path / "test_progress.bin"
+        with (
+            patch.object(client.client, "stream", return_value=DummyStream(response)),
+            patch("app.services.download_api_client.aiofiles.open", side_effect=dummy_open),
+        ):
+            await client.download_file("http://example.com/file.bin", str(out), progress_callback=cb)
 
         assert calls
         assert calls[-1][0] == sum(len(c) for c in chunks)

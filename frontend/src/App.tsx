@@ -1,21 +1,27 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import UserMenu from './components/UserMenu';
 // import { BreadcrumbItem } from './types';
 
-// 页面组件导入
-import Dashboard from './pages/Dashboard';
-import VideoUpload from './pages/VideoUpload';
-import VideoDownload from './pages/VideoDownload';
-import VideoList from './pages/VideoList';
-import VideoAnalysis from './pages/VideoAnalysis';
-import SystemConfig from './pages/SystemConfig';
-import Profile from './pages/Profile';
-import Settings from './pages/Settings';
-import Login from './pages/Login';
-import Register from './pages/Register';
+// 页面按路由懒加载，减少首屏主包体积。
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const VideoUpload = lazy(() => import('./pages/VideoUpload'));
+const VideoDownload = lazy(() => import('./pages/VideoDownload'));
+const VideoList = lazy(() => import('./pages/VideoList'));
+const VideoAnalysis = lazy(() => import('./pages/VideoAnalysis'));
+const SystemConfig = lazy(() => import('./pages/SystemConfig'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+
+const RouteLoading: React.FC = () => (
+  <div className="flex items-center justify-center min-h-[40vh] text-gray-500">
+    页面加载中...
+  </div>
+);
 
 const App: React.FC = () => {
   const location = useLocation();
@@ -62,10 +68,12 @@ const App: React.FC = () => {
   if (isAuthPage) {
     return (
     <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-      </Routes>
+      <Suspense fallback={<RouteLoading />}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+        </Routes>
+      </Suspense>
     </AuthProvider>
   );
   }
@@ -154,49 +162,51 @@ const App: React.FC = () => {
         {/* 右侧主内容区 */}
         <div className="flex-1">
           {/* 路由内容 */}
-          <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            } />
-            <Route path="/profile" element={
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            } />
-            <Route path="/settings" element={
-              <ProtectedRoute>
-                <Settings />
-              </ProtectedRoute>
-            } />
-            <Route path="/video/upload" element={
-              <ProtectedRoute>
-                <VideoUpload />
-              </ProtectedRoute>
-            } />
-            <Route path="/video/download" element={
-              <ProtectedRoute>
-                <VideoDownload />
-              </ProtectedRoute>
-            } />
-            <Route path="/video/list" element={
-              <ProtectedRoute>
-                <VideoList />
-              </ProtectedRoute>
-            } />
-            <Route path="/video/analysis" element={
-              <ProtectedRoute>
-                <VideoAnalysis />
-              </ProtectedRoute>
-            } />
-            <Route path="/system/config" element={
-              <ProtectedRoute requireRoles={['admin']}>
-                <SystemConfig />
-              </ProtectedRoute>
-            } />
-          </Routes>
+          <Suspense fallback={<RouteLoading />}>
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/profile" element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              } />
+              <Route path="/settings" element={
+                <ProtectedRoute>
+                  <Settings />
+                </ProtectedRoute>
+              } />
+              <Route path="/video/upload" element={
+                <ProtectedRoute>
+                  <VideoUpload />
+                </ProtectedRoute>
+              } />
+              <Route path="/video/download" element={
+                <ProtectedRoute>
+                  <VideoDownload />
+                </ProtectedRoute>
+              } />
+              <Route path="/video/list" element={
+                <ProtectedRoute>
+                  <VideoList />
+                </ProtectedRoute>
+              } />
+              <Route path="/video/analysis" element={
+                <ProtectedRoute>
+                  <VideoAnalysis />
+                </ProtectedRoute>
+              } />
+              <Route path="/system/config" element={
+                <ProtectedRoute requireRoles={['admin']}>
+                  <SystemConfig />
+                </ProtectedRoute>
+              } />
+            </Routes>
+          </Suspense>
         </div>
       </main>
       </div>

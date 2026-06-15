@@ -3,12 +3,48 @@
 统一管理应用的所有配置项，支持环境变量和配置文件。
 """
 
-import os
+import json
 from pathlib import Path
 from typing import List, Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _parse_string_list(value: object) -> List[str]:
+    """兼容 JSON 数组和逗号分隔两种列表配置格式。"""
+    if value is None:
+        return []
+
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    if isinstance(value, str):
+        raw_value = value.strip()
+        if not raw_value:
+            return []
+
+        if raw_value.startswith("["):
+            try:
+                parsed = json.loads(raw_value)
+            except json.JSONDecodeError:
+                parsed = None
+            else:
+                if isinstance(parsed, list):
+                    return [
+                        str(item).strip()
+                        for item in parsed
+                        if str(item).strip()
+                    ]
+
+        items = []
+        for item in raw_value.split(","):
+            cleaned_item = item.strip().strip("[]").strip().strip("\"'")
+            if cleaned_item:
+                items.append(cleaned_item)
+        return items
+
+    return [str(value).strip()]
 
 
 class Settings(BaseSettings):
@@ -98,11 +134,16 @@ class Settings(BaseSettings):
     
     # 安全配置
     cors_origins: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:3001", "http://localhost:8080"],
+        default=[
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:5173",
+            "http://localhost:8080",
+        ],
         validation_alias="CORS_ORIGINS",
     )
     allowed_hosts: List[str] = Field(
-        default=["localhost", "127.0.0.1"],
+        default=["localhost", "127.0.0.1", "test", "testserver"],
         validation_alias="ALLOWED_HOSTS",
     )
     
@@ -121,16 +162,12 @@ class Settings(BaseSettings):
     @field_validator("cors_origins", mode="before")
     def parse_cors_origins(cls, v):
         """解析CORS源列表"""
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
-        return v
+        return _parse_string_list(v)
     
     @field_validator("allowed_hosts", mode="before")
     def parse_allowed_hosts(cls, v):
         """解析允许的主机列表"""
-        if isinstance(v, str):
-            return [host.strip() for host in v.split(",")]
-        return v
+        return _parse_string_list(v)
     
     def create_directories(self):
         """创建必要的目录"""

@@ -2,8 +2,7 @@
 
 提供密码哈希、JWT令牌生成和验证等安全功能。
 """
-
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, Optional, Union
 
 from jose import JWTError, jwt
@@ -12,6 +11,11 @@ from cryptography.fernet import Fernet
 import base64
 
 from app.core.config import settings
+
+def utcnow() -> datetime:
+    """返回项目统一使用的 UTC 时间。"""
+    return datetime.now(UTC).replace(tzinfo=None)
+
 
 # 密码加密上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -31,9 +35,9 @@ def create_access_token(
         JWT访问令牌字符串
     """
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(
+        expire = utcnow() + timedelta(
             minutes=settings.jwt_access_token_expire_minutes
         )
     
@@ -102,9 +106,9 @@ def create_refresh_token(
         JWT刷新令牌字符串
     """
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(
+        expire = utcnow() + timedelta(
             days=settings.jwt_refresh_token_expire_days
         )
     
@@ -178,7 +182,7 @@ def generate_password_reset_token(email: str) -> str:
         密码重置令牌
     """
     delta = timedelta(hours=1)  # 1小时有效期
-    now = datetime.utcnow()
+    now = utcnow()
     expires = now + delta
     
     exp = expires.timestamp()
@@ -226,7 +230,7 @@ def generate_email_verification_token(email: str) -> str:
         邮箱验证令牌
     """
     delta = timedelta(hours=24)  # 24小时有效期
-    now = datetime.utcnow()
+    now = utcnow()
     expires = now + delta
     
     exp = expires.timestamp()

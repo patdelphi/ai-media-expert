@@ -2,8 +2,7 @@
 
 提供用户登录、注册、令牌刷新等认证功能。
 """
-
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -15,6 +14,7 @@ from app.core.security import (
     create_access_token,
     create_refresh_token,
     get_password_hash,
+    utcnow,
     verify_password,
     verify_token
 )
@@ -84,7 +84,7 @@ def register(
     return ResponseModel(
         code=200,
         message="User registered successfully",
-        data=UserResponse.from_orm(db_user)
+        data=UserResponse.model_validate(db_user)
     )
 
 
@@ -121,7 +121,7 @@ def login(
         )
     
     # 更新最后登录时间
-    user.last_login_at = datetime.utcnow()
+    user.last_login_at = utcnow()
     db.commit()
     
     # 创建访问令牌和刷新令牌
@@ -142,7 +142,7 @@ def login(
             refresh_token=refresh_token,
             token_type="bearer",
             expires_in=1800,  # 30分钟
-            user=UserResponse.from_orm(user)
+            user=UserResponse.model_validate(user)
         )
     )
 
@@ -195,7 +195,7 @@ def refresh_token(
             refresh_token=token_data.refresh_token,  # 保持原刷新令牌
             token_type="bearer",
             expires_in=1800,
-            user=UserResponse.from_orm(user)
+            user=UserResponse.model_validate(user)
         )
     )
 
@@ -231,5 +231,5 @@ def get_current_user_info(
     return ResponseModel(
         code=200,
         message="User info retrieved successfully",
-        data=UserResponse.from_orm(current_user)
+        data=UserResponse.model_validate(current_user)
     )

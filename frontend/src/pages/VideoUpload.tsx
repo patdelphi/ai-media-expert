@@ -3,6 +3,12 @@ import { FileItem } from '../types';
 import { formatFileSize, generateId } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
 import VideoPlayer from '../components/VideoPlayer';
+import type {
+  RecentFileApiItem,
+  RecentFileItem,
+  UploadNotification,
+  UploadNotificationType,
+} from './video-upload/types';
 
 const VideoUpload: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -13,8 +19,8 @@ const VideoUpload: React.FC = () => {
   const [uploadSpeed, setUploadSpeed] = useState('0 KB/s');
   const [remainingTime, setRemainingTime] = useState('--');
   const [isUploading, setIsUploading] = useState(false);
-  const [notification, setNotification] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null);
-  const [recentFiles, setRecentFiles] = useState<any[]>([]);
+  const [notification, setNotification] = useState<UploadNotification | null>(null);
+  const [recentFiles, setRecentFiles] = useState<RecentFileItem[]>([]);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [currentVideo, setCurrentVideo] = useState<{url: string, title: string} | null>(null);
   const [showTimeEditor, setShowTimeEditor] = useState(false);
@@ -30,31 +36,8 @@ const VideoUpload: React.FC = () => {
     };
   }, []);
 
-  // 检查认证状态
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">加载中...</div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold mb-4">请先登录</h2>
-          <p className="text-gray-600 mb-4">您需要登录后才能上传视频</p>
-          <a href="/login" className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-            前往登录
-          </a>
-        </div>
-      </div>
-    );
-  }
-
   // 显示通知
-  const showNotification = (type: 'success' | 'error' | 'info', message: string) => {
+  const showNotification = (type: UploadNotificationType, message: string) => {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 5000); // 5秒后自动消失
   };
@@ -63,19 +46,24 @@ const VideoUpload: React.FC = () => {
   const backendOrigin = apiBaseUrl.endsWith('/api/v1') ? apiBaseUrl.slice(0, -('/api/v1'.length)) : apiBaseUrl;
 
   // 加载最近上传的文件
-  const loadRecentFiles = async (): Promise<any[] | null> => {
+  const loadRecentFiles = async (): Promise<RecentFileItem[] | null> => {
     try {
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`${apiBaseUrl}/files/files`, {
         method: 'GET',
         mode: 'cors',
-        credentials: 'omit'
+        credentials: 'omit',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       
       if (response.ok) {
-        const result = await response.json();
+        const result = await response.json() as {
+          success?: boolean;
+          files?: RecentFileApiItem[];
+        };
         if (result.success) {
           // 只显示最近10个文件，并正确映射字段
-          const recent = result.files.slice(0, 10).map((file: any) => ({
+          const recent = (result.files ?? []).slice(0, 10).map((file) => ({
             id: file.id || `file-${Date.now()}-${Math.random()}`,
             name: file.name, // API返回的是name字段
             size: file.size,
@@ -97,6 +85,7 @@ const VideoUpload: React.FC = () => {
             video_codec: file.video_codec,
             frame_rate: file.frame_rate,
             aspect_ratio: file.aspect_ratio,
+            video_ratio: file.video_ratio,
             
             // 音频流信息
             audio_codec: file.audio_codec,
@@ -125,7 +114,7 @@ const VideoUpload: React.FC = () => {
 
     while (isMountedRef.current && Date.now() < deadline) {
       const list = await loadRecentFiles();
-      const target = list?.find((f: any) =>
+      const target = list?.find((f) =>
         f?.saved_name === savedName || f?.saved_filename === savedName || f?.path === savedName
       );
       if (target && target.duration && target.width && target.height) {
@@ -472,12 +461,14 @@ const VideoUpload: React.FC = () => {
     try {
       const customDate = new Date(customTime);
       const timestamp = Math.floor(customDate.getTime() / 1000);
+      const token = localStorage.getItem('access_token');
       
       // 调用API更新文件创建时间
       const response = await fetch(`${apiBaseUrl}/files/update-time/${editingFile.saved_name}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           file_created_at: timestamp
@@ -485,15 +476,15 @@ const VideoUpload: React.FC = () => {
       });
       
       if (response.ok) {
-        showNotification('文件创建时间已更新' as any, 'success' as any);
+        showNotification('success', '文件创建时间已更新');
         // 刷新文件列表
         // setRecentFiles();
         } else {
-          showNotification('更新失败' as any, 'error' as any);
+          showNotification('error', '更新失败');
         }
       } catch (error) {
         console.error('更新文件创建时间失败:', error);
-        showNotification('更新失败' as any, 'error' as any);
+        showNotification('error', '更新失败');
       }
     
     setShowTimeEditor(false);
@@ -508,27 +499,29 @@ const VideoUpload: React.FC = () => {
   };
 
   // 删除文件
-  const deleteRecentFile = async (filename: string) => {
-    if (!confirm(`确定要删除文件 "${filename}" 吗？`)) {
+  const deleteRecentFile = async (savedName: string, displayName: string) => {
+    const token = localStorage.getItem('access_token');
+    if (!confirm(`确定要删除文件 "${displayName}" 吗？`)) {
       return;
     }
     
     try {
-      const response = await fetch(`${apiBaseUrl}/files/files/${encodeURIComponent(filename)}`, {
+      const response = await fetch(`${apiBaseUrl}/files/files/${encodeURIComponent(savedName)}`, {
         method: 'DELETE',
         mode: 'cors',
-        credentials: 'omit'
+        credentials: 'omit',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       
       if (response.ok) {
-        showNotification('success', `文件 "${filename}" 已删除`);
+        showNotification('success', `文件 "${displayName}" 已删除`);
         await loadRecentFiles(); // 刷新列表
       } else {
         throw new Error('删除失败');
       }
     } catch (error) {
       console.error('删除文件失败:', error);
-      showNotification('error', `删除文件失败: ${filename}`);
+      showNotification('error', `删除文件失败: ${displayName}`);
     }
   };
 
@@ -545,8 +538,11 @@ const VideoUpload: React.FC = () => {
 
   useEffect(() => {
     // 页面加载时获取最近文件列表
+    if (!isAuthenticated) {
+      return;
+    }
     loadRecentFiles();
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     // 计算上传速度和剩余时间
@@ -565,6 +561,29 @@ const VideoUpload: React.FC = () => {
       return () => clearInterval(interval);
     }
   }, [isUploading, files]);
+
+  // 检查认证状态
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-lg">加载中...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold mb-4">请先登录</h2>
+          <p className="text-gray-600 mb-4">您需要登录后才能上传视频</p>
+          <a href="/login" className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+            前往登录
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -883,7 +902,7 @@ const VideoUpload: React.FC = () => {
 
                     <button
                       className="text-red-600 hover:text-red-800 text-sm px-3 py-1 rounded border border-red-300 hover:bg-red-50"
-                      onClick={() => deleteRecentFile(file.name)}
+                      onClick={() => deleteRecentFile(file.saved_name || file.saved_filename, file.name)}
                       title="删除文件"
                     >
                       <i className="fas fa-trash mr-1"></i>

@@ -1,5 +1,11 @@
 import React, { useEffect } from 'react';
-import * as echarts from 'echarts';
+import * as echarts from 'echarts/core';
+import { BarChart } from 'echarts/charts';
+import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
+
+// 仅注册当前页面实际使用的 ECharts 模块，缩小构建体积。
+echarts.use([BarChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 
 const Dashboard: React.FC = () => {
   // 初始化图表

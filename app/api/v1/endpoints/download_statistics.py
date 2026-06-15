@@ -18,7 +18,7 @@ from app.core.app_logging import download_logger
 router = APIRouter()
 
 
-@router.get("/statistics/overview", response_model=ResponseModel[dict])
+@router.get("/overview", response_model=ResponseModel[dict])
 def get_download_overview(
     days: int = Query(30, description="统计天数", ge=1, le=365),
     current_user: User = Depends(get_current_user),
@@ -137,7 +137,7 @@ def get_download_overview(
         )
 
 
-@router.get("/statistics/platforms", response_model=ResponseModel[List[dict]])
+@router.get("/platforms", response_model=ResponseModel[List[dict]])
 def get_platform_statistics(
     days: int = Query(30, description="统计天数", ge=1, le=365),
     current_user: User = Depends(get_current_user),
@@ -216,7 +216,7 @@ def get_platform_statistics(
         )
 
 
-@router.get("/statistics/trends", response_model=ResponseModel[dict])
+@router.get("/trends", response_model=ResponseModel[dict])
 def get_download_trends(
     days: int = Query(30, description="统计天数", ge=7, le=365),
     current_user: User = Depends(get_current_user),

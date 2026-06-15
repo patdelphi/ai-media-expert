@@ -25,7 +25,7 @@ class DownloadPlatform:
             setattr(self, key, value)
 
 
-@router.get("/platforms", response_model=ResponseModel[List[dict]])
+@router.get("", response_model=ResponseModel[List[dict]])
 def get_download_platforms(
     enabled_only: bool = Query(False, description="仅获取启用的平台"),
     current_user: User = Depends(get_current_user),
@@ -90,7 +90,7 @@ def get_download_platforms(
         )
 
 
-@router.get("/platforms/{platform_name}", response_model=ResponseModel[dict])
+@router.get("/{platform_name}", response_model=ResponseModel[dict])
 def get_download_platform(
     platform_name: str,
     current_user: User = Depends(get_current_user),
@@ -156,7 +156,7 @@ def get_download_platform(
         )
 
 
-@router.put("/platforms/{platform_name}/toggle", response_model=ResponseModel[dict])
+@router.put("/{platform_name}/toggle", response_model=ResponseModel[dict])
 def toggle_platform_status(
     platform_name: str,
     current_user: User = Depends(get_current_user),
@@ -222,7 +222,7 @@ def toggle_platform_status(
         )
 
 
-@router.get("/platforms/{platform_name}/features", response_model=ResponseModel[dict])
+@router.get("/{platform_name}/features", response_model=ResponseModel[dict])
 def get_platform_features(
     platform_name: str,
     current_user: User = Depends(get_current_user),

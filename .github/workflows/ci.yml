@@ -18,7 +18,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
-      - name: Type Check
+      - name: Compile Check
         run: |
           python -m compileall app
       - name: Mypy
@@ -30,6 +30,9 @@ jobs:
       - name: Test
         run: |
           python -m pytest -q
+      - name: Security Regression Tests
+        run: |
+          python -m pytest -q app/tests/test_route_security_baseline.py app/tests/test_registered_routes.py app/tests/test_file_manager_security.py app/tests/test_prompt_template_security.py app/tests/test_ai_config_security.py app/tests/test_websocket_auth.py
 
   backend_integration:
     if: github.event_name == 'workflow_dispatch'
@@ -81,6 +84,12 @@ jobs:
       - name: Lint
         run: |
           npm run lint
+      - name: Type Check
+        run: |
+          npx tsc --noEmit
+      - name: Test
+        run: |
+          npm run test
       - name: Build
         run: |
           npm run build

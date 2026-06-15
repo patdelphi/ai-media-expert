@@ -5,75 +5,72 @@
 
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_current_user
+from app.api.deps import get_current_user, get_db
 from app.core.app_logging import download_logger
-from app.services.websocket_manager import connection_manager, websocket_service
+from app.core.security import verify_token
 from app.models.user import User
+from app.services.websocket_manager import connection_manager, websocket_service
 
 router = APIRouter()
 
 
-@router.websocket("/ws/{user_id}")
+def _authenticate_websocket_token(token: Optional[str], db: Session) -> User:
+    """校验 WebSocket token 并返回用户。"""
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="缺少认证token")
+
+    payload = verify_token(token)
+    if not payload or payload.get("type") != "access":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效token")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效token")
+
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不可用")
+    return user
+
+
+@router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
-    user_id: str,
-    db: Session = Depends(get_db)
+    token: Optional[str] = None,
+    db: Session = Depends(get_db),
 ):
-    """WebSocket连接端点
-    
-    Args:
-        websocket: WebSocket连接对象
-        user_id: 用户ID
-        db: 数据库会话
-    """
-    # 生成连接ID
+    """带 token 验证的 WebSocket 连接端点。"""
     connection_id = str(uuid.uuid4())
-    
+    user_id: Optional[str] = None
+
     try:
-        # 验证用户是否存在（对于演示用户放宽验证）
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user and user_id not in ['demo_user', 'test_user']:
-            await websocket.close(code=4001, reason="用户不存在")
+        user = _authenticate_websocket_token(token, db)
+        user_id = str(user.id)
+
+        if websocket.application_state.name == "CONNECTED":
+            await websocket.close(code=4001, reason="连接状态异常")
             return
-        
-        # 如果是演示用户但数据库中不存在，创建临时用户信息
-        if not user:
-            user_info = {
-                'id': user_id,
-                'username': f'demo_{user_id}',
-                'email': f'{user_id}@demo.com'
-            }
-        else:
-            user_info = {
-                'id': user.id,
-                'username': user.username,
-                'email': user.email
-            }
-        
-        # 建立连接
+
         await connection_manager.connect(websocket, user_id, connection_id)
-        
+
         download_logger.info(
-            "WebSocket连接已建立",
+            "WebSocket连接已建立（token验证）",
             user_id=user_id,
             connection_id=connection_id,
-            username=user.username
+            username=user.username,
         )
-        
-        # 监听消息
+
         while True:
             try:
-                # 接收客户端消息
                 message = await websocket.receive_text()
-                
-                # 处理消息
                 await websocket_service.handle_client_message(
                     websocket, user_id, message
                 )
-                
             except WebSocketDisconnect:
                 download_logger.info(
                     "WebSocket连接主动断开",
@@ -88,7 +85,6 @@ async def websocket_endpoint(
                     connection_id=connection_id,
                     error=str(e)
                 )
-                # 发送错误消息给客户端
                 try:
                     await connection_manager.send_personal_message(
                         user_id,
@@ -99,10 +95,16 @@ async def websocket_endpoint(
                         },
                         connection_id
                     )
-                except:
-                    # 如果发送错误消息也失败，则断开连接
+                except Exception:
                     break
-    
+
+    except HTTPException as exc:
+        download_logger.warning(
+            "WebSocket认证失败",
+            connection_id=connection_id,
+            error=exc.detail,
+        )
+        await websocket.close(code=4001, reason=exc.detail)
     except Exception as e:
         download_logger.error(
             "WebSocket连接建立失败",
@@ -112,78 +114,17 @@ async def websocket_endpoint(
         )
         try:
             await websocket.close(code=4000, reason=f"连接失败: {str(e)}")
-        except:
+        except Exception:
             pass
-    
-    finally:
-        # 清理连接
-        connection_manager.disconnect(user_id, connection_id)
-        
-        download_logger.info(
-            "WebSocket连接已清理",
-            user_id=user_id,
-            connection_id=connection_id
-        )
 
-
-@router.websocket("/ws")
-async def websocket_endpoint_with_token(
-    websocket: WebSocket,
-    token: str = None
-):
-    """带token验证的WebSocket连接端点
-    
-    Args:
-        websocket: WebSocket连接对象
-        token: 认证token（通过查询参数传递）
-    """
-    connection_id = str(uuid.uuid4())
-    
-    try:
-        # 这里可以添加token验证逻辑
-        if not token:
-            await websocket.close(code=4001, reason="缺少认证token")
-            return
-        
-        # TODO: 实现token验证和用户获取逻辑
-        # 目前使用简单的模拟
-        user_id = "demo_user"  # 实际应该从token中解析
-        
-        # 建立连接
-        await connection_manager.connect(websocket, user_id, connection_id)
-        
-        download_logger.info(
-            "WebSocket连接已建立（token验证）",
-            user_id=user_id,
-            connection_id=connection_id
-        )
-        
-        # 监听消息
-        while True:
-            try:
-                message = await websocket.receive_text()
-                await websocket_service.handle_client_message(
-                    websocket, user_id, message
-                )
-            except WebSocketDisconnect:
-                break
-            except Exception as e:
-                download_logger.error(
-                    "WebSocket消息处理错误",
-                    user_id=user_id,
-                    error=str(e)
-                )
-                break
-    
-    except Exception as e:
-        download_logger.error(
-            "WebSocket连接失败",
-            connection_id=connection_id,
-            error=str(e)
-        )
-    
     finally:
-        connection_manager.disconnect(user_id, connection_id)
+        if user_id is not None:
+            connection_manager.disconnect(user_id, connection_id)
+            download_logger.info(
+                "WebSocket连接已清理",
+                user_id=user_id,
+                connection_id=connection_id
+            )
 
 
 @router.get("/ws/stats")

@@ -1,56 +1,43 @@
-import os
-
-import httpx
 import pytest
-from sqlalchemy.orm import Session
-from unittest.mock import Mock
 
-from app.api import deps
-from app.app import app
-from app.models.user import User
+from app.api.v1.endpoints.simple_upload import simple_upload
+from app.tests.factories import create_user
+
+
+class DummyUploadFile:
+    def __init__(self, *, filename: str, content_type: str, data: bytes) -> None:
+        self.filename = filename
+        self.content_type = content_type
+        self.size = len(data)
+        self._data = data
+        self._offset = 0
+
+    async def read(self, size: int = -1) -> bytes:
+        if self._offset >= len(self._data):
+            return b""
+        if size is None or size < 0:
+            chunk = self._data[self._offset :]
+            self._offset = len(self._data)
+            return chunk
+        chunk = self._data[self._offset : self._offset + size]
+        self._offset += len(chunk)
+        return chunk
 
 
 @pytest.mark.asyncio
-async def test_simple_upload_success(tmp_path) -> None:
-    def override_get_current_user() -> User:
-        user = User(email="test@example.com", hashed_password="x")
-        user.id = 1
-        user.is_active = True
-        return user
+async def test_simple_upload_success(override_db, temp_upload_dir, tmp_path) -> None:
+    user = create_user(override_db, email="test@example.com")
+    upload = DummyUploadFile(filename="sample.mp4", content_type="video/mp4", data=b"dummy")
 
-    def override_get_db() -> Session:
-        return Mock(spec=Session)
+    resp = await simple_upload(
+        file=upload,
+        title="t",
+        description="d",
+        db=override_db,
+        current_user=user,
+    )
 
-    app.dependency_overrides[deps.get_current_user] = override_get_current_user
-    app.dependency_overrides[deps.get_db] = override_get_db
-
-    file_path = tmp_path / "sample.mp4"
-    file_path.write_bytes(b"dummy")
-
-    try:
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            resp = await client.post(
-                "/api/v1/simple-upload/simple",
-                files={"file": ("sample.mp4", file_path.read_bytes(), "video/mp4")},
-                data={"title": "t", "description": "d"},
-            )
-
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body.get("code") == 200
-        assert body.get("data", {}).get("file_path")
-
-        saved_path = body["data"]["file_path"]
-        assert os.path.exists(saved_path)
-
-    finally:
-        app.dependency_overrides.clear()
-        try:
-            if "saved_path" in locals() and os.path.exists(saved_path):
-                os.remove(saved_path)
-        except Exception:
-            pass
+    assert getattr(resp, "code", None) == 200
+    assert resp.data.get("file_path")
+    assert resp.data["file_path"].startswith(str(temp_upload_dir))
 

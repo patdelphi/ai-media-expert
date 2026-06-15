@@ -17,6 +17,30 @@ async def test_health_check() -> None:
 
 
 @pytest.mark.asyncio
+async def test_liveness_check() -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.get("/health/liveness")
+
+    assert resp.status_code == 200
+    assert resp.json().get("status") == "alive"
+
+
+@pytest.mark.asyncio
+async def test_readiness_check() -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.get("/health/readiness")
+
+    assert resp.status_code == 200
+    assert resp.json().get("status") == "ready"
+
+
+@pytest.mark.asyncio
 async def test_root() -> None:
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
@@ -28,5 +52,6 @@ async def test_root() -> None:
     data = resp.json()
     assert data.get("message")
     assert data.get("docs") == "/docs"
-    assert data.get("health") == "/health"
+    assert data.get("health") == "/health/liveness"
+    assert data.get("readiness") == "/health/readiness"
 
