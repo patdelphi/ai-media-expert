@@ -637,6 +637,45 @@
 
 ## 2026-06-16 排查 Mimo 视频理解执行报错
 
+---
+
+## 2026-06-17 更新相关文档并尝试提交推送
+
+### 用户问题
+- 用户确认百炼接口问题已处理完成，要求：
+  - 更新相关文档
+  - 执行 `commit`
+  - 执行 `push`
+
+### 已执行内容
+- 更新 `"Docs/changelog.md"`：
+  - 补充本轮 `provider` 收口说明
+  - 补充百炼完整 `api_base` 写法说明
+  - 补充 `upload_api_key` 与 `api_key` 的职责边界
+- 更新 `"Docs/video-analysis-development-plan.md"`：
+  - 将支持的 `provider` 收敛为 `openai`、`anthropic`、`custom`
+  - 补充百炼 OpenAI 兼容模式完整地址要求
+  - 补充 `Qwen + 文件上传` 的 `upload_api_key` 说明
+- 更新 `"Docs/11-配置管理规范文档.md"`：
+  - 新增 AI API 运行时配置补充章节
+  - 明确百炼 `api_base` 必须为完整 `chat/completions` 地址
+  - 明确双 Key 使用边界
+- 重新执行前端聚焦测试：
+  - `npm test -- "src/services/aiConfig.test.ts" "src/pages/SystemConfig.test.tsx"`：通过
+- 已创建提交：
+  - `523f4b4`
+  - `fix(ai-config): narrow providers and clarify bailian setup`
+
+### 推送结果
+- 执行 `git push origin main` 时失败
+- 失败原因：
+  - 远端 `main` 存在本地尚未获取的新提交
+  - 当前推送被拒绝，提示需要先 `fetch/pull` 再推送
+- 根据用户规则，助手**未自动执行** `git pull`
+
+### 记录时间
+- 2026-06-17 00:16:34
+
 ### 用户问题
 - Mimo API 已配置完成，但执行时报错，希望对照官方视频理解文档排查
 
