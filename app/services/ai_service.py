@@ -32,6 +32,115 @@ class AIService:
     def __init__(self):
         self.timeout = 300  # 5分钟超时
         self.max_retries = 3
+
+    def supports_video_understanding_model(self, model_name: Optional[str]) -> bool:
+        """判断模型是否支持直接接收视频内容。"""
+        if not model_name:
+            return False
+
+        normalized_model = model_name.lower()
+        return normalized_model in {"glm-4.5v", "glm-4v", "mimo-v2.5"}
+
+    def _update_debug_info(self, analysis: VideoAnalysis, **updates: Any) -> None:
+        """通过重新赋值的方式更新 JSON 调试信息，确保 ORM 能持久化变更。"""
+        merged_debug_info = dict(analysis.debug_info or {})
+        merged_debug_info.update(updates)
+        analysis.debug_info = merged_debug_info
+
+    def _sanitize_request_data_for_debug(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
+        """裁剪调试信息中的超长字段，避免 Base64 请求撑爆数据库。"""
+        sanitized_request_data: Dict[str, Any] = {
+            "model": request_data.get("model"),
+            "temperature": request_data.get("temperature"),
+            "stream": request_data.get("stream"),
+        }
+
+        if "max_tokens" in request_data:
+            sanitized_request_data["max_tokens"] = request_data.get("max_tokens")
+        if "max_completion_tokens" in request_data:
+            sanitized_request_data["max_completion_tokens"] = request_data.get("max_completion_tokens")
+
+        sanitized_messages = []
+        for message in request_data.get("messages", []):
+            sanitized_message: Dict[str, Any] = {"role": message.get("role")}
+            content = message.get("content")
+
+            if isinstance(content, str):
+                sanitized_message["content"] = content
+            elif isinstance(content, list):
+                sanitized_content = []
+                for item in content:
+                    if not isinstance(item, dict):
+                        sanitized_content.append(item)
+                        continue
+
+                    sanitized_item = dict(item)
+                    video_url = ((sanitized_item.get("video_url") or {}).get("url"))
+                    if isinstance(video_url, str) and video_url.startswith("data:"):
+                        sanitized_item["video_url"] = {
+                            "url": f"{video_url[:64]}... [length={len(video_url)}]"
+                        }
+                    sanitized_content.append(sanitized_item)
+                sanitized_message["content"] = sanitized_content
+            else:
+                sanitized_message["content"] = content
+
+            sanitized_messages.append(sanitized_message)
+
+        sanitized_request_data["messages"] = sanitized_messages
+        return sanitized_request_data
+
+    def _build_openai_compatible_request(
+        self,
+        ai_config: AIConfig,
+        prompt: str,
+        analysis: VideoAnalysis,
+    ) -> Dict[str, Any]:
+        """构建 OpenAI 兼容请求体，并兼容不同供应商的视频参数差异。"""
+        normalized_model = (ai_config.model or "").lower()
+        supports_video = self.supports_video_understanding_model(ai_config.model)
+        video_content = self._prepare_video_content(analysis, ai_config.model) if supports_video else None
+
+        if video_content:
+            api_logger.info(f"Using video understanding mode with {video_content['type']}")
+            user_content: Any = [
+                video_content,
+                {
+                    "type": "text",
+                    "text": prompt,
+                },
+            ]
+        elif supports_video:
+            transmission_method = getattr(analysis, "transmission_method", "url")
+            raise ValueError(
+                f"视频模型 {ai_config.model} 未能生成有效的视频内容，当前传输方式为 {transmission_method}"
+            )
+        else:
+            user_content = prompt
+
+        request_data: Dict[str, Any] = {
+            "model": ai_config.model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": user_content,
+                }
+            ],
+            "temperature": ai_config.temperature or 0.7,
+            "stream": True,
+        }
+
+        if normalized_model.startswith("mimo"):
+            request_data["max_completion_tokens"] = ai_config.max_tokens or 4000
+        else:
+            request_data["max_tokens"] = ai_config.max_tokens or 4000
+
+        if normalized_model in {"glm-4.5v", "glm-4v"}:
+            request_data["thinking"] = {
+                "type": "enabled"
+            }
+
+        return request_data
     
     async def call_ai_api(
         self,
@@ -80,10 +189,7 @@ class AIService:
             }
             
             # 如果已有调试信息，合并而不是覆盖
-            if analysis.debug_info:
-                analysis.debug_info.update(initial_debug_info)
-            else:
-                analysis.debug_info = initial_debug_info
+            self._update_debug_info(analysis, **initial_debug_info)
             
             db.commit()
             
@@ -121,12 +227,8 @@ class AIService:
     ) -> Generator[str, None, None]:
         """调用OpenAI兼容的API"""
         
-        # 构建请求URL
-        api_base = ai_config.api_base or "https://api.openai.com/v1"
-        if not api_base.endswith('/chat/completions'):
-            api_url = f"{api_base.rstrip('/')}/chat/completions"
-        else:
-            api_url = api_base
+        # 构建请求URL：尊重配置中的完整地址，不再自动拼接路径
+        api_url = ai_config.api_base or "https://api.openai.com/v1/chat/completions"
         
         # 构建请求头
         api_key = ai_config.api_key
@@ -138,72 +240,8 @@ class AIService:
             "Content-Type": "application/json"
         }
         
-        # 构建请求体 - 支持GLM-4.5V的视频分析格式
-        if ai_config.model.lower() in ['glm-4.5v', 'glm-4v']:
-            # 准备视频内容（URL或Base64）
-            video_content = self._prepare_video_content(analysis)
-            
-            if video_content:
-                api_logger.info(f"Using GLM video understanding mode with {video_content['type']}")
-                # 包含视频内容的多模态消息格式
-                request_data = {
-                    "model": ai_config.model,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                video_content,
-                                {
-                                    "type": "text",
-                                    "text": prompt
-                                }
-                            ]
-                        }
-                    ],
-                    "max_tokens": ai_config.max_tokens or 4000,
-                    "temperature": ai_config.temperature or 0.7,
-                    "stream": True,
-                    "thinking": {
-                        "type": "enabled"
-                    }
-                }
-            else:
-                api_logger.warning(f"GLM video model {ai_config.model} used without video content, falling back to text mode")
-                # 仅文本的消息格式（兼容现有逻辑）
-                request_data = {
-                    "model": ai_config.model,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": prompt
-                                }
-                            ]
-                        }
-                    ],
-                    "max_tokens": ai_config.max_tokens or 4000,
-                    "temperature": ai_config.temperature or 0.7,
-                    "stream": True,
-                    "thinking": {
-                        "type": "enabled"
-                    }
-                }
-        else:
-            # 标准OpenAI格式
-            request_data = {
-                "model": ai_config.model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                "max_tokens": ai_config.max_tokens or 4000,
-                "temperature": ai_config.temperature or 0.7,
-                "stream": True
-            }
+        request_data = self._build_openai_compatible_request(ai_config, prompt, analysis)
+        debug_request_data = self._sanitize_request_data_for_debug(request_data)
         
         # 生成curl命令用于调试
         curl_headers = []
@@ -213,25 +251,17 @@ class AIService:
             else:
                 curl_headers.append(f'-H "{key}: {value}"')
         
-        curl_command = f"curl -X POST {api_url} {' '.join(curl_headers)} -d '{json.dumps(request_data, ensure_ascii=False)}'"
+        curl_command = f"curl -X POST {api_url} {' '.join(curl_headers)} -d '{json.dumps(debug_request_data, ensure_ascii=False)}'"
         
         # 更新调试信息
-        if analysis.debug_info:
-            analysis.debug_info.update({
-                "api_url": api_url,
-                "curl_command": curl_command,
-                "request_headers": {k: ("***" if k.lower() == "authorization" else v) for k, v in headers.items()},
-                "request_data": request_data,
-                "status": "sending_request"
-            })
-        else:
-            analysis.debug_info = {
-                "api_url": api_url,
-                "curl_command": curl_command,
-                "request_headers": {k: ("***" if k.lower() == "authorization" else v) for k, v in headers.items()},
-                "request_data": request_data,
-                "status": "sending_request"
-            }
+        self._update_debug_info(
+            analysis,
+            api_url=api_url,
+            curl_command=curl_command,
+            request_headers={k: ("***" if k.lower() == "authorization" else v) for k, v in headers.items()},
+            request_data=debug_request_data,
+            status="sending_request",
+        )
         db.commit()
         
         api_logger.info(f"Calling OpenAI API: {api_url}")
@@ -250,12 +280,13 @@ class AIService:
                     error_msg = f"API request failed: {response.status_code} - {error_text.decode()}"
                     
                     # 更新错误调试信息
-                    analysis.debug_info.update({
-                        "status": "error",
-                        "error_code": response.status_code,
-                        "error_message": error_msg,
-                        "response_headers": dict(response.headers)
-                    })
+                    self._update_debug_info(
+                        analysis,
+                        status="error",
+                        error_code=response.status_code,
+                        error_message=error_msg,
+                        response_headers=dict(response.headers),
+                    )
                     db.commit()
                     
                     raise Exception(error_msg)
@@ -264,20 +295,13 @@ class AIService:
                 analysis.api_response_time = datetime.now()
                 
                 # 更新调试信息
-                if analysis.debug_info:
-                    analysis.debug_info.update({
-                        "status": "receiving_response",
-                        "response_status_code": response.status_code,
-                        "response_headers": dict(response.headers),
-                        "response_start_time": analysis.api_response_time.isoformat()
-                    })
-                else:
-                    analysis.debug_info = {
-                        "status": "receiving_response",
-                        "response_status_code": response.status_code,
-                        "response_headers": dict(response.headers),
-                        "response_start_time": analysis.api_response_time.isoformat()
-                    }
+                self._update_debug_info(
+                    analysis,
+                    status="receiving_response",
+                    response_status_code=response.status_code,
+                    response_headers=dict(response.headers),
+                    response_start_time=analysis.api_response_time.isoformat(),
+                )
                 db.commit()
                 
                 full_content = ""
@@ -298,6 +322,9 @@ class AIService:
                                 
                                 if "delta" in choice and "content" in choice["delta"]:
                                     content_chunk = choice["delta"]["content"]
+                                    if not isinstance(content_chunk, str) or not content_chunk:
+                                        continue
+
                                     full_content += content_chunk
                                     completion_tokens += len(content_chunk) // 4  # 粗略估算
                                     
@@ -306,27 +333,16 @@ class AIService:
                                     analysis.total_tokens = analysis.prompt_tokens + completion_tokens
                                     
                                     # 更新实时调试信息（保留之前的信息）
-                                    if analysis.debug_info:
-                                        analysis.debug_info.update({
-                                            "status": "streaming",
-                                            "current_content_length": len(full_content),
-                                            "current_completion_tokens": completion_tokens,
-                                            "current_total_tokens": analysis.total_tokens,
-                                            "last_chunk_time": datetime.now().isoformat(),
-                                            "chunks_received": analysis.debug_info.get("chunks_received", 0) + 1
-                                        })
-                                    else:
-                                        # 如果debug_info为空，初始化基本信息
-                                        analysis.debug_info = {
-                                            "status": "streaming",
-                                            "current_content_length": len(full_content),
-                                            "current_completion_tokens": completion_tokens,
-                                            "current_total_tokens": analysis.total_tokens,
-                                            "last_chunk_time": datetime.now().isoformat(),
-                                            "chunks_received": 1,
-                                            "api_url": "N/A",
-                                            "curl_command": "调试信息初始化时丢失"
-                                        }
+                                    existing_debug_info = dict(analysis.debug_info or {})
+                                    self._update_debug_info(
+                                        analysis,
+                                        status="streaming",
+                                        current_content_length=len(full_content),
+                                        current_completion_tokens=completion_tokens,
+                                        current_total_tokens=analysis.total_tokens,
+                                        last_chunk_time=datetime.now().isoformat(),
+                                        chunks_received=existing_debug_info.get("chunks_received", 0) + 1,
+                                    )
                                     
                                     db.commit()
                                     
@@ -348,15 +364,12 @@ class AIService:
                 }
                 
                 # 合并调试信息，保留之前的curl命令、api_url等重要信息
-                if analysis.debug_info:
-                    analysis.debug_info.update(final_debug_info)
-                else:
-                    # 如果debug_info为空，添加基本信息
+                if not analysis.debug_info:
                     final_debug_info.update({
                         "api_url": api_url,
                         "curl_command": "调试信息在流式处理中丢失"
                     })
-                    analysis.debug_info = final_debug_info
+                self._update_debug_info(analysis, **final_debug_info)
                 db.commit()
                 
                 api_logger.info(f"OpenAI API call completed successfully. Tokens: {analysis.total_tokens}")
@@ -473,7 +486,7 @@ class AIService:
                 
                 api_logger.info(f"Anthropic API call completed successfully. Tokens: {analysis.total_tokens}")
     
-    def _prepare_video_content(self, analysis: VideoAnalysis) -> Optional[Dict[str, Any]]:
+    def _prepare_video_content(self, analysis: VideoAnalysis, model_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """根据传输方式准备视频内容
         
         Args:
@@ -485,18 +498,23 @@ class AIService:
         try:
             transmission_method = getattr(analysis, 'transmission_method', 'url')
             api_logger.info(f"使用传输方式: {transmission_method}")
+            normalized_model = (model_name or "").lower()
             
             if transmission_method == 'url':
                 # URL方式
                 video_url = getattr(analysis, 'runtime_video_url', None) or getattr(analysis, 'video_url', None)
                 if video_url:
                     api_logger.info("使用URL方式发送受保护媒体流")
-                    return {
+                    video_content = {
                         "type": "video_url",
                         "video_url": {
                             "url": video_url
                         }
                     }
+                    if normalized_model.startswith("mimo"):
+                        video_content["fps"] = 2
+                        video_content["media_resolution"] = "default"
+                    return video_content
                 else:
                     api_logger.warning("URL方式选择但未找到video_url，回退到Base64")
                     transmission_method = 'base64'  # 回退到Base64
@@ -517,14 +535,19 @@ class AIService:
                     base64_data = video_base64_encoder.encode_video_to_base64(video_file_path, compress=True)
                     if base64_data:
                         api_logger.info("Base64编码成功")
-                        # 构建data URL格式，符合GLM API要求
-                        data_url = f"data:video/mp4;base64,{base64_data}"
-                        return {
+                        mime_type = video_base64_encoder.get_mime_type(video_file_path)
+                        # 构建data URL格式，符合 Mimo / GLM 视频输入要求
+                        data_url = f"data:{mime_type};base64,{base64_data}"
+                        video_content = {
                             "type": "video_url",
                             "video_url": {
                                 "url": data_url
                             }
                         }
+                        if normalized_model.startswith("mimo"):
+                            video_content["fps"] = 2
+                            video_content["media_resolution"] = "default"
+                        return video_content
                     else:
                         api_logger.error("Base64编码失败")
                         return None

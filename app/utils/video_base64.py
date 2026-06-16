@@ -6,8 +6,9 @@
 用于解决GLM-4.5V视频分析中URL访问失败的问题。
 """
 
-import os
 import base64
+import mimetypes
+import os
 import subprocess
 import tempfile
 import time
@@ -22,8 +23,29 @@ class VideoBase64Encoder:
     """视频Base64编码器"""
     
     def __init__(self):
-        self.max_file_size = 10 * 1024 * 1024  # 10MB限制
+        # Mimo 官方限制为 Base64 字符串不超过 50MB，折算原始二进制约 37.5MB。
+        self.max_base64_payload_bytes = 50 * 1024 * 1024
+        self.max_raw_file_size = int(self.max_base64_payload_bytes * 3 / 4)
         self.ffmpeg_path = "ffmpeg"  # 假设ffmpeg在PATH中
+
+    def get_mime_type(self, video_path: str) -> str:
+        """根据视频文件推断 MIME 类型。"""
+        suffix = Path(video_path).suffix.lower()
+        mime_mapping = {
+            ".mp4": "video/mp4",
+            ".mov": "video/quicktime",
+            ".m4v": "video/x-m4v",
+            ".avi": "video/x-msvideo",
+            ".mkv": "video/x-matroska",
+            ".webm": "video/webm",
+        }
+        if suffix in mime_mapping:
+            return mime_mapping[suffix]
+
+        guessed_mime, _ = mimetypes.guess_type(video_path)
+        if guessed_mime and guessed_mime.startswith("video/"):
+            return guessed_mime
+        return "video/mp4"
     
     def check_ffmpeg_available(self) -> bool:
         """检查ffmpeg是否可用"""
@@ -163,9 +185,9 @@ class VideoBase64Encoder:
             final_video_path = video_path
             temp_file_created = False
             
-            if file_size > self.max_file_size and compress:
+            if file_size > self.max_raw_file_size and compress:
                 api_logger.info("文件过大，尝试压缩...")
-                compressed_path = self.compress_video(video_path, target_size_mb=8.0)
+                compressed_path = self.compress_video(video_path, target_size_mb=30.0)
                 
                 if compressed_path and compressed_path != video_path:
                     final_video_path = compressed_path
@@ -173,7 +195,7 @@ class VideoBase64Encoder:
                     
                     # 重新检查压缩后的文件大小
                     compressed_size = os.path.getsize(final_video_path)
-                    if compressed_size > self.max_file_size:
+                    if compressed_size > self.max_raw_file_size:
                         api_logger.warning(f"压缩后文件仍然过大: {compressed_size / (1024 * 1024):.2f}MB")
                         # 可以选择继续或者返回None
             
@@ -209,13 +231,14 @@ class VideoBase64Encoder:
             
             file_size = os.path.getsize(video_path)
             file_size_mb = file_size / (1024 * 1024)
+            raw_limit_mb = self.max_raw_file_size / (1024 * 1024)
             
-            if file_size_mb <= 5:
+            if file_size <= self.max_raw_file_size:
                 return True, f"文件大小适中: {file_size_mb:.2f}MB"
-            elif file_size_mb <= 20 and self.check_ffmpeg_available():
-                return True, f"文件较大但可压缩: {file_size_mb:.2f}MB"
+            elif self.check_ffmpeg_available():
+                return True, f"文件较大但可压缩至 Base64 上限以内: {file_size_mb:.2f}MB"
             else:
-                return False, f"文件过大: {file_size_mb:.2f}MB"
+                return False, f"文件过大且无法压缩: {file_size_mb:.2f}MB，当前原始文件建议不超过 {raw_limit_mb:.2f}MB"
                 
         except Exception as e:
             return False, f"检查失败: {e}"

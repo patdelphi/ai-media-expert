@@ -917,7 +917,7 @@ async def process_video_analysis(analysis_id: int, db: Session):
         api_logger.info(f"Processing analysis {analysis_id} with AI config {ai_config.name}")
         
         # 检查是否为视频理解模型，生成视频URL
-        if ai_config.model.lower() in ['glm-4.5v', 'glm-4v']:
+        if ai_service.supports_video_understanding_model(ai_config.model):
             try:
                 # 为视频理解模型生成可访问的视频URL
                 from app.core.config import settings
@@ -952,7 +952,7 @@ async def process_video_analysis(analysis_id: int, db: Session):
                 analysis.runtime_video_url = video_url
                 db.commit()
                 
-                api_logger.info(f"Generated protected media stream for GLM model: {filename}")
+                api_logger.info(f"Generated protected media stream for video model: {filename}")
                 api_logger.info(f"Video file path for Base64 fallback: {video_file_path}")
                 api_logger.info(f"Base URL source: {base_url} (ngrok: {settings.ngrok_url}, public: {settings.public_base_url})")
                 

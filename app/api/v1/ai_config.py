@@ -234,19 +234,17 @@ async def test_ai_config(
             "Content-Type": "application/json"
         }
         
+        api_base = config.api_base or ""
+
         # 根据不同provider构建不同的测试请求
-        if config.provider.lower() == "openai" or "chat/completions" in config.api_base:
+        if config.provider.lower() == "openai" or "chat/completions" in api_base:
             test_data = {
                 "model": config.model,
                 "messages": [{"role": "user", "content": "Hello"}],
                 "max_tokens": min(config.max_tokens or 10, 10),
                 "temperature": config.temperature or 0.7
             }
-            # 如果api_base已经包含完整路径，直接使用
-            if config.api_base.endswith('/chat/completions'):
-                test_url = config.api_base
-            else:
-                test_url = f"{config.api_base.rstrip('/')}/chat/completions"
+            test_url = api_base or "https://api.openai.com/v1/chat/completions"
         else:
             # 对于其他provider，使用通用测试
             test_data = {
@@ -255,11 +253,7 @@ async def test_ai_config(
                 "max_tokens": min(config.max_tokens or 10, 10),
                 "temperature": config.temperature or 0.7
             }
-            # 如果api_base已经包含完整路径，直接使用
-            if config.api_base.endswith('/completions'):
-                test_url = config.api_base
-            else:
-                test_url = f"{config.api_base.rstrip('/')}/completions"
+            test_url = api_base or "https://api.openai.com/v1/completions"
         
         # 发送测试请求
         async with httpx.AsyncClient(timeout=10.0) as client:

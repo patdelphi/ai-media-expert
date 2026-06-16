@@ -7,12 +7,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import AsyncGenerator
 
+import pytest
 from fastapi import BackgroundTasks
 
-from app.api.v1.endpoints.video_analysis import start_video_analysis
+from app.api.v1.endpoints.video_analysis import process_video_analysis, start_video_analysis
 from app.models.video import AIConfig
 from app.models.video_analysis import VideoAnalysis
+from app.services.ai_service import ai_service
 from app.schemas.video_analysis import AnalysisStartRequest
 from app.tests.factories import create_uploaded_file, create_user
 
@@ -63,3 +66,62 @@ def test_start_video_analysis_uses_video_owner_as_analysis_user(
     assert analysis is not None
     assert str(analysis.user_id) == str(uploaded_file.user_id)
     assert analysis.video_file_id == uploaded_file.id
+
+
+@pytest.mark.asyncio
+async def test_process_video_analysis_generates_runtime_video_url_for_mimo(
+    db_session,
+    temp_upload_dir: Path,
+    monkeypatch,
+) -> None:
+    """Mimo 视频模型应走视频理解分支，并生成运行时视频 URL。"""
+    user = create_user(db_session, email="mimo-analysis-owner@example.com")
+    video_path = temp_upload_dir / "mimo-source.mp4"
+    video_path.write_bytes(b"fake-video-content")
+
+    uploaded_file = create_uploaded_file(
+        db_session,
+        user=user,
+        original_filename="mimo-source.mp4",
+        saved_filename="mimo-source.mp4",
+        file_path=video_path,
+        file_size=video_path.stat().st_size,
+    )
+
+    ai_config = AIConfig(
+        name="mimo-config",
+        provider="custom",
+        api_key="test-key",
+        api_base="https://example.com/chat/completions",
+        model="mimo-v2.5",
+        is_active=True,
+    )
+    db_session.add(ai_config)
+    db_session.commit()
+    db_session.refresh(ai_config)
+
+    analysis = VideoAnalysis(
+        user_id=str(user.id),
+        video_file_id=uploaded_file.id,
+        prompt_content="请分析视频内容",
+        ai_config_id=ai_config.id,
+        status="pending",
+        progress=0,
+    )
+    db_session.add(analysis)
+    db_session.commit()
+    db_session.refresh(analysis)
+
+    async def fake_call_ai_api(*args, **kwargs) -> AsyncGenerator[str, None]:
+        yield "ok"
+
+    monkeypatch.setattr(ai_service, "call_ai_api", fake_call_ai_api)
+    monkeypatch.setattr("app.core.config.Settings.get_base_url", lambda self: "http://example.com")
+
+    await process_video_analysis(analysis.id, db_session)
+    db_session.refresh(analysis)
+
+    assert analysis.status == "completed"
+    assert analysis.video_url == "http://example.com/api/v1/files/stream/mimo-source.mp4"
+    assert analysis.runtime_video_url is not None
+    assert analysis.runtime_video_url.startswith("http://example.com/api/v1/files/stream/mimo-source.mp4?token=")

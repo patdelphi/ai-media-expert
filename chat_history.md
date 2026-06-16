@@ -101,6 +101,189 @@
 
 ---
 
+## 2026-06-16 先提交当前修改并整理下一批需求
+
+### 用户问题
+- 先提交当前已完成的修改
+- 下一批需求包括：
+  - 视频解析选择视频时增加分页，每页 `9` 个，按 `3x3` 排列
+  - 解析历史增加删除按钮，采用逻辑删除，不物理删除记录
+  - 系统设置中 AI API 设置页签后的数字显示不对
+
+### 已执行内容
+- 复核当前工作区，确认本次待提交主要为：
+  - AI 配置 `provider` 可编辑
+  - `api_base` 原样使用
+  - `Mimo` 视频理解与 Base64 适配
+  - 调试信息持久化修复
+  - 相关回归测试
+- 按用户要求准备先执行本次 Git 提交
+- 提交后准备为下一批 3 个需求整理 `"todo.md"` 再继续交互
+
+### 记录时间
+- 2026-06-16 22:03:14
+
+---
+
+## 2026-06-16 修复 Mimo Base64 传输链路
+
+### 用户问题
+- 页面明确选择了 `"base64"`，但模型返回内容仍像是没有真正看到视频
+
+### 根因定位
+- 前端请求和后端落库都已确认：
+  - `transmission_method` 实际为 `"base64"`
+- 当前问题不在前端，而在后端 Base64 链路：
+  - `"app/utils/video_base64.py"` 的本地适配阈值过低，只允许到约 `20MB`
+  - 但 Mimo 官方文档允许 Base64 字符串不超过 `50MB`，折算原始文件约 `37.5MB`
+  - 这会导致用户明明选择 `"base64"`，本地判断却先拒绝，再在上层静默退回纯文本
+- 另外还发现两处实现问题：
+  - Base64 Data URL 的 MIME 之前固定写成 `"video/mp4"`，对 `.mov` 等格式不准确
+  - `"debug_info"` 使用 JSON 原地 `update()`，ORM 不一定会持久化，导致请求细节经常丢失
+
+### 已执行内容
+- 修改 `"app/utils/video_base64.py"`：
+  - 将 Base64 可接受上限对齐到 Mimo 官方 `50MB` Base64 约束
+  - 原始文件阈值提升为约 `37.5MB`
+  - 大文件压缩目标调整为更合理的 `30MB`
+  - 新增基于文件后缀的 MIME 推断，如 `.mov -> video/quicktime`
+- 修改 `"app/services/ai_service.py"`：
+  - Mimo Base64 请求现在会携带正确 MIME 的 `data:{mime};base64,...`
+  - Mimo 视频块补充官方示例字段：
+    - `"fps": 2`
+    - `"media_resolution": "default"`
+  - 对视频模型不再允许“视频内容准备失败后静默回退纯文本”
+  - 新增调试信息合并函数，改为重新赋值，确保 `"debug_info"` 持久化
+  - 调试信息中的 `"request_data"` 改为可持久化的摘要版，避免完整 Base64 塞爆数据库
+- 更新回归测试 `"app/tests/test_ai_config_security.py"`：
+  - 验证 Mimo URL/Base64 请求格式
+  - 验证 `.mov` 文件会生成 `data:video/quicktime;base64,...`
+  - 验证 Base64 准备失败时直接报错，不再静默退回文本
+  - 验证 `"debug_info.request_data"` 可以持久化到数据库
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_ai_config_security.py" "app/tests/test_video_analysis_endpoints.py"`：通过
+- `python -m pytest -q "app/tests/test_video_analysis_history_list_fields.py"`：通过
+
+### 记录时间
+- 2026-06-16 21:53:08
+
+---
+
+## 2026-06-16 修复 Mimo 视频理解请求与流式解析
+
+### 用户问题
+- Mimo API 配置已完成，但执行视频理解时报错，希望按官方文档修复
+
+### 已执行内容
+- 修改 `"app/services/ai_service.py"`：
+  - 新增视频理解模型判断，已将 `"mimo-v2.5"` 纳入视频模型分支
+  - 抽取 OpenAI 兼容请求体构建逻辑
+  - 对 Mimo 视频理解改为按官方格式发送：
+    - `messages[].content` 同时包含 `"video_url"` 和 `"text"`
+    - 使用 `"max_completion_tokens"`，不再沿用 `"max_tokens"`
+  - 修复流式解析对 `delta.content = null` 的兼容，避免再次出现 `NoneType` 拼接异常
+- 修改 `"app/api/v1/endpoints/video_analysis.py"`：
+  - 解析任务入口不再只把 GLM 识别为视频模型
+  - `"mimo-v2.5"` 现在也会生成运行时视频 URL，并走视频理解分支
+- 新增/更新回归测试：
+  - `"app/tests/test_ai_config_security.py"`：
+    - 验证 Mimo 请求体包含 `"video_url"` + `"text"`
+    - 验证请求使用 `"max_completion_tokens"`
+    - 验证流式块中 `content=null` 时不会崩溃
+  - `"app/tests/test_video_analysis_endpoints.py"`：
+    - 验证 `"mimo-v2.5"` 解析任务会生成 `runtime_video_url`
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_ai_config_security.py" "app/tests/test_video_analysis_endpoints.py"`：通过
+- `python -m pytest -q "app/tests/test_video_analysis_history_list_fields.py"`：通过
+
+### 记录时间
+- 2026-06-16 21:39:25
+
+---
+
+## 2026-06-16 排查 Mimo 视频理解执行报错
+
+### 用户问题
+- Mimo API 已配置完成，但执行时报错，希望对照官方视频理解文档排查
+
+### 排查结论
+- 当前 `"Mimo"` 配置本身已可连通：
+  - `"api_base"` 为 `"https://token-plan-cn.xiaomimimo.com/v1/chat/completions"`
+  - 后端日志显示该地址测试和真实调用都返回过 `HTTP 200`
+- 本次失败不是鉴权错误，而是本地代码处理 Mimo 返回流时抛出了：
+  - `"can only concatenate str (not \"NoneType\") to str"`
+- 官方视频理解文档要求的视频请求格式包含：
+  - `messages` 中用户消息的 `content` 为数组
+  - 数组内同时包含 `"type": "video_url"` 和 `"type": "text"`
+  - 使用 `"max_completion_tokens"` 参数
+- 当前项目实现与官方文档的关键差异：
+  - `"app/api/v1/endpoints/video_analysis.py"` 只把 `GLM-4.5V/GLM-4V` 识别为视频理解模型，未把 `"mimo-v2.5"` 纳入视频分支
+  - `"app/services/ai_service.py"` 只对 GLM 模型构造视频多模态消息；对 Mimo 仍按纯文本 `messages[].content = prompt` 发送
+  - 同文件的流式解析代码默认认为 `choice.delta.content` 一定是字符串，未处理 Mimo 返回中可能出现的 `null / reasoning_content` 等情况，导致本地拼接时报错
+- 数据库中最近一次失败记录也印证了这一点：
+  - 解析记录 `id=95` 的 `"video_url"` 为 `null`
+  - 说明本次 Mimo 实际没有收到项目生成的视频 URL 输入
+
+### 记录时间
+- 2026-06-16 21:34:32
+
+---
+
+## 2026-06-16 AI 配置支持可编辑 provider 且 api_base 原样使用
+
+### 用户问题
+- 前端没法选 `provider`
+- 不要拼接 `base url`，输入什么就是什么
+
+### 已执行内容
+- 修改 `"frontend/src/pages/SystemConfig.tsx"`：
+  - 新增 AI 配置的 `provider` 选择能力
+  - 采用“常用 provider 下拉 + 自定义 provider 文本输入”组合
+  - 新建与编辑配置时都不再把 `provider` 写死为 `"custom"`
+  - 配置卡片中增加 `provider` 展示
+- 修改 `"app/services/ai_service.py"`：
+  - 运行时调用 OpenAI 兼容接口时，不再自动给 `"api_base"` 追加 `"/chat/completions"`
+  - 现在直接使用数据库中保存的完整 URL
+- 修改 `"app/api/v1/ai_config.py"`：
+  - 测试 AI 配置时，不再自动拼接 `"/chat/completions"` 或 `"/completions"`
+  - 现在直接按配置中的 `"api_base"` 发请求
+- 补充回归测试 `"app/tests/test_ai_config_security.py"`：
+  - 验证 AI 配置测试接口原样使用 `"api_base"`
+  - 验证运行时 AIService 原样使用 `"api_base"`
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_ai_config_security.py"`：通过
+- `"frontend"` `npx tsc --noEmit`：通过
+
+### 记录时间
+- 2026-06-16 21:12:52
+
+---
+
+## 2026-06-16 排查 Qwen API 调用报错
+
+### 用户问题
+- 添加了 Qwen API，但调用报错，希望对照阿里云百炼官方文档检查哪里不对
+
+### 排查结论
+- 阿里云百炼 OpenAI 兼容接口要求的 `base_url` 应为 `https://dashscope.aliyuncs.com/compatible-mode/v1`，HTTP 实际请求地址为 `POST /chat/completions`，不能使用控制台文档页地址。
+- 项目当前视频解析运行时仅支持 `"openai"`、`"custom"`、`"anthropic"` 三类 provider；若前端把 Qwen 配成 `"ollama"`，运行时会直接判定为不支持。
+- 前端 provider 列表中 `"ollama"` 的模型示例包含 `"qwen"`，容易误导为“阿里云 Qwen = Ollama Qwen”，但两者并不是同一接入方式。
+- 项目对视频多模态消息的组装目前只对 GLM 视频模型做了特殊分支；若使用 `qwen-vl-*` 之类视觉模型，当前实现不会按百炼文档要求自动发送 `video_url` 多模态内容。
+- Qwen 模型名也需要使用百炼支持的真实模型名，如 `qwen-plus`、`qwen-max`、`qwen-vl-plus` 等，不能仅写成 `qwen`。
+
+### 涉及代码
+- `"app/services/ai_service.py"`：OpenAI 兼容请求统一拼接到 `"/chat/completions"`，但仅对 GLM 视频模型注入多模态视频内容
+- `"frontend/src/services/aiConfig.ts"`：provider 列表把 `"qwen"` 放在 `"ollama"` 示例模型中
+- `"app/api/v1/ai_config.py"`：AI 配置测试接口按 OpenAI 兼容方式拼接测试地址
+
+### 记录时间
+- 2026-06-16 20:56:54
+
+---
+
 ## 2026-06-16 更新 README 并提交剩余文件
 
 ### 用户问题

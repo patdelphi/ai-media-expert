@@ -36,6 +36,7 @@ const PRESET_TAG_COLORS = [
 
 const SystemConfigPage: React.FC = () => {
   const { user } = useAuth();
+  const supportedProviders = aiConfigService.getSupportedProviders();
   const [activeTab, setActiveTab] = useState('basic');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,7 +126,15 @@ const SystemConfigPage: React.FC = () => {
   });
 
   // 表单状态
-  const [newApi, setNewApi] = useState({
+  const [newApi, setNewApi] = useState<{
+    provider: string;
+    name: string;
+    apiKey: string;
+    baseUrl: string;
+    model: string;
+    maxTokens?: number;
+    temperature: number;
+  }>({
     provider: 'custom',
     name: '',
     apiKey: '',
@@ -526,6 +535,10 @@ const SystemConfigPage: React.FC = () => {
     if (!data.name?.trim()) {
       errors.name = 'API名称是必填项';
     }
+
+    if (!data.provider?.trim()) {
+      errors.provider = 'Provider是必填项';
+    }
     
     if (!data.apiKey?.trim()) {
       errors.apiKey = 'API Key是必填项';
@@ -561,6 +574,7 @@ const SystemConfigPage: React.FC = () => {
     
     const errors = validateApiForm({
       name: newApi.name,
+      provider: newApi.provider,
       apiKey: newApi.apiKey,
       baseUrl: newApi.baseUrl,
       model: newApi.model,
@@ -581,7 +595,7 @@ const SystemConfigPage: React.FC = () => {
       console.log('📡 发送POST请求创建配置', { url: '/api/v1/ai-config/' });
       const configData: CreateAIConfigRequest = {
         name: newApi.name,
-        provider: 'custom',
+        provider: newApi.provider,
         api_key: newApi.apiKey,
         api_base: newApi.baseUrl,
         model: newApi.model,
@@ -636,6 +650,7 @@ const SystemConfigPage: React.FC = () => {
     
     const errors = validateApiForm({
       name: editingApi.name,
+      provider: editingApi.provider,
       apiKey: editingApi.api_key,
       baseUrl: editingApi.api_base,
       model: editingApi.model,
@@ -1544,6 +1559,31 @@ const SystemConfigPage: React.FC = () => {
                     )}
                   </div>
                   <div>
+                    <select
+                      value={supportedProviders.some((provider) => provider.value === newApi.provider) ? newApi.provider : 'custom'}
+                      onChange={(e) => setNewApi({...newApi, provider: e.target.value})}
+                      className={`input-field ${validationErrors.provider ? 'border-red-500' : ''}`}
+                    >
+                      {supportedProviders.map((provider) => (
+                        <option key={provider.value} value={provider.value}>
+                          {provider.label}
+                        </option>
+                      ))}
+                    </select>
+                    {validationErrors.provider && (
+                      <p className="text-red-500 text-xs mt-1">{validationErrors.provider}</p>
+                    )}
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Provider *"
+                      value={newApi.provider}
+                      onChange={(e) => setNewApi({...newApi, provider: e.target.value})}
+                      className={`input-field ${validationErrors.provider ? 'border-red-500' : ''}`}
+                    />
+                  </div>
+                  <div>
                     <input
                       type="text"
                       placeholder="API Key *"
@@ -1555,7 +1595,7 @@ const SystemConfigPage: React.FC = () => {
                       <p className="text-red-500 text-xs mt-1">{validationErrors.apiKey}</p>
                     )}
                   </div>
-                  <div>
+                  <div className="md:col-span-2 lg:col-span-1">
                     <input
                       type="text"
                       placeholder="模型名称 *"
@@ -1585,7 +1625,7 @@ const SystemConfigPage: React.FC = () => {
                     <input
                       type="number"
                       placeholder="最大Token数"
-                      value={newApi.maxTokens}
+                      value={newApi.maxTokens ?? ''}
                       onChange={(e) => setNewApi({...newApi, maxTokens: e.target.value === '' ? undefined : parseInt(e.target.value, 10)})}
                       className={`input-field ${validationErrors.maxTokens ? 'border-red-500' : ''}`}
                     />
@@ -1657,6 +1697,36 @@ const SystemConfigPage: React.FC = () => {
                                   />
                                 </div>
                                 <div>
+                                  <select
+                                    value={supportedProviders.some((provider) => provider.value === editingApi.provider) ? editingApi.provider : 'custom'}
+                                    onChange={(e) => setEditingApi({...editingApi, provider: e.target.value})}
+                                    className={`input-field w-full ${validationErrors.provider ? 'border-red-500' : ''}`}
+                                  >
+                                    {supportedProviders.map((provider) => (
+                                      <option key={provider.value} value={provider.value}>
+                                        {provider.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {validationErrors.provider && (
+                                    <p className="text-red-500 text-xs mt-1">{validationErrors.provider}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                  <input
+                                    type="text"
+                                    placeholder="Provider *"
+                                    value={editingApi.provider}
+                                    onChange={(e) => setEditingApi({...editingApi, provider: e.target.value})}
+                                    className={`input-field w-full ${validationErrors.provider ? 'border-red-500' : ''}`}
+                                  />
+                                  {validationErrors.provider && (
+                                    <p className="text-red-500 text-xs mt-1">{validationErrors.provider}</p>
+                                  )}
+                                </div>
+                                <div>
                                   <input
                                     type="text"
                                     placeholder="模型名称 *"
@@ -1698,7 +1768,7 @@ const SystemConfigPage: React.FC = () => {
                                   <input
                                     type="number"
                                     placeholder="最大Token数"
-                                    value={editingApi.max_tokens}
+                                    value={editingApi.max_tokens ?? ''}
                                     onChange={(e) => setEditingApi({...editingApi, max_tokens: e.target.value === '' ? undefined : parseInt(e.target.value, 10)})}
                                     className={`input-field w-full ${validationErrors.maxTokens ? 'border-red-500' : ''}`}
                                   />
@@ -1713,7 +1783,7 @@ const SystemConfigPage: React.FC = () => {
                                     step="0.1"
                                     min="0"
                                     max="2"
-                                    value={editingApi.temperature}
+                                    value={editingApi.temperature ?? ''}
                                     onChange={(e) => setEditingApi({...editingApi, temperature: parseFloat(e.target.value)})}
                                     className={`input-field w-full ${validationErrors.temperature ? 'border-red-500' : ''}`}
                                   />
@@ -1725,6 +1795,7 @@ const SystemConfigPage: React.FC = () => {
                             </div>
                           ) : (
                             <div className="mt-2 space-y-1">
+                              <p className="text-sm text-gray-600">Provider: {config.provider}</p>
                               <p className="text-sm text-gray-600">模型: {config.model}</p>
                               <p className="text-sm text-gray-500">API Key: {'*'.repeat(Math.min(config.api_key?.length || 0, 20))}</p>
                               <p className="text-sm text-gray-500">Base URL: {config.api_base}</p>
