@@ -92,6 +92,11 @@ class VideoAnalysisListResponse(BaseModel):
     result_summary: Optional[str] = None
     confidence_score: Optional[float] = None
     processing_time: Optional[float] = None
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+    model_name: Optional[str] = None
+    api_provider: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
     

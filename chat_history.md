@@ -1772,3 +1772,222 @@ pm run build 打包校验（0 errors）。
 ### 验证结果
 - `python -m pytest -q "app/tests/test_ai_config_security.py"`：通过
 
+---
+
+## 2026-06-16 前端菜单与跳转优化（待你确认后再提交）
+
+### 用户需求
+- 先 commit 一下
+- 视频上传：分析按钮直接跳转至视频解析页面
+- 数据概览、视频列表菜单隐藏
+- 视频下载增加显示：功能开发中
+- 视频解析换一个 icon
+
+### 已执行内容
+- 已完成一次提交：`fix: stabilize config endpoints and dev workflow`
+- 视频上传页点击“分析”跳转到 `"/video/analysis?saved_filename=..."`，并在解析页自动选中对应视频：[VideoUpload.tsx](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/VideoUpload.tsx)、[VideoAnalysis.tsx](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/VideoAnalysis.tsx)
+- 左侧菜单隐藏“数据概览/视频列表”，并将“视频解析”图标改为 `fa-brain`：[App.tsx](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/App.tsx)
+- 视频下载页增加“功能开发中”提示条：[VideoDownload.tsx](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/VideoDownload.tsx)
+- 新增测试覆盖“分析按钮跳转”：[VideoUpload.test.tsx](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/VideoUpload.test.tsx)
+
+### 验证结果
+- `frontend` `npm.cmd test`：通过
+- `frontend` `npm.cmd run build`：通过
+
+---
+
+## 2026-06-16 19:18:26 +08:00
+
+### 用户问题
+- 解析历史详情里的模型、提供商、请求ID、调用时间、耗时、Token 使用均为空
+
+### 根因定位
+- 前端详情弹窗调用的是 `"/video-analysis/{analysis_id}"` 详情接口。
+- 后端详情接口虽然响应模型 `VideoAnalysisResponse` 已定义这些字段，但实际构造响应时漏传了 `api_call_time`、`api_response_time`、`api_duration`、`prompt_tokens`、`completion_tokens`、`total_tokens`、`model_name`、`api_provider`、`request_id`、`debug_info` 等字段。
+
+### 已执行内容
+- 补齐解析详情接口返回字段：[video_analysis.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/api/v1/endpoints/video_analysis.py)
+- 新增回归测试覆盖详情接口调试字段返回：[test_video_analysis_history_list_fields.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/tests/test_video_analysis_history_list_fields.py)
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_video_analysis_history_list_fields.py"`：通过
+
+### 备注
+- 这次修复后，新旧记录只要数据库里本身有这些值，详情弹窗就会显示。
+- 若某些更早的历史记录生成时本来就没有写入这些字段，仍会显示为空，需要重新跑解析才会补齐。
+
+---
+
+## 2026-06-16 19:29:24 +08:00
+
+### 用户问题
+- 视频解析完成后的结果页，模型、提供商、请求ID、调用时间、耗时、Token 等参数仍为空
+
+### 根因定位
+- 当前仓库代码直接调用 `get_analysis_result(93)` 可返回完整调试字段，说明代码修复已生效。
+- 本地数据库最新解析记录（如 `id=93`）本身也已写入 `model_name`、`api_provider`、`request_id`、`api_call_time`、`api_duration`、`prompt_tokens`、`completion_tokens`、`total_tokens`。
+- 但当前运行中的 `http://localhost:8000` 与 `http://localhost:8001` 接口返回仍为 `None`，说明前端命中的后端进程仍是旧代码，未重载本次修复。
+
+### 结论
+- 不是前端页面问题，也不是本次解析任务没写库。
+- 是当前运行中的后端服务没有加载最新代码，需要重启实际提供接口的后端进程，前端结果页参数才会正常显示。
+
+---
+
+## 2026-06-16 19:31:50 +08:00
+
+### 用户问题
+- 杀掉当前占用后端端口的进程
+
+### 已执行内容
+- 检查监听端口：
+  - `8000 -> PID 52060`
+  - `8001 -> PID 49172`
+- 已成功结束 `8001` 对应进程。
+- `8000` 对应监听仍显示为 `PID 52060`，但 `Stop-Process`、`Get-Process`、`taskkill` 均返回“进程不存在”，当前无法从本会话直接结束。
+
+### 当前结果
+- `8001` 已释放。
+- `8000` 仍有异常监听残留，需要后续换新端口或在更高权限环境下进一步处理。
+
+---
+
+## 2026-06-16 19:49:49 +08:00
+
+### 用户问题
+- 又跳登录页了，无法登录，报错：`Unexpected end of JSON input`
+
+### 根因定位
+- 前端代理仍指向 `http://localhost:8001`，而此前该端口对应后端已被结束，导致登录接口无有效响应。
+- 前端登录逻辑直接对响应执行 `response.json()`，遇到空响应时会抛出 `Unexpected end of JSON input`。
+
+### 已执行内容
+- 重新启动最新后端到 `8001`，恢复当前前端代理链路。
+- 本地验证 `POST "/api/v1/auth/login"` 返回 `200` 且响应体为合法 JSON。
+- 前端登录逻辑增加空响应/非 JSON 响应保护，改为返回可读错误提示，而不是直接抛 JSON 解析异常：[auth.ts](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/services/auth.ts)
+- 新增回归测试覆盖“空响应时报可读错误”路径：[auth.test.ts](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/services/auth.test.ts)
+
+### 验证结果
+- `frontend` `npm.cmd test -- src/services/auth.test.ts src/contexts/AuthContext.test.tsx`：通过
+- `frontend` `npm.cmd run lint`：通过
+
+---
+
+## 2026-06-16 19:51:02 +08:00
+
+### 用户问题
+- 启动 bat 只能跑 `8000`，是不是写死了
+
+### 结论
+- 是，当前批处理入口 `start_all_services.bat` 本身不写端口，但它会调用 `"start_auto.py"`。
+- `"start_auto.py"` 的后端启动命令里把端口硬编码成了 `--port 8000`，所以通过 bat 启动时默认只能跑 `8000`：[start_auto.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/start_auto.py)
+- 另一个 `"start.py"` 不是写死的，它走 `settings.port`，理论上可从配置读取端口：[start.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/start.py)
+
+---
+
+## 2026-06-16 20:28:41 +08:00
+
+### 用户问题
+- 方案 B：自动切换到 `8001/8002`
+- 同时继续看看如何杀掉 `8000`
+
+### 已执行内容
+- 修改 `"start_auto.py"`：
+  - 新增自动选择后端端口逻辑，默认从 `8000` 开始，端口被占用时自动递增选择下一个可用端口：[start_auto.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/start_auto.py)
+  - 启动前端时，通过环境变量注入 `VITE_DEV_PROXY_TARGET=http://127.0.0.1:{backend_port}`，让前端代理自动跟随后端实际端口：[start_auto.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/start_auto.py)
+  - 健康检查、浏览器自动打开地址、启动摘要中的 URL 全部改为动态端口显示：[start_auto.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/start_auto.py)
+- 新增测试覆盖：
+  - 自动回退到下一个可用端口
+  - 前端启动时正确注入动态代理目标
+  - [test_start_auto.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/tests/test_start_auto.py)
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_start_auto.py" "app/tests/test_video_analysis_history_list_fields.py"`：通过
+- `frontend` `npm.cmd test -- src/services/auth.test.ts src/contexts/AuthContext.test.tsx`：通过
+- `frontend` `npm.cmd run lint`：通过
+
+### 关于 `8000`
+- `8000` 当前确实有真实监听，并且可响应本地请求（`/health -> 200`），不是假残留。
+- 但 `Get-Process`、`tasklist`、`Get-CimInstance Win32_Process` 都查不到 `OwningProcess=52060`，因此当前会话无法直接结束它。
+- 这更像是当前权限下不可见/不可控的宿主进程或系统层监听，而不是普通用户进程。
+
+---
+
+## 2026-06-16 20:32:00 +08:00
+
+### 用户问题
+- 让我直接执行 `"start_all_services.bat"`
+
+### 已执行内容
+- 已实际启动 `"start_all_services.bat"`，其内部 `"start_auto.py"` 自动检测到 `8000` 被占用，并切换到 `8002`。
+- 实际启动结果：
+  - 后端：`http://localhost:8002`
+  - 前端：`http://localhost:5173`
+  - 前端代理目标：`http://127.0.0.1:8002`
+- 本地实测登录接口 `POST "http://127.0.0.1:8002/api/v1/auth/login"` 返回 `200`，响应为合法 JSON。
+
+### 当前监听
+- `5173` -> 前端 dev server
+- `8002` -> 最新后端
+- `8000` -> 仍为异常旧监听，未被当前启动链路使用
+
+---
+
+## 2026-06-16 20:43:38 +08:00
+
+### 用户问题
+- AI API 配置中的“最大 token 数”不要设上限，只要是整数即可
+
+### 已执行内容
+- 先补测试，再按方案 B 收口前后端校验：
+  - 前端 `aiConfigService.validateConfig()` 去掉 `32000` 上限，改为“传值时必须是正整数”：[aiConfig.ts](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/services/aiConfig.ts)
+  - 系统配置页本地表单校验同步改为“最大Token数必须是正整数”，并修正输入框清空时的处理：[SystemConfig.tsx](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/SystemConfig.tsx)
+  - 后端 `AIConfigCreate/AIConfigUpdate` schema 增加统一的正整数校验函数，取消上限约束：[video.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/schemas/video.py)
+- 新增/更新测试：
+  - 前端：`max_tokens` 超大整数允许通过，`0/负数/小数` 拒绝：[aiConfig.test.ts](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/services/aiConfig.test.ts)
+  - 后端：schema 允许超大正整数，拒绝非正整数：[test_ai_config_security.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/tests/test_ai_config_security.py)
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_ai_config_security.py"`：通过
+- `frontend` `npm.cmd test -- src/services/aiConfig.test.ts`：通过
+- `frontend` `npm.cmd run lint`：通过
+
+---
+
+## 2026-06-16 19:13:36 +08:00
+
+### 已执行内容
+- 后端解析历史列表接口补充：模型/供应商与 Token 字段（`model_name`、`api_provider`、`prompt_tokens`、`completion_tokens`、`total_tokens`）。
+- 前端全站移除“置信度”展示（历史列表、详情弹窗、调试信息）。
+- 解析历史列表改为展示：完成时间、耗时、模型/供应商、Token 用量。
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_video_analysis_history_list_fields.py"`：通过
+- `frontend`：`npm.cmd test`、`npm.cmd run lint`、`npm.cmd run build`：通过
+
+---
+
+## 2026-06-16 18:59:45 +08:00
+
+### 用户问题
+- 删除解析历史里的“置信度”展示，并建议替代字段
+
+### 建议
+- “置信度”当前为占位值（固定 0.85），建议全站不展示；数据库字段可先保留不影响功能
+- 历史列表（零后端改动）优先展示：状态、完成时间、耗时、结果摘要
+- 若希望更“可度量”，可追加：模型/供应商、Token 用量（prompt/completion/total）（需要接口返回更多字段）
+
+---
+
+## 2026-06-16 解析历史显示视频原始标题
+
+### 用户问题
+- 解析历史，要增加显示视频原始标题
+
+### 已执行内容
+- 解析历史列表新增“视频标题”显示：根据 `video_file_id` 拉取 `"/video-analysis/videos/{id}"` 的 `title/original_filename` 并做本地缓存映射：[VideoAnalysis.tsx](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/VideoAnalysis.tsx)
+- 新增测试覆盖解析历史标题渲染：[VideoAnalysis.test.tsx](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/VideoAnalysis.test.tsx)
+
+### 验证结果
+- `frontend` `npm.cmd test`：通过
+- `frontend` `npm.cmd run build`：通过

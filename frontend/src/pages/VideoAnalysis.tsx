@@ -11,6 +11,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { useSearchParams } from 'react-router-dom';
 import type {
   AIConfig,
   AnalysisHistoryItem,
@@ -23,6 +24,10 @@ import type {
 import apiService from '../services/api';
 
 const VideoAnalysis: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const initialSavedFilename = (searchParams.get('saved_filename') || '').trim();
+  const initialAutoSelectedRef = useRef(false);
+
   // 状态管理
   const [currentStep, setCurrentStep] = useState(1); // 当前步骤：1-选择视频，2-配置参数，3-确认提示词，4-解析中，5-查看结果
   const [selectedVideo, setSelectedVideo] = useState<VideoFile | null>(null);
@@ -33,6 +38,7 @@ const VideoAnalysis: React.FC = () => {
   const [finalPrompt, setFinalPrompt] = useState('');
   const [currentAnalysis, setCurrentAnalysis] = useState<AnalysisResult | null>(null);
   const [analysisHistory, setAnalysisHistory] = useState<AnalysisHistoryItem[]>([]);
+  const [historyVideoTitleMap, setHistoryVideoTitleMap] = useState<Record<number, string>>({});
   
   // 视频传输方式状态
   const [transmissionMethod, setTransmissionMethod] = useState<'url' | 'base64' | 'upload'>('url');
@@ -155,6 +161,24 @@ const VideoAnalysis: React.FC = () => {
     setTimeout(() => setNotification(null), 5000);
   };
 
+  const tryAutoSelectVideo = (items: VideoFile[]) => {
+    if (initialAutoSelectedRef.current || initialSavedFilename === '') {
+      return;
+    }
+
+    const matched = items.find(
+      (item) =>
+        item.saved_filename === initialSavedFilename || item.original_filename === initialSavedFilename,
+    );
+    if (!matched) {
+      return;
+    }
+
+    initialAutoSelectedRef.current = true;
+    setSelectedVideo(matched);
+    setCurrentStep(2);
+  };
+
   const loadVideos = async (page: number = 1) => {
     try {
       const result = await apiService.get<{
@@ -168,6 +192,7 @@ const VideoAnalysis: React.FC = () => {
       setVideoTotal(data?.total || 0);
       setVideoPage(data?.page || page);
       setVideoPages(data?.pages || 1);
+      tryAutoSelectVideo(data?.items || []);
     } catch (err) {
       console.error('Failed to load videos:', err);
     }
@@ -193,6 +218,7 @@ const VideoAnalysis: React.FC = () => {
       setVideoTotal(videosData?.total || 0);
       setVideoPage(videosData?.page || 1);
       setVideoPages(videosData?.pages || 1);
+      tryAutoSelectVideo(videosData?.items || []);
 
       const loadedTemplates = templatesResult.data || [];
       const loadedTagGroups = tagGroupsResult.data || [];
@@ -499,7 +525,6 @@ const VideoAnalysis: React.FC = () => {
           token_usage: analysisData.token_usage,
           cost_estimate: analysisData.cost_estimate,
           processing_time: analysisData.processing_time,
-          confidence_score: analysisData.confidence_score,
           started_at: analysisData.started_at,
           completed_at: analysisData.completed_at,
           transmission_method: analysisData.transmission_method
@@ -528,10 +553,12 @@ const VideoAnalysis: React.FC = () => {
         ...(statusFilter !== 'all' ? { status_filter: statusFilter } : {}),
       });
       const data = result.data;
-      setAnalysisHistory(data?.items || []);
+      const items = data?.items || [];
+      setAnalysisHistory(items);
       setHistoryTotal(data?.total || 0);
       setHistoryPage(data?.page || page);
       setHistoryPages(data?.pages || 1);
+      preloadHistoryVideoTitles(items);
     } catch (err) {
       console.error('Failed to load analysis history:', err);
     }
@@ -569,6 +596,35 @@ const VideoAnalysis: React.FC = () => {
     } catch {
       return null;
     }
+  };
+
+  const preloadHistoryVideoTitles = async (items: AnalysisHistoryItem[]) => {
+    const ids = Array.from(new Set((items || []).map((it) => it.video_file_id))).filter(
+      (id) => typeof id === 'number' && id > 0,
+    );
+    const missingIds = ids.filter((id) => !historyVideoTitleMap[id]);
+    if (missingIds.length === 0) {
+      return;
+    }
+
+    const pairs = await Promise.all(
+      missingIds.map(async (id) => {
+        const title = await fetchVideoTitle(id);
+        return [id, title] as const;
+      }),
+    );
+
+    const next: Record<number, string> = {};
+    for (const [id, title] of pairs) {
+      if (title) {
+        next[id] = title;
+      }
+    }
+    if (Object.keys(next).length === 0) {
+      return;
+    }
+
+    setHistoryVideoTitleMap((prev) => ({ ...prev, ...next }));
   };
 
   const formatExportTimestamp = (dateInput?: string | Date) => {
@@ -698,7 +754,6 @@ const VideoAnalysis: React.FC = () => {
             token_usage: analysisData.token_usage,
             cost_estimate: analysisData.cost_estimate,
             processing_time: analysisData.processing_time,
-            confidence_score: analysisData.confidence_score,
             started_at: analysisData.started_at,
             completed_at: analysisData.completed_at,
             transmission_method: analysisData.transmission_method
@@ -994,7 +1049,7 @@ const VideoAnalysis: React.FC = () => {
                             <div className="flex-1">
                               <div className="flex items-center space-x-3 mb-2">
                                 <span className="font-medium text-gray-900">
-                                  视频ID: {analysis.video_file_id}
+                                  视频: {historyVideoTitleMap[analysis.video_file_id] || `#${analysis.video_file_id}`}
                                 </span>
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                   analysis.status === 'completed' ? 'bg-green-100 text-green-800' :
@@ -1012,11 +1067,22 @@ const VideoAnalysis: React.FC = () => {
                               )}
                               <div className="flex items-center space-x-4 text-xs text-gray-500">
                                 <span>创建时间: {new Date(analysis.created_at).toLocaleString()}</span>
-                                {analysis.processing_time && (
+                                {analysis.completed_at && (
+                                  <span>完成时间: {new Date(analysis.completed_at).toLocaleString()}</span>
+                                )}
+                                {analysis.processing_time !== undefined && analysis.processing_time !== null && (
                                   <span>处理时间: {analysis.processing_time.toFixed(1)}秒</span>
                                 )}
-                                {analysis.confidence_score && (
-                                  <span>置信度: {(analysis.confidence_score * 100).toFixed(1)}%</span>
+                                {(analysis.model_name || analysis.api_provider) && (
+                                  <span>模型: {[analysis.api_provider, analysis.model_name].filter(Boolean).join('/')}</span>
+                                )}
+                                {analysis.total_tokens !== undefined && analysis.total_tokens !== null && (
+                                  <span>
+                                    Tokens: {analysis.total_tokens}
+                                    {analysis.prompt_tokens !== undefined && analysis.prompt_tokens !== null && analysis.completion_tokens !== undefined && analysis.completion_tokens !== null
+                                      ? ` (${analysis.prompt_tokens}+${analysis.completion_tokens})`
+                                      : ''}
+                                  </span>
                                 )}
                               </div>
                             </div>
@@ -1922,14 +1988,6 @@ const VideoAnalysis: React.FC = () => {
                               {currentDebugInfo.processing_time ? `${currentDebugInfo.processing_time.toFixed(2)}秒` : 'N/A'}
                             </span>
                           </div>
-                          {currentDebugInfo.confidence_score && (
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">置信度:</span>
-                              <span className={`${currentDebugInfo.confidence_score > 0.8 ? 'text-green-600' : currentDebugInfo.confidence_score > 0.6 ? 'text-yellow-600' : 'text-red-500'}`}>
-                                {(currentDebugInfo.confidence_score * 100).toFixed(1)}%
-                              </span>
-                            </div>
-                          )}
                           {currentDebugInfo.transmission_method && (
                             <div className="flex justify-between">
                               <span className="text-gray-500">传输方式:</span>
@@ -2160,9 +2218,6 @@ const VideoAnalysis: React.FC = () => {
                     {selectedHistoryItem.processing_time && (
                       <div><span className="font-medium">处理时间:</span> {selectedHistoryItem.processing_time.toFixed(2)}秒</div>
                     )}
-                    {selectedHistoryItem.confidence_score && (
-                      <div><span className="font-medium">置信度:</span> {(selectedHistoryItem.confidence_score * 100).toFixed(1)}%</div>
-                    )}
                   </div>
                 </div>
                 
@@ -2271,14 +2326,6 @@ const VideoAnalysis: React.FC = () => {
                                 {selectedHistoryItem.processing_time ? `${selectedHistoryItem.processing_time.toFixed(2)}秒` : 'N/A'}
                               </span>
                             </div>
-                            {selectedHistoryItem.confidence_score && (
-                              <div className="flex justify-between">
-                                <span className="text-gray-500">置信度:</span>
-                                <span className={`${selectedHistoryItem.confidence_score > 0.8 ? 'text-green-600' : selectedHistoryItem.confidence_score > 0.6 ? 'text-yellow-600' : 'text-red-500'}`}>
-                                  {(selectedHistoryItem.confidence_score * 100).toFixed(1)}%
-                                </span>
-                              </div>
-                            )}
                             {selectedHistoryItem.temperature && (
                               <div className="flex justify-between">
                                 <span className="text-gray-500">温度:</span>

@@ -523,6 +523,11 @@ const VideoDownload: React.FC = () => {
         </div>
       </div>
 
+      <div className="p-3 bg-yellow-50 text-yellow-800 rounded-lg border border-yellow-200">
+        <i className="fas fa-tools mr-2"></i>
+        功能开发中：当前页面仍在完善，部分能力可能不可用
+      </div>
+
       {/* 通知栏 */}
       {notification && (
         <div className="p-3 bg-blue-100 text-blue-800 rounded-lg flex justify-between items-center">

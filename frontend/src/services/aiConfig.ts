@@ -182,8 +182,13 @@ class AIConfigService {
       errors.push('API基础URL格式不正确');
     }
     
-    if ('max_tokens' in data && data.max_tokens && (data.max_tokens < 1 || data.max_tokens > 32000)) {
-      errors.push('最大token数应在1-32000之间');
+    if (
+      'max_tokens' in data &&
+      data.max_tokens !== undefined &&
+      data.max_tokens !== null &&
+      (!Number.isInteger(data.max_tokens) || data.max_tokens <= 0)
+    ) {
+      errors.push('最大token数必须是正整数');
     }
     
     if ('temperature' in data && data.temperature && (data.temperature < 0 || data.temperature > 2)) {

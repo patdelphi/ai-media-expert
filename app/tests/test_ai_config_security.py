@@ -9,12 +9,14 @@ from unittest.mock import Mock
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.v1.ai_config import activate_ai_config, deactivate_ai_config
 from app.api.v1.ai_config import get_ai_configs_full
 from app.api.v1.ai_config import test_ai_config as run_ai_config_test
 from app.models.video import AIConfig
+from app.schemas.video import AIConfigCreate, AIConfigUpdate
 from app.models.user import User
 from app.tests.factories import create_admin
 
@@ -120,3 +122,36 @@ async def test_ai_config_test_returns_hint_when_api_key_cannot_decrypt(override_
     assert resp.data is not None
     assert resp.data.get("success") is False
     assert "无法解密" in resp.data.get("message", "")
+
+
+def test_ai_config_schema_allows_large_positive_max_tokens() -> None:
+    payload = AIConfigCreate(
+        name="cfg-large",
+        provider="custom",
+        api_key="1234567890-valid-key",
+        api_base="https://example.com/v1",
+        model="gpt-4o",
+        max_tokens=999999999,
+        temperature=0.7,
+        is_active=True,
+    )
+
+    assert payload.max_tokens == 999999999
+
+
+def test_ai_config_schema_rejects_non_positive_or_non_integer_max_tokens() -> None:
+    with pytest.raises(ValidationError):
+        AIConfigCreate(
+            name="cfg-zero",
+            provider="custom",
+            api_key="1234567890-valid-key",
+            api_base="https://example.com/v1",
+            model="gpt-4o",
+            max_tokens=0,
+        )
+
+    with pytest.raises(ValidationError):
+        AIConfigUpdate(max_tokens=-1)
+
+    with pytest.raises(ValidationError):
+        AIConfigUpdate(max_tokens=1.5)

@@ -77,7 +77,7 @@ export const MENU_CONFIG = [
       { key: 'upload', label: '视频上传', icon: 'fas fa-upload', path: '/video/upload' },
       { key: 'download', label: '视频下载', icon: 'fas fa-download', path: '/video/download' },
       { key: 'list', label: '视频列表', icon: 'fas fa-list', path: '/video/list' },
-      { key: 'analysis', label: '视频解析', icon: 'fas fa-search', path: '/video/analysis' },
+      { key: 'analysis', label: '视频解析', icon: 'fas fa-brain', path: '/video/analysis' },
     ],
   },
   {

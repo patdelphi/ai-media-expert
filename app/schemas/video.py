@@ -8,6 +8,23 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 
+def _validate_positive_max_tokens(value: Optional[int]) -> Optional[int]:
+    """校验 max_tokens：允许为空，传值时必须为正整数。"""
+    if value is None:
+        return None
+
+    if isinstance(value, bool):
+        raise ValueError("max_tokens must be a positive integer")
+
+    if isinstance(value, float):
+        raise ValueError("max_tokens must be a positive integer")
+
+    if value <= 0:
+        raise ValueError("max_tokens must be a positive integer")
+
+    return value
+
+
 class VideoBase(BaseModel):
     """视频基础模型"""
     title: str = Field(description="视频标题")
@@ -261,6 +278,10 @@ class AIConfigBase(BaseModel):
     temperature: Optional[float] = Field(default=0.7, description="温度参数")
     is_active: Optional[bool] = Field(default=True, description="是否激活")
 
+    @field_validator("max_tokens")
+    def validate_max_tokens(cls, value: Optional[int]) -> Optional[int]:
+        return _validate_positive_max_tokens(value)
+
 
 class AIConfigCreate(AIConfigBase):
     """AI配置创建模型"""
@@ -277,6 +298,10 @@ class AIConfigUpdate(BaseModel):
     max_tokens: Optional[int] = Field(default=None, description="最大令牌数")
     temperature: Optional[float] = Field(default=None, description="温度参数")
     is_active: Optional[bool] = Field(default=None, description="是否激活")
+
+    @field_validator("max_tokens")
+    def validate_max_tokens(cls, value: Optional[int]) -> Optional[int]:
+        return _validate_positive_max_tokens(value)
 
 
 class AIConfigResponse(AIConfigBase):

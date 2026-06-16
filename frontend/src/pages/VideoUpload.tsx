@@ -4,6 +4,7 @@ import { formatFileSize, generateId } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
 import VideoPlayer from '../components/VideoPlayer';
 import { API_BASE_URL } from '../config';
+import { useNavigate } from 'react-router-dom';
 import type {
   RecentFileApiItem,
   RecentFileItem,
@@ -14,6 +15,7 @@ import type {
 
 const VideoUpload: React.FC = () => {
   const { isLoading } = useAuth();
+  const navigate = useNavigate();
   const [files, setFiles] = useState<FileItem[]>([]);
   // 移除不再需要的uploadTasks状态
   const [isDragging, setIsDragging] = useState(false);
@@ -98,7 +100,6 @@ const VideoUpload: React.FC = () => {
             upload_time: file.upload_time
           }));
           setRecentFiles(recent);
-          console.log('加载的文件数据:', recent); // 调试日志
           return recent;
         }
       }
@@ -549,10 +550,9 @@ const VideoUpload: React.FC = () => {
   };
 
   // 分析视频
-  const analyzeVideo = (filename: string) => {
-    showNotification('info', `开始分析视频: ${filename}`);
-    // TODO: 实现视频分析功能
-    console.log('分析视频:', filename);
+  const analyzeVideo = (savedFilename: string, displayName: string) => {
+    showNotification('info', `跳转到视频解析: ${displayName}`);
+    navigate(`/video/analysis?saved_filename=${encodeURIComponent(savedFilename)}`);
   };
 
   const triggerFileInput = () => {
@@ -902,7 +902,7 @@ const VideoUpload: React.FC = () => {
                      </button>
                     <button
                       className="text-blue-600 hover:text-blue-800 text-sm px-3 py-1 rounded border border-blue-300 hover:bg-blue-50"
-                      onClick={() => analyzeVideo(file.name)}
+                      onClick={() => analyzeVideo(file.saved_name || file.saved_filename, file.name)}
                       title="分析视频"
                     >
                       <i className="fas fa-chart-line mr-1"></i>

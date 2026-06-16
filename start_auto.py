@@ -50,6 +50,9 @@ class AutoServiceManager:
         self.redis_started_by_script = False
         self.celery_enabled = False
         self.frontend_opened = False
+        self.backend_host = "0.0.0.0"
+        self.backend_port = 8000
+        self.frontend_port = 5173
         self.setup_logging()
     
     def setup_logging(self):
@@ -78,7 +81,7 @@ class AutoServiceManager:
         if self.frontend_opened:
             return
         try:
-            webbrowser.open("http://localhost:5173")
+            webbrowser.open(f"http://localhost:{self.frontend_port}")
             self.frontend_opened = True
             print_flush("OK: Opened frontend UI in the default browser.")
         except Exception as e:
@@ -145,6 +148,20 @@ class AutoServiceManager:
                 return True
         except OSError:
             return False
+
+    def select_backend_port(self, preferred_port: int = 8000, max_attempts: int = 10) -> int:
+        """Select the first available backend port starting from the preferred port."""
+        for candidate_port in range(preferred_port, preferred_port + max_attempts):
+            if not self.is_tcp_port_open("127.0.0.1", candidate_port):
+                if candidate_port != preferred_port:
+                    print_flush(
+                        f"WARN: Backend port {preferred_port} is unavailable, switching to {candidate_port}."
+                    )
+                return candidate_port
+
+        raise RuntimeError(
+            f"No available backend port found in range {preferred_port}-{preferred_port + max_attempts - 1}."
+        )
 
     def start_redis(self) -> bool:
         """Try to start Redis; degrade gracefully if unavailable."""
@@ -244,11 +261,12 @@ class AutoServiceManager:
         print_flush("Starting backend API...")
         
         try:
+            self.backend_port = self.select_backend_port()
             cmd = [
                 sys.executable, "-m", "uvicorn",
                 "app.app:app",
-                "--host", "0.0.0.0",
-                "--port", "8000",
+                "--host", self.backend_host,
+                "--port", str(self.backend_port),
                 "--reload"
             ]
             
@@ -264,7 +282,7 @@ class AutoServiceManager:
             self.processes['backend'] = process
             self.log_handles['backend'] = log_handle
             print_flush(f"OK: Backend API started (PID: {process.pid}).")
-            print_flush("    URL: http://localhost:8000")
+            print_flush(f"    URL: http://localhost:{self.backend_port}")
             print_flush(f"    Log file: {log_file}")
             
             return True
@@ -316,24 +334,28 @@ class AutoServiceManager:
         
         try:
             if platform.system() == "Windows":
-                cmd = ["npm.cmd", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+                cmd = ["npm.cmd", "run", "dev", "--", "--host", "0.0.0.0", "--port", str(self.frontend_port)]
             else:
-                cmd = ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+                cmd = ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", str(self.frontend_port)]
             
             log_file = LOGS_DIR / "frontend.log"
             log_handle = open(log_file, "w", encoding="utf-8")
+            env = os.environ.copy()
+            env["VITE_DEV_PROXY_TARGET"] = f"http://127.0.0.1:{self.backend_port}"
             process = subprocess.Popen(
                 cmd,
                 stdout=log_handle,
                 stderr=subprocess.STDOUT,
                 cwd=FRONTEND_DIR,
+                env=env,
                 shell=False
             )
             
             self.processes['frontend'] = process
             self.log_handles['frontend'] = log_handle
             print_flush(f"OK: Frontend dev server started (PID: {process.pid}).")
-            print_flush("    URL: http://localhost:5173")
+            print_flush(f"    URL: http://localhost:{self.frontend_port}")
+            print_flush(f"    Proxy target: {env['VITE_DEV_PROXY_TARGET']}")
             print_flush(f"    Log file: {log_file}")
             
             return True
@@ -354,7 +376,7 @@ class AutoServiceManager:
             print_flush("WARN: Redis is not running. Celery-related features are unavailable.")
         
         try:
-            response = requests.get("http://localhost:8000/health", timeout=5)
+            response = requests.get(f"http://localhost:{self.backend_port}/health", timeout=5)
             if response.status_code == 200:
                 print_flush("OK: Backend API is healthy.")
             else:
@@ -363,7 +385,7 @@ class AutoServiceManager:
             print_flush("WARN: Backend API may still be starting.")
         
         try:
-            response = requests.get("http://localhost:5173", timeout=5)
+            response = requests.get(f"http://localhost:{self.frontend_port}", timeout=5)
             if response.status_code == 200:
                 print_flush("OK: Frontend dev server is healthy.")
                 self.try_open_frontend()
@@ -461,10 +483,10 @@ class AutoServiceManager:
             print_flush()
             print_flush("Service URLs:")
             print_flush(f"  - Redis:       {'redis://localhost:6379' if self.redis_ready else 'disabled'}")
-            print_flush("  - Backend API: http://localhost:8000")
-            print_flush("  - API Docs:    http://localhost:8000/docs")
-            print_flush("  - Frontend UI: http://localhost:5173")
-            print_flush("  - Admin Panel: http://localhost:8000/admin")
+            print_flush(f"  - Backend API: http://localhost:{self.backend_port}")
+            print_flush(f"  - API Docs:    http://localhost:{self.backend_port}/docs")
+            print_flush(f"  - Frontend UI: http://localhost:{self.frontend_port}")
+            print_flush(f"  - Admin Panel: http://localhost:{self.backend_port}/admin")
             print_flush()
             print_flush("Log files:")
             print_flush(f"  - Redis log:   {LOGS_DIR}/redis.log (if Redis was started by script)")

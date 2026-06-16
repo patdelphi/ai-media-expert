@@ -52,6 +52,24 @@ export interface UserUpdateRequest {
 }
 
 class AuthService {
+  /**
+   * 安全解析登录响应，避免后端无响应或返回空内容时直接抛出 JSON 解析异常。
+   */
+  private async parseLoginResponse(response: Response): Promise<any> {
+    const rawText = await response.text();
+
+    if (!rawText.trim()) {
+      throw new Error('登录服务无响应，请确认后端已启动');
+    }
+
+    try {
+      return JSON.parse(rawText);
+    } catch (error) {
+      console.error('Failed to parse login response:', error);
+      throw new Error('登录服务返回格式异常，请稍后重试');
+    }
+  }
+
   // 用户注册
   async register(data: RegisterRequest): Promise<ApiResponse<User>> {
     return apiService.post('/auth/register', data);
@@ -69,12 +87,11 @@ class AuthService {
       body: formData,
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Login failed');
-    }
+    const result = await this.parseLoginResponse(response);
 
-    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.message || 'Login failed');
+    }
     
     // 保存tokens和用户信息
     if (result.code === 200) {

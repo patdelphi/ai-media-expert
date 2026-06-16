@@ -135,11 +135,9 @@ const App: React.FC = () => {
           </div>
           <nav className="p-2">
             {[
-              { name: '数据概览', icon: 'fa-chart-pie', path: '/dashboard' },
               { name: '视频上传', icon: 'fa-upload', path: '/video/upload' },
               { name: '视频下载', icon: 'fa-download', path: '/video/download' },
-              { name: '视频列表', icon: 'fa-list', path: '/video/list' },
-              { name: '视频解析', icon: 'fa-search', path: '/video/analysis' },
+              { name: '视频解析', icon: 'fa-brain', path: '/video/analysis' },
               { name: '系统配置', icon: 'fa-cog', path: '/system/config' },
             ].map((item) => (
               <a

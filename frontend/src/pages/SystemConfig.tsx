@@ -541,8 +541,12 @@ const SystemConfigPage: React.FC = () => {
       errors.model = '模型名称是必填项';
     }
     
-    if (data.maxTokens && (data.maxTokens < 1 || data.maxTokens > 32000)) {
-      errors.maxTokens = '最大Token数应在1-32000之间';
+    if (
+      data.maxTokens !== undefined &&
+      data.maxTokens !== null &&
+      (!Number.isInteger(data.maxTokens) || data.maxTokens <= 0)
+    ) {
+      errors.maxTokens = '最大Token数必须是正整数';
     }
     
     if (data.temperature && (data.temperature < 0 || data.temperature > 2)) {
@@ -1582,7 +1586,7 @@ const SystemConfigPage: React.FC = () => {
                       type="number"
                       placeholder="最大Token数"
                       value={newApi.maxTokens}
-                      onChange={(e) => setNewApi({...newApi, maxTokens: parseInt(e.target.value)})}
+                      onChange={(e) => setNewApi({...newApi, maxTokens: e.target.value === '' ? undefined : parseInt(e.target.value, 10)})}
                       className={`input-field ${validationErrors.maxTokens ? 'border-red-500' : ''}`}
                     />
                     {validationErrors.maxTokens && (
@@ -1695,7 +1699,7 @@ const SystemConfigPage: React.FC = () => {
                                     type="number"
                                     placeholder="最大Token数"
                                     value={editingApi.max_tokens}
-                                    onChange={(e) => setEditingApi({...editingApi, max_tokens: parseInt(e.target.value)})}
+                                    onChange={(e) => setEditingApi({...editingApi, max_tokens: e.target.value === '' ? undefined : parseInt(e.target.value, 10)})}
                                     className={`input-field w-full ${validationErrors.maxTokens ? 'border-red-500' : ''}`}
                                   />
                                   {validationErrors.maxTokens && (

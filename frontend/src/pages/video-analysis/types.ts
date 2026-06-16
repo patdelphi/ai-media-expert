@@ -65,7 +65,6 @@ export interface AnalysisResult {
   progress: number
   analysis_result?: string
   result_summary?: string
-  confidence_score?: number
   processing_time?: number
   api_call_time?: string
   api_response_time?: string
@@ -92,8 +91,12 @@ export interface AnalysisHistoryItem {
   status: string
   progress: number
   result_summary?: string
-  confidence_score?: number
   processing_time?: number
+  prompt_tokens?: number
+  completion_tokens?: number
+  total_tokens?: number
+  model_name?: string
+  api_provider?: string
   created_at: string
   completed_at?: string
 }
