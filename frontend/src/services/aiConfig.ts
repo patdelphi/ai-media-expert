@@ -6,6 +6,7 @@ export interface AIConfig {
   name: string;
   provider: string;
   api_key: string;
+  upload_api_key?: string;
   api_base?: string;
   model: string;
   max_tokens?: number;
@@ -30,6 +31,7 @@ export interface CreateAIConfigRequest {
   name: string;
   provider: string;
   api_key: string;
+  upload_api_key?: string;
   api_base?: string;
   model: string;
   max_tokens?: number;
@@ -42,6 +44,7 @@ export interface UpdateAIConfigRequest {
   name?: string;
   provider?: string;
   api_key?: string;
+  upload_api_key?: string;
   api_base?: string;
   model?: string;
   max_tokens?: number;

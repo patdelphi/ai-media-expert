@@ -125,6 +125,295 @@
 
 ---
 
+## 2026-06-16 修复 Qwen 视频模型未走视频理解分支
+
+### 用户问题
+- 用户确认百炼文档支持相关 `Qwen` 模型的视频理解，希望按文档修复当前 `qwen3.7-plus` 无法真正看视频的问题
+
+### 文档核对结论
+- 百炼文档显示 `Qwen` 多模态模型支持图像/视频输入
+- 当前项目问题不在 `api_base`，而在后端没有把 `Qwen` 识别为视频模型，导致请求退回纯文本分析
+
+### 已执行内容
+- 修改 `"app/services/ai_service.py"`：
+  - 新增 `_is_qwen_video_model()`，按模型命名规则识别百炼支持视频/视觉输入的 `Qwen` 系列
+  - 已纳入的规则包括：
+    - `"qwen3.7-plus"`
+    - `"qwen3.6-plus"` / `"qwen3.6-flash"`
+    - `"qwen3.5-plus"` / `"qwen3.5-flash"`
+    - `"qwen3.5-omni-plus"`
+    - `"qwen3-vl-*"` / `"qwen-vl-*"` / `"qwen2.5-vl-*"`
+    - `"qvq-*"`
+  - 明确排除纯文本模型，避免把 `"qwen-plus"`、`"qwen3.7-max"`、`"qwen3-coder-*"` 误判成视频模型
+- 更新 `"app/tests/test_ai_config_security.py"`：
+  - 验证 `Qwen` 视频模型规则识别
+  - 验证 `"qwen3.7-plus"` 请求会真正携带 `"video_url"` 多模态内容
+  - 验证 `Qwen` 仍使用 `"max_tokens"`，不会误走 `Mimo` 的 `"max_completion_tokens"`
+- 更新 `"app/tests/test_video_analysis_endpoints.py"`：
+  - 验证 `"qwen3.7-plus"` 在解析入口层会生成 `runtime_video_url`
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_ai_config_security.py" "app/tests/test_video_analysis_endpoints.py"`：通过
+
+### 记录时间
+- 2026-06-16 22:42:03
+
+---
+
+## 2026-06-16 用户反馈 Qwen 解析仍然报错
+
+### 用户问题
+- 用户反馈：`报错`
+
+### 当前状态
+- 已由助手自行排查本地 `"logs/backend.log"`，定位到明确错误：
+  - 当前 `Qwen` 请求实际走的是 `"base64"` 传输
+  - 视频原文件大小约 `37.48MB`
+  - 编码后的 Base64 长度约 `52400272` 字符
+  - 请求发送到 `"https://coding.dashscope.aliyuncs.com/v1/chat/completions"` 后返回 `400 Bad Request`
+  - 百炼返回错误为：
+    - `"String value length (28049408) exceeds the maximum allowed (28000000, from StreamReadConstraints.getMaxStringLength())"`
+- 说明这次失败的直接原因是：传给 `Qwen` 的视频字符串过长，超过接口允许的单字符串长度上限。
+- 另外日志还显示当前运行时基础地址来源为 `"http://0.0.0.0:8000"`；若后续改走 `"url"` 传输，还需要先确保存在外部可访问的公网地址，否则远端模型也拿不到本地视频。
+
+### 记录时间
+- 2026-06-16 22:51:16
+
+---
+
+## 2026-06-16 优化 Qwen 视频输入策略，避免 Base64 超限
+
+### 用户问题
+- 用户追问为什么其他模型同样走 `base64` 没报错，并要求先直接修复
+
+### 根因结论
+- 已确认这次 `Qwen` 失败不是“没走视频分支”，而是：
+  - 当前视频原文件约 `37.48MB`
+  - Base64 后约 `52400272` 字符
+  - 百炼接口返回单字符串长度超限
+- 说明不同模型/接口后端对 `base64` 字符串长度的容忍度不同，不能因为“都是 base64”就假设限制一致
+
+### 已执行内容
+- 修改 `"app/services/ai_service.py"`：
+  - 为 `Qwen` 增加更严格的本地 Base64 安全上限
+  - 当用户选 `"base64"` 且存在公网可访问 `runtime_video_url` 时，`Qwen` 现在优先改走 URL，避免无意义地发送超长 Base64
+  - 当只有本地地址（如 `"0.0.0.0"` / `"localhost"`）可用时，不再错误地当作公网 URL 使用
+  - 当 `Qwen` Base64 在本地就已判断必然超限时，直接提前报清晰错误，不再把超长字符串真实发到接口
+  - 若本机有 `ffmpeg`，会先尝试压缩到更适合 `Qwen` 的目标体积后再编码
+- 更新 `"app/tests/test_ai_config_security.py"`：
+  - 验证 `Qwen` 在用户选 `base64` 但已有公网 URL 时会优先走 URL
+  - 验证 `Qwen` Base64 超限时会在本地直接抛出清晰错误
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_ai_config_security.py" "app/tests/test_video_analysis_endpoints.py"`：通过
+
+### 记录时间
+- 2026-06-16 22:58:53
+
+---
+
+## 2026-06-16 排查百炼临时文件上传方案
+
+### 用户问题
+- 用户提供百炼文档链接，提示有“临时文件上传”的办法，希望确认是否适合当前 `Qwen` 视频解析场景
+
+### 排查结论
+- 已确认阿里云百炼提供“上传本地文件获取临时URL”能力：
+  - 上传后得到以 `"oss://"` 开头的临时 URL
+  - 有效期为 `48小时`
+  - 文件与模型绑定、与主账号绑定
+  - 通过 HTTP 方式调用模型时，请求头必须加 `"X-DashScope-OssResourceResolve: enable"`
+- 该方案从技术路线看，确实更适合当前 `Qwen` 场景：
+  - 可以绕开超长 `base64` 字符串限制
+  - 也能绕开本地 `"0.0.0.0"` / `"localhost"` 视频地址无法被远端模型访问的问题
+- 但当前项目使用的是 `"coding.dashscope.aliyuncs.com"` 的 Coding Plan 兼容接口，文档暂未明确说明“临时文件上传接口 + oss 临时 URL”是否完全兼容 Coding Plan 专属 API Key，因此接入前仍需做一次兼容性验证
+
+### 记录时间
+- 2026-06-16 23:00:39
+
+---
+
+## 2026-06-16 核对前端传输方式与百炼临时文件上传能力
+
+### 用户问题
+- 用户强调当前页面本来就有多种传输方式可选，希望确认如何在前端设置为百炼“临时文件上传”方式，而不是继续调整 `base64`
+
+### 排查结论
+- `"frontend/src/pages/VideoAnalysis.tsx"` 当前页面确实提供三种传输方式：
+  - `"URL方式"`
+  - `"Base64编码"`
+  - `"文件上传"`
+- 但其中 `"文件上传"` 卡片在前端已明确标注 `"开发中"`，不是已经接通的能力。
+- 后端 `"app/services/ai_service.py"` 对 `transmission_method == "upload"` 的处理目前仍是：
+  - `"文件上传方式暂未实现"`
+- 因此，当前页面里**无法通过现有设置**直接切到百炼官方“上传本地文件获取临时URL”方案。
+- 现阶段用户在页面上真正可用的只有：
+  - `"URL方式"`：依赖公网可访问视频地址
+  - `"Base64编码"`：适合较小文件或可压缩后发送
+
+### 记录时间
+- 2026-06-16 23:05:00
+
+---
+
+## 2026-06-16 接通百炼临时文件上传方式
+
+### 用户问题
+- 用户确认要把前端现有 `"文件上传"` 选项真正接到百炼“上传本地文件获取临时URL”能力上
+
+### 已执行内容
+- 修改 `"app/services/ai_service.py"`：
+  - 将 `upload` 传输方式正式接通为百炼临时文件上传流程
+  - 新增百炼上传凭证请求与 OSS 表单上传逻辑：
+    - `GET https://dashscope.aliyuncs.com/api/v1/uploads?action=getPolicy&model=...`
+    - 上传成功后生成 `"oss://..."` 临时 URL
+  - 对使用 `"oss://"` 临时 URL 的模型请求自动追加请求头：
+    - `"X-DashScope-OssResourceResolve: enable"`
+  - 对不兼容百炼临时上传的 AI 配置给出清晰错误，避免静默失败
+- 修改 `"frontend/src/pages/VideoAnalysis.tsx"`：
+  - 去掉 `"文件上传"` 卡片上的 `"开发中"` 标记
+  - 将说明文案更新为百炼临时 URL 的真实行为与限制
+- 更新 `"app/tests/test_ai_config_security.py"`：
+  - 验证 `upload` 会先上传本地文件并生成 `"oss://"` URL
+  - 验证模型请求会自动带 `"X-DashScope-OssResourceResolve: enable"`
+  - 验证非百炼兼容配置会收到清晰报错
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_ai_config_security.py" "app/tests/test_video_analysis_endpoints.py"`：通过
+- `npm test -- --run "src/pages/VideoAnalysis.test.tsx"`：通过
+
+### 记录时间
+- 2026-06-16 23:10:35
+
+---
+
+## 2026-06-16 百炼临时文件上传实测报错定位
+
+### 用户问题
+- 用户实测前端 `"文件上传"` 方式后反馈再次报错，希望助手直接查看日志定位
+
+### 日志定位结果
+- 后端日志显示本次任务 `104` 已正确进入 `upload` 传输分支：
+  - 已识别传输方式为 `"upload"`
+  - 已开始请求百炼上传凭证，模型为 `"qwen3.7-plus"`
+- 失败点发生在上传前的第一步“获取上传凭证”：
+  - 请求：`GET https://dashscope.aliyuncs.com/api/v1/uploads?action=getPolicy&model=qwen3.7-plus`
+  - 返回：`401 Unauthorized`
+  - 错误内容：`{"code":"InvalidApiKey","message":"Invalid API-key provided."}`
+
+### 结论
+- 当前报错不是上传逻辑本身写错，而是**当前配置里的 API Key 不能用于百炼临时上传凭证接口**。
+- 从日志行为看：
+  - 当前视频解析主调用仍走 `coding.dashscope.aliyuncs.com`
+  - 但临时文件上传官方接口走的是 `dashscope.aliyuncs.com/api/v1/uploads`
+- 因此，当前这把 Key 至少对“上传凭证接口”不被接受，导致 `"文件上传"` 方式无法完成第一步。
+
+### 记录时间
+- 2026-06-16 23:18:55
+
+---
+
+## 2026-06-16 标准百炼 API Key 配置说明
+
+### 用户问题
+- 用户提供标准百炼 API Key（`sk-...`）并询问应如何配置，才能用于 `Qwen` 视频分析与临时文件上传
+
+### 配置建议
+- 标准百炼 API Key 应搭配百炼官方域名使用，而不是 `coding.dashscope.aliyuncs.com`
+- 系统设置中的推荐配置为：
+  - `provider`: `custom`
+  - `api_base`: `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions`
+  - `model`: `qwen3.7-plus`
+  - `api_key`: 使用标准百炼 `sk-...` Key
+- 如果要走前端 `"文件上传"` 方式，仍使用同一条 AI 配置即可；后端会自动请求：
+  - `https://dashscope.aliyuncs.com/api/v1/uploads?action=getPolicy&model=qwen3.7-plus`
+  - 然后再调用 `api_base` 对应的模型接口
+
+### 记录时间
+- 2026-06-16 23:20:19
+
+---
+
+## 2026-06-16 说明上传与解析使用不同 Key 的限制
+
+### 用户问题
+- 用户进一步说明：临时上传 URL 使用的是一把 Key，解析视频使用的是另一把 Key，希望确认这种情况应该如何配置
+
+### 结论
+- 当前项目的 AI 配置结构只有一套 `api_key`，现有实现会用**同一把 Key**完成：
+  - 获取百炼上传凭证
+  - 上传文件
+  - 调用视频解析模型
+- 因此前端/当前配置页面**不能直接配置“两把不同的 Key”**。
+- 从百炼文档约束看，上传文件与模型调用所使用的 Key 至少必须属于**同一个阿里云主账号**；如果不是同一主账号，临时上传得到的文件无法给模型调用使用。
+- 即使两把 Key 同属一个主账号，当前项目也仍需额外开发，增加类似 `upload_api_key` 的独立配置字段，才能真正分开使用。
+
+### 记录时间
+- 2026-06-16 23:22:12
+
+---
+
+## 2026-06-16 确认双 Key 改造范围
+
+### 用户问题
+- 用户确认两把 Key 属于同一阿里云主账号
+- 用户进一步明确采用方案 A：
+  - 仅为 `Qwen` 文件上传单独配置一把专用 Key
+  - 不与视频解析用的 `api_key` 混用
+
+### 当前结论
+- 下一步将按“前后端都支持”的方向设计：
+  - 系统设置里新增 `Qwen` 上传专用 Key 字段
+  - 百炼临时上传固定走该字段
+  - 解析视频继续只走原 `api_key`
+
+### 记录时间
+- 2026-06-16 23:32:53
+
+---
+
+## 2026-06-16 实现 Qwen 上传专用 Key 双 Key 支持
+
+### 用户问题
+- 用户确认采用方案 A：
+  - 仅为 `Qwen` 文件上传单独配置专用 Key
+  - 不与视频解析用的 `api_key` 混用
+
+### 已执行内容
+- 设计文档已补充：
+  - `"docs/superpowers/specs/2026-06-16-qwen-upload-api-key-design.md"`
+- 修改 `"app/models/video.py"`、`"app/schemas/video.py"`、`"app/api/v1/ai_config.py"`：
+  - 为 AI 配置新增 `"upload_api_key"`
+  - 创建、更新、完整查询接口均支持该字段
+  - 返回时对 `"upload_api_key"` 做脱敏处理
+- 修改 `"app/services/ai_service.py"`：
+  - 百炼临时上传改为**只使用** `"upload_api_key"`
+  - 模型解析继续**只使用**原 `"api_key"`
+  - 不做复用，不做自动回退
+  - 若 `Qwen + 文件上传` 缺少 `"upload_api_key"`，直接返回清晰错误
+  - 调试信息中补充上传阶段接口信息与密钥来源标记
+- 修改 `"frontend/src/services/aiConfig.ts"`、`"frontend/src/pages/SystemConfig.tsx"`：
+  - 系统设置新增 `"上传专用 API Key（仅Qwen文件上传）"` 字段
+  - 创建/编辑 AI 配置时可单独保存该字段
+  - 编辑态沿用掩码策略，未修改时不覆盖原值
+- 新增迁移脚本：
+  - `"scripts/add_ai_config_upload_api_key_migration.py"`
+  - 用于为 `"ai_configs"` 表补 `"upload_api_key"` 字段
+
+### 验证结果
+- 后端：
+  - `python -m pytest -q "app/tests/test_ai_config_security.py" "app/tests/test_video_analysis_endpoints.py"`：通过
+- 前端：
+  - `npm test -- --run "src/pages/SystemConfig.test.tsx" "src/pages/VideoAnalysis.test.tsx"`：通过
+
+### 备注
+- 当前仅完成代码与测试，**未执行**数据库迁移脚本，也**未执行** `git commit`
+
+### 记录时间
+- 2026-06-16 23:40:30
+
+---
+
 ## 2026-06-16 修复 Mimo Base64 传输链路
 
 ### 用户问题
@@ -1115,6 +1404,54 @@ pm run build 打包校验（0 errors）。
   - `python -c` 内联命令在批处理中引号转义失败，导致 `SyntaxError`
   - 前端目录切换与输出重定向组合不稳定
 - 继续实跑后确认：批处理层错误修掉后，服务真实依赖问题还包括 `Celery` 因本机未启动 `Redis` 而持续连接失败。
+
+---
+
+## 2026-06-16 完成视频分页、历史逻辑删除与 AI 页签计数收尾
+
+### 用户问题
+- 用户选择按现有 `"todo.md"` 继续执行本轮后三项需求收尾
+
+### 已执行内容
+- 已完成并确认以下实现：
+  - `"frontend/src/pages/VideoAnalysis.tsx"`：选择视频分页固定为每页 `9` 条，桌面端按 `3x3` 展示
+  - `"app/api/v1/endpoints/video_analysis.py"`：解析历史新增逻辑删除接口，列表默认过滤 `is_active = false` 记录
+  - `"frontend/src/pages/VideoAnalysis.tsx"`：解析历史增加删除按钮，删除后仅隐藏记录，不物理删除
+  - `"frontend/src/pages/SystemConfig.tsx"`：`AI API配置` 页签数字改为读取真实 `aiConfigs.length`
+- 修复 `"frontend/src/pages/VideoAnalysis.test.tsx"` 最后一个失败用例：
+  - 原因是测试文件内未做 DOM 与 mock 隔离，前一个用例残留的历史列表节点影响了 `"删除"` 按钮定位
+  - 已补充 `beforeEach/afterEach` 清理 `mock`、`localStorage` 和渲染节点，删除测试恢复稳定
+
+### 验证结果
+- `"frontend"` `npm test -- --run "src/pages/VideoAnalysis.test.tsx" "src/pages/SystemConfig.test.tsx"`：通过
+- `python -m pytest -q "app/tests/test_video_analysis_history_list_fields.py" "app/tests/test_video_analysis_endpoints.py"`：通过
+
+### 记录时间
+- 2026-06-16 22:17:59
+
+---
+
+## 2026-06-16 排查 Qwen 再次退回元数据分析
+
+### 用户问题
+- `Qwen` 又返回“无法直接解析视频流文件，只能基于元数据模拟分析”
+
+### 排查结论
+- 当前不是前端选择问题，而是后端代码没有把 `Qwen` 识别为视频理解模型。
+- `"app/services/ai_service.py"` 中 `supports_video_understanding_model()` 目前只包含：
+  - `"glm-4.5v"`
+  - `"glm-4v"`
+  - `"mimo-v2.5"`
+- 因此 `Qwen` 不会进入视频多模态请求分支，也不会发送 `"video_url"` 或 Base64 视频内容，而是退回普通文本提示词模式。
+- `"app/api/v1/endpoints/video_analysis.py"` 也依赖同一个判断来生成 `runtime_video_url`，所以 `Qwen` 这条链路在入口层就没有拿到视频输入。
+- 另外，如果当前实际配置的模型名本身是文本模型（如 `"qwen-plus"`、`"qwen-max"`），即使补上分支也仍然不能真正看视频，必须换成支持视觉/视频理解的 `Qwen` 模型。
+
+### 处理建议
+- 需要在后端补上 `Qwen` 视频模型识别与回归测试。
+- 同时确认系统配置里填写的是支持视频理解的 `Qwen` 模型，而不是纯文本模型。
+
+### 记录时间
+- 2026-06-16 22:36:22
 
 ### 已执行内容
 - `"start_all_services.bat"` 改为只做环境检查并委托 `"start_auto.py"` 启动，不再在批处理中内联拼接 3 个长命令。

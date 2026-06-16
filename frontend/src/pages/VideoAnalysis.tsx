@@ -46,7 +46,7 @@ const VideoAnalysis: React.FC = () => {
   // 数据状态
   const [videos, setVideos] = useState<VideoFile[]>([]);
   const [videoPage, setVideoPage] = useState(1);
-  const [videoPageSize] = useState(12);
+  const [videoPageSize] = useState(9);
   const [videoTotal, setVideoTotal] = useState(0);
   const [videoPages, setVideoPages] = useState(1);
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
@@ -668,6 +668,30 @@ const VideoAnalysis: React.FC = () => {
     }
   };
 
+  const deleteHistoryItem = async (analysisId: number) => {
+    const confirmed = window.confirm('确认删除这条解析历史吗？删除后仅在列表中隐藏，不会物理删除记录。');
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await apiService.delete(`/video-analysis/${analysisId}`);
+      showNotification('success', '解析历史已隐藏');
+
+      if (selectedHistoryId === analysisId) {
+        closeHistoryModal();
+      }
+
+      const nextPage = analysisHistory.length === 1 && historyPage > 1
+        ? historyPage - 1
+        : historyPage;
+      loadAnalysisHistory(nextPage, historyStatusFilter);
+    } catch (err) {
+      console.error('Failed to delete analysis history:', err);
+      showNotification('error', '删除失败，请稍后重试');
+    }
+  };
+
   // 导出结果为MD文件
   const exportResult = (result: string, filename: string) => {
     const blob = new Blob([result], { type: 'text/markdown;charset=utf-8' });
@@ -939,7 +963,7 @@ const VideoAnalysis: React.FC = () => {
                 </div>
               ) : (
                 <div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {videos.map((video) => (
                       <div
                         key={video.id}
@@ -1103,6 +1127,13 @@ const VideoAnalysis: React.FC = () => {
                                   导出
                                 </button>
                               )}
+                              <button
+                                onClick={() => deleteHistoryItem(analysis.id)}
+                                className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+                              >
+                                <i className="fas fa-trash-alt mr-1"></i>
+                                删除
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1315,12 +1346,12 @@ const VideoAnalysis: React.FC = () => {
                       <div className="flex items-center mb-2">
                         <i className="fas fa-upload text-purple-600 mr-2"></i>
                         <h4 className="font-medium text-gray-900">文件上传</h4>
-                        <span className="ml-auto text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">开发中</span>
+                        <span className="ml-auto text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">百炼临时URL</span>
                       </div>
                       <div className="text-sm text-gray-600 space-y-1">
-                        <div>• 上传到AI服务商</div>
-                        <div>• 支持大文件</div>
-                        <div>• 可重复使用</div>
+                        <div>• 先上传到百炼临时存储</div>
+                        <div>• 适合大文件视频</div>
+                        <div>• 临时URL有效期48小时</div>
                       </div>
                     </div>
                   </div>
@@ -1348,7 +1379,7 @@ const VideoAnalysis: React.FC = () => {
                         <div className="flex items-start">
                           <i className="fas fa-info-circle text-purple-500 mr-2 mt-0.5"></i>
                           <div>
-                            <strong>文件上传：</strong>先上传视频到AI服务商的存储服务，然后引用文件ID进行分析。支持大文件且可重复使用。
+                            <strong>文件上传：</strong>先上传视频到百炼临时存储，再使用临时URL进行分析。适合百炼/Qwen 的大文件视频场景。
                           </div>
                         </div>
                       )}

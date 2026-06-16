@@ -286,6 +286,7 @@ class AIConfigBase(BaseModel):
 class AIConfigCreate(AIConfigBase):
     """AI配置创建模型"""
     api_key: str = Field(description="API密钥")
+    upload_api_key: Optional[str] = Field(default=None, description="Qwen上传专用API密钥")
 
 
 class AIConfigUpdate(BaseModel):
@@ -293,6 +294,7 @@ class AIConfigUpdate(BaseModel):
     name: Optional[str] = Field(default=None, description="配置名称")
     provider: Optional[str] = Field(default=None, description="AI提供商")
     api_key: Optional[str] = Field(default=None, description="API密钥")
+    upload_api_key: Optional[str] = Field(default=None, description="Qwen上传专用API密钥")
     api_base: Optional[str] = Field(default=None, description="API基础URL")
     model: Optional[str] = Field(default=None, description="模型名称")
     max_tokens: Optional[int] = Field(default=None, description="最大令牌数")
@@ -308,6 +310,7 @@ class AIConfigResponse(AIConfigBase):
     """AI配置响应模型"""
     id: int
     api_key: Optional[str] = Field(default=None, description="API密钥（已脱敏）")
+    upload_api_key: Optional[str] = Field(default=None, description="Qwen上传专用API密钥（已脱敏）")
     created_at: datetime
     updated_at: datetime
     

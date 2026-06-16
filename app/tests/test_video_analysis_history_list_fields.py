@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.api.v1.endpoints.video_analysis import get_analysis_history
+from app.api.v1.endpoints.video_analysis import delete_analysis_history_item, get_analysis_history
 from app.models.video import AIConfig
 from app.models.video_analysis import VideoAnalysis
 from app.schemas.common import PaginationParams
@@ -165,3 +165,112 @@ def test_get_analysis_result_returns_debug_fields(
     assert response.data.api_response_time is not None
     assert response.data.api_call_time.replace(tzinfo=timezone.utc) == now
     assert response.data.api_response_time.replace(tzinfo=timezone.utc) == now
+
+
+def test_get_analysis_history_excludes_logically_deleted_records(
+    db_session,
+    temp_upload_dir: Path,
+) -> None:
+    user = create_user(db_session, email="analysis-history-delete@example.com")
+    video_path = temp_upload_dir / "analysis-history-delete.mp4"
+    video_path.write_bytes(b"fake-video-content")
+
+    uploaded_file = create_uploaded_file(
+        db_session,
+        user=user,
+        original_filename="analysis-history-delete.mp4",
+        saved_filename="analysis-history-delete.mp4",
+        file_path=video_path,
+        file_size=video_path.stat().st_size,
+    )
+
+    ai_config = AIConfig(
+        name="history-delete-config",
+        provider="openai",
+        api_key="test-key",
+        model="gpt-4o-mini",
+        is_active=True,
+    )
+    db_session.add(ai_config)
+    db_session.commit()
+    db_session.refresh(ai_config)
+
+    visible_analysis = VideoAnalysis(
+        user_id=str(user.id),
+        video_file_id=uploaded_file.id,
+        prompt_content="visible",
+        ai_config_id=ai_config.id,
+        status="completed",
+        progress=100,
+        is_active=True,
+    )
+    hidden_analysis = VideoAnalysis(
+        user_id=str(user.id),
+        video_file_id=uploaded_file.id,
+        prompt_content="hidden",
+        ai_config_id=ai_config.id,
+        status="completed",
+        progress=100,
+        is_active=False,
+    )
+    db_session.add_all([visible_analysis, hidden_analysis])
+    db_session.commit()
+
+    response = get_analysis_history(
+        pagination=PaginationParams(page=1, size=20),
+        status_filter=None,
+        db=db_session,
+    )
+
+    assert response.code == 200
+    assert response.data is not None
+    assert response.data.total == 1
+    assert [item.id for item in response.data.items] == [visible_analysis.id]
+
+
+def test_delete_analysis_history_item_marks_record_inactive(
+    db_session,
+    temp_upload_dir: Path,
+) -> None:
+    user = create_user(db_session, email="analysis-delete-action@example.com")
+    video_path = temp_upload_dir / "analysis-delete-action.mp4"
+    video_path.write_bytes(b"fake-video-content")
+
+    uploaded_file = create_uploaded_file(
+        db_session,
+        user=user,
+        original_filename="analysis-delete-action.mp4",
+        saved_filename="analysis-delete-action.mp4",
+        file_path=video_path,
+        file_size=video_path.stat().st_size,
+    )
+
+    ai_config = AIConfig(
+        name="history-delete-action-config",
+        provider="openai",
+        api_key="test-key",
+        model="gpt-4o-mini",
+        is_active=True,
+    )
+    db_session.add(ai_config)
+    db_session.commit()
+    db_session.refresh(ai_config)
+
+    analysis = VideoAnalysis(
+        user_id=str(user.id),
+        video_file_id=uploaded_file.id,
+        prompt_content="delete-me",
+        ai_config_id=ai_config.id,
+        status="completed",
+        progress=100,
+        is_active=True,
+    )
+    db_session.add(analysis)
+    db_session.commit()
+    db_session.refresh(analysis)
+
+    response = delete_analysis_history_item(analysis.id, db=db_session)
+
+    assert response.code == 200
+    db_session.refresh(analysis)
+    assert analysis.is_active is False

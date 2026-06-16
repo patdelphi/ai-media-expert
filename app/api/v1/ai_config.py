@@ -40,6 +40,13 @@ def _mask_api_key(stored: str) -> str:
     return f"{plain[:3]}****{plain[-4:]}"
 
 
+def _apply_masked_keys(resp: AIConfigResponse, config: AIConfig) -> AIConfigResponse:
+    """统一处理响应中的敏感密钥脱敏。"""
+    resp.api_key = _mask_api_key(config.api_key)
+    resp.upload_api_key = _mask_api_key(config.upload_api_key) if config.upload_api_key else ""
+    return resp
+
+
 @router.post("/", response_model=ResponseModel[AIConfigResponse])
 async def create_ai_config(
     config: AIConfigCreate,
@@ -55,13 +62,14 @@ async def create_ai_config(
     
     config_dict = config.model_dump()
     config_dict["api_key"] = _encrypt_api_key(config_dict["api_key"])
+    if config_dict.get("upload_api_key"):
+        config_dict["upload_api_key"] = _encrypt_api_key(config_dict["upload_api_key"])
     db_config = AIConfig(**config_dict)
     db.add(db_config)
     db.commit()
     db.refresh(db_config)
 
-    resp = AIConfigResponse.model_validate(db_config)
-    resp.api_key = _mask_api_key(db_config.api_key)
+    resp = _apply_masked_keys(AIConfigResponse.model_validate(db_config), db_config)
     return ResponseModel(
         code=200,
         message="AI配置创建成功",
@@ -104,8 +112,7 @@ async def get_ai_configs_full(
     configs = query.order_by(AIConfig.created_at.desc()).all()
     data: List[AIConfigResponse] = []
     for config in configs:
-        resp = AIConfigResponse.model_validate(config)
-        resp.api_key = _mask_api_key(config.api_key)
+        resp = _apply_masked_keys(AIConfigResponse.model_validate(config), config)
         data.append(resp)
     return ResponseModel(
         code=200,
@@ -125,8 +132,7 @@ async def get_ai_config(
     if not config:
         raise HTTPException(status_code=404, detail="AI配置不存在")
     
-    resp = AIConfigResponse.model_validate(config)
-    resp.api_key = _mask_api_key(config.api_key)
+    resp = _apply_masked_keys(AIConfigResponse.model_validate(config), config)
     return ResponseModel(
         code=200,
         message="AI配置获取成功",
@@ -162,14 +168,18 @@ async def update_ai_config(
             update_data["api_key"] = _encrypt_api_key(update_data["api_key"])
         else:
             update_data.pop("api_key")
+    if "upload_api_key" in update_data:
+        if update_data["upload_api_key"]:
+            update_data["upload_api_key"] = _encrypt_api_key(update_data["upload_api_key"])
+        else:
+            update_data.pop("upload_api_key")
     for field, value in update_data.items():
         setattr(config, field, value)
     
     db.commit()
     db.refresh(config)
     
-    resp = AIConfigResponse.model_validate(config)
-    resp.api_key = _mask_api_key(config.api_key)
+    resp = _apply_masked_keys(AIConfigResponse.model_validate(config), config)
     return ResponseModel(
         code=200,
         message="AI配置更新成功",

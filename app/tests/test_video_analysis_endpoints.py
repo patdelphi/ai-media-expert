@@ -125,3 +125,62 @@ async def test_process_video_analysis_generates_runtime_video_url_for_mimo(
     assert analysis.video_url == "http://example.com/api/v1/files/stream/mimo-source.mp4"
     assert analysis.runtime_video_url is not None
     assert analysis.runtime_video_url.startswith("http://example.com/api/v1/files/stream/mimo-source.mp4?token=")
+
+
+@pytest.mark.asyncio
+async def test_process_video_analysis_generates_runtime_video_url_for_qwen_video_model(
+    db_session,
+    temp_upload_dir: Path,
+    monkeypatch,
+) -> None:
+    """Qwen 视频模型应走视频理解分支，并生成运行时视频 URL。"""
+    user = create_user(db_session, email="qwen-analysis-owner@example.com")
+    video_path = temp_upload_dir / "qwen-source.mp4"
+    video_path.write_bytes(b"fake-video-content")
+
+    uploaded_file = create_uploaded_file(
+        db_session,
+        user=user,
+        original_filename="qwen-source.mp4",
+        saved_filename="qwen-source.mp4",
+        file_path=video_path,
+        file_size=video_path.stat().st_size,
+    )
+
+    ai_config = AIConfig(
+        name="qwen-config",
+        provider="custom",
+        api_key="test-key",
+        api_base="https://example.com/chat/completions",
+        model="qwen3.7-plus",
+        is_active=True,
+    )
+    db_session.add(ai_config)
+    db_session.commit()
+    db_session.refresh(ai_config)
+
+    analysis = VideoAnalysis(
+        user_id=str(user.id),
+        video_file_id=uploaded_file.id,
+        prompt_content="请分析视频内容",
+        ai_config_id=ai_config.id,
+        status="pending",
+        progress=0,
+    )
+    db_session.add(analysis)
+    db_session.commit()
+    db_session.refresh(analysis)
+
+    async def fake_call_ai_api(*args, **kwargs) -> AsyncGenerator[str, None]:
+        yield "ok"
+
+    monkeypatch.setattr(ai_service, "call_ai_api", fake_call_ai_api)
+    monkeypatch.setattr("app.core.config.Settings.get_base_url", lambda self: "http://example.com")
+
+    await process_video_analysis(analysis.id, db_session)
+    db_session.refresh(analysis)
+
+    assert analysis.status == "completed"
+    assert analysis.video_url == "http://example.com/api/v1/files/stream/qwen-source.mp4"
+    assert analysis.runtime_video_url is not None
+    assert analysis.runtime_video_url.startswith("http://example.com/api/v1/files/stream/qwen-source.mp4?token=")

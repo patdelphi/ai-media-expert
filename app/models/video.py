@@ -358,6 +358,7 @@ class AIConfig(BaseModel):
     name = Column(String(100), nullable=False)  # 配置名称
     provider = Column(String(50), nullable=False)  # 提供商：openai, claude, gemini等
     api_key = Column(String(500), nullable=False)  # API密钥
+    upload_api_key = Column(String(500), nullable=True)  # Qwen 文件上传专用 API 密钥
     api_base = Column(String(500))  # API基础URL
     model = Column(String(100), nullable=False)  # 模型名称
     max_tokens = Column(Integer, default=4000)  # 最大token数

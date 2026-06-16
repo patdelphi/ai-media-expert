@@ -130,6 +130,7 @@ const SystemConfigPage: React.FC = () => {
     provider: string;
     name: string;
     apiKey: string;
+    uploadApiKey: string;
     baseUrl: string;
     model: string;
     maxTokens?: number;
@@ -138,6 +139,7 @@ const SystemConfigPage: React.FC = () => {
     provider: 'custom',
     name: '',
     apiKey: '',
+    uploadApiKey: '',
     baseUrl: '',
     model: '',
     maxTokens: 4000,
@@ -236,6 +238,15 @@ const SystemConfigPage: React.FC = () => {
     
     const filtered = configs.filter(config => config.category === categoryFilter);
     setFilteredConfigs(filtered);
+  };
+
+  const getTabCount = (tabKey: string): number | null => {
+    if (tabKey === 'ai') {
+      return aiConfigs.length;
+    }
+
+    const matchedCategory = categories.find(c => c.category === tabKey);
+    return matchedCategory ? matchedCategory.count : null;
   };
 
   const handleCreateConfig = async () => {
@@ -597,6 +608,7 @@ const SystemConfigPage: React.FC = () => {
         name: newApi.name,
         provider: newApi.provider,
         api_key: newApi.apiKey,
+        upload_api_key: newApi.uploadApiKey || undefined,
         api_base: newApi.baseUrl,
         model: newApi.model,
         max_tokens: newApi.maxTokens,
@@ -611,6 +623,7 @@ const SystemConfigPage: React.FC = () => {
           provider: 'custom',
           name: '',
           apiKey: '',
+          uploadApiKey: '',
           baseUrl: '',
           model: '',
           maxTokens: 4000,
@@ -638,7 +651,8 @@ const SystemConfigPage: React.FC = () => {
   const handleEditApi = (config: AIConfig) => {
     setEditingApi({
       ...config,
-      api_key: config.api_key // 保持原有的API key
+      api_key: config.api_key, // 保持原有的API key
+      upload_api_key: config.upload_api_key || ''
     });
     setValidationErrors({});
   };
@@ -670,10 +684,12 @@ const SystemConfigPage: React.FC = () => {
     try {
       console.log('📡 发送PUT请求更新配置', { url: `/api/v1/ai-config/${editingApi.id}` });
       const apiKeyToSubmit = editingApi.api_key?.includes('*') ? undefined : editingApi.api_key;
+      const uploadApiKeyToSubmit = editingApi.upload_api_key?.includes('*') ? undefined : editingApi.upload_api_key;
       const response = await aiConfigService.updateConfig(editingApi.id, {
         name: editingApi.name,
         provider: editingApi.provider,
         api_key: apiKeyToSubmit,
+        upload_api_key: uploadApiKeyToSubmit,
         api_base: editingApi.api_base,
         model: editingApi.model,
         max_tokens: editingApi.max_tokens,
@@ -1293,9 +1309,9 @@ const SystemConfigPage: React.FC = () => {
               >
                 <i className={`fas ${tab.icon}`}></i>
                 <span>{tab.label}</span>
-                {categories.find(c => c.category === tab.key) && (
+                {getTabCount(tab.key) !== null && (
                   <span className="ml-2 bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full">
-                    {categories.find(c => c.category === tab.key)?.count || 0}
+                    {getTabCount(tab.key) || 0}
                   </span>
                 )}
               </button>
@@ -1585,7 +1601,7 @@ const SystemConfigPage: React.FC = () => {
                   </div>
                   <div>
                     <input
-                      type="text"
+                      type="password"
                       placeholder="API Key *"
                       value={newApi.apiKey}
                       onChange={(e) => setNewApi({...newApi, apiKey: e.target.value})}
@@ -1594,6 +1610,15 @@ const SystemConfigPage: React.FC = () => {
                     {validationErrors.apiKey && (
                       <p className="text-red-500 text-xs mt-1">{validationErrors.apiKey}</p>
                     )}
+                  </div>
+                  <div>
+                    <input
+                      type="password"
+                      placeholder="上传专用 API Key（仅Qwen文件上传）"
+                      value={newApi.uploadApiKey}
+                      onChange={(e) => setNewApi({...newApi, uploadApiKey: e.target.value})}
+                      className="input-field"
+                    />
                   </div>
                   <div className="md:col-span-2 lg:col-span-1">
                     <input
@@ -1741,7 +1766,7 @@ const SystemConfigPage: React.FC = () => {
                               </div>
                               <div>
                                 <input
-                                  type="text"
+                                  type="password"
                                   placeholder="API Key *"
                                   value={editingApi.api_key}
                                   onChange={(e) => setEditingApi({...editingApi, api_key: e.target.value})}
@@ -1750,6 +1775,16 @@ const SystemConfigPage: React.FC = () => {
                                 {validationErrors.apiKey && (
                                   <p className="text-red-500 text-xs mt-1">{validationErrors.apiKey}</p>
                                 )}
+                              </div>
+                              <div>
+                                <input
+                                  type="password"
+                                  placeholder="上传专用 API Key（仅Qwen文件上传）"
+                                  value={editingApi.upload_api_key || ''}
+                                  onChange={(e) => setEditingApi({...editingApi, upload_api_key: e.target.value})}
+                                  className="input-field w-full"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">仅用于 Qwen 文件上传，不参与模型解析</p>
                               </div>
                               <div>
                                 <input
@@ -1798,6 +1833,7 @@ const SystemConfigPage: React.FC = () => {
                               <p className="text-sm text-gray-600">Provider: {config.provider}</p>
                               <p className="text-sm text-gray-600">模型: {config.model}</p>
                               <p className="text-sm text-gray-500">API Key: {'*'.repeat(Math.min(config.api_key?.length || 0, 20))}</p>
+                              <p className="text-sm text-gray-500">上传Key: {config.upload_api_key ? '*'.repeat(Math.min(config.upload_api_key.length, 20)) : '未配置'}</p>
                               <p className="text-sm text-gray-500">Base URL: {config.api_base}</p>
                               <div className="flex space-x-4 text-sm text-gray-500">
                                 <span>最大Token: {config.max_tokens}</span>

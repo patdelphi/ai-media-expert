@@ -591,6 +591,42 @@ def get_analysis_result(
         )
 
 
+@router.delete("/{analysis_id}", response_model=ResponseModel[dict])
+def delete_analysis_history_item(
+    analysis_id: int,
+    db: Session = Depends(get_db)
+) -> Any:
+    """逻辑删除解析历史记录。"""
+    try:
+        analysis = db.query(VideoAnalysis).filter(
+            VideoAnalysis.id == analysis_id
+        ).first()
+
+        if not analysis:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Analysis not found"
+            )
+
+        analysis.is_active = False
+        db.commit()
+
+        return ResponseModel(
+            code=200,
+            message="Analysis history deleted successfully",
+            data={"id": analysis_id, "is_active": False}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        api_logger.error(f"Failed to delete analysis history: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete analysis history: {str(e)}"
+        )
+
+
 @router.get("/{analysis_id}/stream")
 def stream_analysis_result(
     analysis_id: int,
@@ -804,7 +840,7 @@ def get_analysis_history(
 ) -> Any:
     """获取解析历史记录"""
     try:
-        query = db.query(VideoAnalysis)
+        query = db.query(VideoAnalysis).filter(VideoAnalysis.is_active == True)
         
         if status_filter:
             query = query.filter(VideoAnalysis.status == status_filter)
