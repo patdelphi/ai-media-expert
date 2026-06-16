@@ -95,7 +95,7 @@ class TagGroupListResponse(BaseModel):
     name: str
     description: Optional[str]
     is_active: bool
-    tag_count: int = Field(description="标签数量")
+    tag_count: int = Field(default=0, description="标签数量")
     created_at: datetime
     updated_at: datetime
     

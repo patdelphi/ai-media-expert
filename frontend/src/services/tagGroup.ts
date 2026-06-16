@@ -86,7 +86,7 @@ class TagGroupService {
     if (params.is_active !== undefined) queryParams.append('is_active', params.is_active.toString());
     if (params.include_tags !== undefined) queryParams.append('include_tags', params.include_tags.toString());
     
-    const url = `/tag-groups${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const url = `/tag-groups/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     return apiService.get<TagGroup[]>(url);
   }
 
@@ -101,7 +101,7 @@ class TagGroupService {
    * 创建标签组
    */
   async createTagGroup(data: CreateTagGroupRequest): Promise<ApiResponse<TagGroup>> {
-    return apiService.post<TagGroup>('/tag-groups', data);
+    return apiService.post<TagGroup>('/tag-groups/', data);
   }
 
   /**

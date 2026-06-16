@@ -96,7 +96,7 @@ class SystemConfigService {
     if (isPublic !== undefined) params.is_public = isPublic;
     if (includeInactive) params.include_inactive = includeInactive;
 
-    return apiService.get('/system/config', params);
+    return apiService.get('/system/config/', params);
   }
 
   // 获取公开配置（不需要认证）
@@ -121,7 +121,7 @@ class SystemConfigService {
 
   // 创建配置
   async createConfig(data: CreateConfigRequest): Promise<ApiResponse<SystemConfig>> {
-    return apiService.post('/system/config', data);
+    return apiService.post('/system/config/', data);
   }
 
   // 更新配置

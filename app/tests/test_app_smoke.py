@@ -1,7 +1,9 @@
+import inspect
+
 import httpx
 import pytest
 
-from app.app import app
+from app.app import app, lifespan
 
 
 @pytest.mark.asyncio
@@ -54,4 +56,11 @@ async def test_root() -> None:
     assert data.get("docs") == "/docs"
     assert data.get("health") == "/health/liveness"
     assert data.get("readiness") == "/health/readiness"
+
+
+def test_lifespan_and_uploads_route_hardened() -> None:
+    wrapped_lifespan = getattr(lifespan, "__wrapped__", None)
+    assert wrapped_lifespan is not None
+    assert inspect.isasyncgenfunction(wrapped_lifespan)
+    assert all(getattr(route, "path", None) != "/uploads/{path:path}" for route in app.routes)
 

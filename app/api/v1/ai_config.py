@@ -29,7 +29,10 @@ def _decrypt_api_key(stored: str) -> str:
 
 
 def _mask_api_key(stored: str) -> str:
-    plain = _decrypt_api_key(stored)
+    try:
+        plain = _decrypt_api_key(stored)
+    except Exception:
+        return "****"
     if not plain:
         return ""
     if len(plain) <= 8:
@@ -214,7 +217,18 @@ async def test_ai_config(
         start_time = time.time()
         
         # 构建测试请求
-        api_key = _decrypt_api_key(config.api_key)
+        try:
+            api_key = _decrypt_api_key(config.api_key)
+        except ValueError:
+            test_result = {
+                "success": False,
+                "message": "API Key 无法解密，请在系统配置中编辑该 AI 配置并重新填写 API Key（可能是 SECRET_KEY 变更导致历史加密数据不可解密）",
+            }
+            return ResponseModel(
+                code=200,
+                message="AI配置测试完成",
+                data=test_result,
+            )
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"

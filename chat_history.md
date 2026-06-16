@@ -1,4 +1,4 @@
-﻿# AI媒体专家项目聊天记录
+# AI媒体专家项目聊天记录
 
 ## 2025-01-21 视频下载功能设计文档完成
 
@@ -550,6 +550,505 @@ pm run build 打包校验（0 errors）。
 
 ---
 
+## 2026-06-16 前端临时管理员无感登录
+
+### 用户问题
+- 项目暂时去除登录鉴权，打开直接进入功能页面
+- 只改前端(推荐)
+- 按admin自动登录设计，用户无感就可以
+
+### 已执行内容
+- 前端临时鉴权模式：
+  - `"frontend/src/contexts/AuthContext.tsx"` 增加前端临时管理员态，默认注入本地 `admin` 用户并保持 `isAuthenticated=true`
+  - 登出时不再回到登录页，而是立即恢复前端临时管理员会话，保证使用过程无感
+- 页面入口与跳转：
+  - `"frontend/src/App.tsx"` 将根路由 `"/"` 默认跳转到 `"/video/upload"`
+  - `"frontend/src/pages/Login.tsx"` 与 `"frontend/src/pages/Register.tsx"` 在已登录时默认回到 `"/video/upload"`
+  - `"frontend/src/components/UserMenu.tsx"` 移除退出后跳 `"/login"` 的前端跳转
+- 登录页强跳收口：
+  - `"frontend/src/services/api.ts"` 去掉接口 `401` 后前端强制跳转 `"/login"` 的行为
+- 页面文案与可见行为：
+  - `"frontend/src/pages/VideoUpload.tsx"` 去掉页面级“请先登录”拦截
+  - `"frontend/src/pages/VideoUpload.tsx"` 将播放失败时的“登录失效”提示改为中性文案，避免暴露前端临时登录实现
+- 前端测试补充：
+  - 新增 `"frontend/src/contexts/AuthContext.test.tsx"`，覆盖默认管理员态、退出后仍保持管理员态、管理员可通过受保护路由
+  - 更新 `"frontend/src/services/api.test.ts"`，覆盖 `401` 且无 refresh token 时不再强跳登录
+
+### 验证结果
+- `"frontend"` `npm.cmd test`：通过
+- `"frontend"` `npm.cmd run lint`：通过
+- `"frontend"` `npm.cmd run build`：通过
+
+### 记录时间
+- 2026-06-16 13:04:07
+
+---
+
+## 2026-06-16 修复视频解析启动写库失败
+
+### 用户问题
+- 改了半天，现在最核心视频解析功能没法用，数据库报错
+
+### 根因定位
+- `"app/api/v1/endpoints/video_analysis.py"` 的 `"/start"` 接口在创建 `"VideoAnalysis"` 记录时，遗漏了必填字段 `"user_id"`。
+- 而 `"app/models/video_analysis.py"` 中 `"video_analyses.user_id"` 定义为 `nullable=False`，并且外键关联 `"users.id"`，因此启动解析时会在写库阶段直接失败。
+- 这次报错发生在后端解析任务创建入口，不是前端页面渲染本身导致。
+
+### 已执行内容
+- 修复 `"app/api/v1/endpoints/video_analysis.py"`：
+  - 创建解析任务时补写 `user_id=str(video_file.user_id)`，继承所选视频的归属用户，避免空值写库失败。
+- 新增回归测试 `"app/tests/test_video_analysis_endpoints.py"`：
+  - 验证启动解析后会正确写入 `video_analyses.user_id`
+  - 验证解析记录仍正确关联所选视频
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_video_analysis_endpoints.py"`：通过
+- `python -m compileall -q "app"`：通过
+
+### 记录时间
+- 2026-06-16 13:10:00
+
+---
+
+## 2026-06-16 收口为前端真实 admin 自动登录
+
+### 用户问题
+- 不要这么大改动，只要自动以admin登录就可以，不要动后端
+- 前端自动登录改用 ".env" 中现有 admin 凭据
+
+### 已执行内容
+- 收口前端鉴权实现，只保留“真实登录”方案：
+  - `"frontend/src/contexts/AuthContext.tsx"` 移除本地伪造 admin 直通
+  - 初始化时改为读取 `".env"` 中的 `"VITE_AUTO_LOGIN_USERNAME"` 与 `"VITE_AUTO_LOGIN_PASSWORD"`
+  - 若本地无有效 token，则自动调用现有登录接口获取真实 token 与真实用户信息
+- 恢复正常前端鉴权流转：
+  - `"frontend/src/services/api.ts"` 恢复刷新失败后的登录页跳转
+  - `"frontend/src/components/UserMenu.tsx"` 恢复退出登录后跳转 `"/login"`
+- 更新前端环境变量示例：
+  - `"frontend/.env.example"` 增加自动登录所需的两个变量占位
+- 更新前端测试：
+  - `"frontend/src/contexts/AuthContext.test.tsx"` 改为验证 `.env` 自动真实登录、无凭据时保持未登录、已有登录态不重复自动登录
+  - `"frontend/src/services/api.test.ts"` 调整为验证刷新失败时清空本地认证数据
+
+### 验证结果
+- `"frontend"` `npm.cmd test`：通过
+- `"frontend"` `npm.cmd run lint`：通过
+- `"frontend"` `npm.cmd run build`：通过
+
+### 记录时间
+- 2026-06-16 13:27:14
+
+---
+
+## 2026-06-16 重置本地管理员密码并落地前端自动登录
+
+### 用户问题
+- 都重置为 123456
+
+### 已执行内容
+- 新增脚本 `"scripts/reset_admin_passwords.py"`：
+  - 使用项目内密码哈希算法生成 `hashed_password`
+  - 使用 SQLite 事务更新本地 `"ai_media_expert.db"` 中指定用户的密码
+- 已将管理员用户 `id=1`、`id=2` 的密码重置为 `123456`
+- 新增 `"frontend/.env"`：
+  - `VITE_AUTO_LOGIN_USERNAME=admin`
+  - `VITE_AUTO_LOGIN_PASSWORD=123456`
+
+### 验证结果
+- 使用 FastAPI TestClient 验证两个管理员账号都可用新密码登录（HTTP 200）
+- 后端全量测试：`python -m pytest -q` 通过
+
+### 备注
+- 当前环境存在 `passlib/bcrypt` 的版本告警日志，但不影响登录与哈希写入结果（本次验证均成功）
+
+### 记录时间
+- 2026-06-16 13:37:14
+
+---
+
+## 2026-06-16 修复浏览器端无法登录/无法自动登录（前端代理）
+
+### 用户问题
+- 不行，还是要手工登录，且无法登录
+
+### 根因定位
+- 前端默认 `API_BASE_URL` 指向 `http://localhost:8000/api/v1`，浏览器从 `http://localhost:5173` 直接跨域请求后端会被 CORS 拦截，导致：
+  - 自动登录请求失败
+  - 手工登录请求也失败
+- Vite 已配置 `/api` 代理（`vite.config.ts`），因此开发环境应使用相对路径 `/api/v1` 走同源代理，绕过 CORS。
+
+### 已执行内容
+- `"frontend/.env"` 增加：`VITE_API_BASE_URL=/api/v1`
+- `"frontend/.env.example"` 增加开发环境建议配置说明
+- 新增 `"scripts/smoke_frontend_autologin.py"`：
+  - 用 Playwright 冒烟验证自动登录是否成功
+  - 验证结果：进入 `"/video/upload"` 且本地已写入 token/user
+
+### 需要操作
+- 前端 `.env` 变更需要重启前端 dev server 才会生效
+
+### 记录时间
+- 2026-06-16 13:42:52
+
+---
+
+## 2026-06-16 修复视频解析页面加载失败（前端直连后端与缺少鉴权头）
+
+### 用户问题
+- 视频解析，页面加载失败
+
+### 根因定位
+- `"frontend/src/pages/VideoAnalysis.tsx"` 内部自定义了 `getApiBaseUrl()`，在开发环境强制使用 `http://localhost:8000` 直连后端，绕开了 Vite 的 `/api` 代理，导致浏览器端出现跨域/CORS 问题。
+- 同时该页面大量使用 `fetch(...)` 直调接口，未携带 `Authorization: Bearer <token>`，会导致接口 401，从而表现为页面数据加载失败。
+
+### 已执行内容
+- `"frontend/src/pages/VideoAnalysis.tsx"`：
+  - 移除硬编码的 `getApiBaseUrl()` 与直连逻辑
+  - 统一改用 `apiService` 发起请求（自动注入 Bearer token、使用统一 `API_BASE_URL`）
+  - SSE 流式结果改为使用 `apiService.getBaseUrl()` 组装 URL（支持 `/api/v1` 代理与绝对地址两种模式）
+- 测试与校验：
+  - `"frontend"` `npm.cmd test`：通过
+  - `"frontend"` `npm.cmd run lint`：通过
+  - `"frontend"` `npm.cmd run build`：通过
+
+### 需要操作
+- 若你正在运行前端 dev server，请刷新页面；如果仍旧加载旧资源，重启前端 dev server。
+
+### 记录时间
+- 2026-06-16 16:14:01
+
+---
+
+## 2026-06-16 全局排查并收口前端直连/未带鉴权头问题
+
+### 用户问题
+- 看看其他页面是不是有这些问题
+
+### 排查结论
+- 前端存在两类高风险模式：
+  - 开发环境硬编码直连 `http://localhost:8000`（绕开 Vite `/api` 代理，易触发 CORS）
+  - 直接使用 `fetch()` 调后端但未统一注入 `Authorization`（易触发 401）
+- 本次排查发现除 `"VideoAnalysis.tsx"` 外，主要剩余风险点集中在 `"VideoUpload.tsx"` 与默认配置：
+  - `"frontend/src/pages/VideoUpload.tsx"` 存在 `:8000/api/v1` 的 fallback
+  - `"frontend/src/config/index.ts"` 默认 `API_BASE_URL` 也是 `http://localhost:8000/api/v1`
+
+### 已执行内容
+- `"frontend/src/pages/VideoUpload.tsx"`：
+  - 移除 `:8000/api/v1` fallback，改为统一使用 `API_BASE_URL`
+- `"frontend/src/config/index.ts"`：
+  - 默认 `API_BASE_URL` 改为 `"/api/v1"`，默认走 Vite 代理/同源部署，更不易触发 CORS
+
+### 验证结果
+- `"frontend"` `npm.cmd test`：通过
+- `"frontend"` `npm.cmd run lint`：通过
+- `"frontend"` `npm.cmd run build`：通过
+
+### 记录时间
+- 2026-06-16 16:16:58
+
+---
+
+## 2026-06-15 补齐今日复查修复的文档记录
+
+### 用户问题
+- 你快改吧
+
+### 已执行内容
+- 复核当前未提交改动，确认以下修复已真实落地而非仅写入记录：
+  - `"app/app.py"` 已改为异步 `lifespan`，且不再公开挂载 `"/uploads"`
+  - `"app/api/v1/endpoints/file_manager.py"` 已新增 `"/stream/{filename}"` 并修正 `"/stats"` 的 `403` 透传
+  - `"app/api/v1/endpoints/video_analysis.py"` 与 `"frontend/src/pages/VideoUpload.tsx"` 已切换到受保护视频地址
+  - `"frontend/src/utils/markdown.ts"` 已增加危险协议过滤，`"frontend/src/utils/markdown.test.ts"` 已覆盖 `javascript:` 场景
+- 更新 `"docs/changelog.md"`，补齐上述“今日复查遗留问题”的正式变更记录，避免文档口径继续落后于实际代码。
+
+### 当前状态
+- 这批修复相关代码、测试与聊天记录现已对齐。
+- 当前仍处于未提交状态，未执行新的 Git 写操作。
+
+### 记录时间
+- 2026-06-15 23:08:00
+
+---
+
+## 2026-06-15 继续优化媒体流安全链路
+
+### 用户问题
+- 看下chat history最后一条，继续优化
+- go
+
+### 已执行内容
+- 针对最后一条记录中的剩余问题，继续收口媒体流链路：
+  - `"app/core/security.py"`：新增媒体专用短时只读 token，绑定单个 `saved_filename`
+  - `"app/api/v1/endpoints/file_manager.py"`：`"/stream/{filename}"` 改为只接受媒体 token，并校验 token 中的文件名与请求文件一致
+  - `"app/api/v1/endpoints/file_manager.py"`：流式响应改为 `inline`，避免播放器场景被默认当作附件下载
+  - `"app/api/v1/endpoints/video_analysis.py"`：生成媒体 URL 时改用媒体 token，且数据库仅保存不含 token 的基础地址，不再持久化敏感 URL
+  - `"app/services/ai_service.py"`：读取运行时媒体 URL 发给模型，但日志不再输出完整敏感 URL
+- 补充/更新 `"app/tests/test_file_manager_security.py"`：
+  - 缺少 token 返回 401
+  - 普通 access token 不可用于媒体流
+  - token 与文件名不匹配时拒绝访问
+  - 跨用户文件访问返回 404
+  - 响应头为 `inline`，并保留 Range 能力断言
+- 更新 `"docs/changelog.md"`，同步本轮媒体流安全优化内容。
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_file_manager_security.py"`：通过
+- `python -m pytest -q "app/tests/test_app_smoke.py" "app/tests/test_file_manager_security.py"`：通过
+- `python -m compileall -q "app"`：通过
+- `python -m flake8 "app"`：通过
+
+### 记录时间
+- 2026-06-15 23:18:00
+
+---
+
+## 2026-06-16 继续优化上传页播放链路
+
+### 用户问题
+- 看下chat history最后一条，继续优化
+
+### 已执行内容
+- 复核最后一条记录后，确认剩余未收口问题是：
+  - `"frontend/src/pages/VideoUpload.tsx"` 仍把登录 `access_token` 作为 `"/files/stream/{filename}"` 的 query token
+  - 后端媒体流接口现已只接受 media token，因此上传页播放会返回 `401`
+- 已继续收口该链路：
+  - `"app/api/v1/endpoints/file_manager.py"`：新增 `"/stream-token/{filename}"`，通过登录态为当前用户自己的文件换发短时 media token
+  - `"frontend/src/pages/VideoUpload.tsx"`：播放前先请求 `"/stream-token/{filename}"`，成功后再使用换发 token 打开 `"/stream/{filename}"` 播放地址
+  - `"frontend/src/pages/video-upload/types.ts"`：新增播放令牌响应类型
+  - `"app/tests/test_file_manager_security.py"`：补充 `stream-token` 路由鉴权依赖、本人文件换发成功、跨用户文件换发拒绝断言
+- 同步更新 `"docs/changelog.md"`，补齐本轮前端播放链路优化记录。
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_file_manager_security.py"`：通过
+- `python -m compileall -q "app"`：通过
+- `python -m flake8 "app"`：通过
+- `npx tsc --noEmit`：通过
+- `npm run lint`：通过
+- `npm run build`：通过
+
+### 记录时间
+- 2026-06-16 00:05:00
+
+---
+
+## 2026-06-16 修复启动脚本乱码报错
+
+### 用户问题
+- 运行 `"start_all_services.bat"` 有一些报错
+
+### 原因
+- 批处理脚本中包含 emoji、项目符号和部分非 ASCII 输出文本，当前 Windows `cmd` 环境下出现编码/隐藏字符兼容问题。
+- 这些字符导致部分 `echo` 行被错误当作命令执行，进而出现 `is not recognized as an internal or external command` 报错。
+
+### 已执行内容
+- 重写 `"start_all_services.bat"` 的输出部分，改为更稳定的 ASCII 文本，移除 emoji 和项目符号。
+- 保留原有启动流程：后端 API、Celery、前端开发服务器仍按原顺序启动。
+- 将前端目录切换改为 `pushd/popd` 与 `cd /d`，减少路径切换兼容问题。
+- 将服务状态检查从 `curl` 改为 PowerShell `Invoke-WebRequest` 本地检查，避免 `curl` 可用性差异造成额外报错。
+- 保留日志输出和打开前端页面逻辑。
+
+### 当前状态
+- `"start_all_services.bat"` 已按 Windows `cmd` 兼容性做最小修复。
+- 本轮未执行 Git 写操作。
+
+### 记录时间
+- 2026-06-16 00:18:00
+
+---
+
+## 2026-06-16 修复停止脚本乱码兼容性
+
+### 用户问题
+- go
+
+### 已执行内容
+- 继续对 `"stop_all_services.bat"` 做与启动脚本一致的兼容性修复：
+  - 去除 emoji、项目符号和容易触发乱码执行的输出文本
+  - 统一为更稳定的 ASCII 提示信息
+  - 统一启动/停止脚本使用的窗口标题，确保停止脚本能稳定匹配到由启动脚本拉起的后台窗口
+  - 保留原有停止逻辑：后端 API、Celery、前端、Redis 与端口清理仍继续执行
+
+### 当前状态
+- `"start_all_services.bat"` 与 `"stop_all_services.bat"` 现在都按 Windows `cmd` 兼容方式收口。
+- 本轮未执行 Git 写操作。
+
+### 记录时间
+- 2026-06-16 00:22:00
+
+---
+
+## 2026-06-16 启动脚本单窗口化
+
+### 用户问题
+- `"start_all_services.bat"` 开了三个 cmd 窗口，合并成一个，简化一下启动流程
+
+### 已执行内容
+- `"start_all_services.bat"` 改为单窗口启动：
+  - 使用 `start /b` 在同一 console 中启动后端、Celery、前端，不再弹出 3 个额外 cmd 窗口
+  - 移除自动安装依赖步骤（`pip install` / `npm install`），避免启动脚本做隐式环境改动
+  - 服务启动后进入循环等待，窗口保持占用；关闭窗口即停止服务
+- `"stop_all_services.bat"` 同步调整：
+  - 不再依赖窗口标题匹配停止进程，改为端口清理 + PowerShell 识别 celery 进程方式
+
+### 验证结果
+- 后端 `compileall/pytest`：通过
+- 前端 `tsc/lint/build`：通过
+
+### 记录时间
+- 2026-06-16 00:35:00
+
+---
+
+## 2026-06-16 实跑修复单窗口启动脚本
+
+### 用户问题
+- 一堆报错，你自己运行自己看
+
+### 实跑发现
+- 旧版单窗口批处理方案在当前环境下仍有真实问题：
+  - `start /b cmd /c ...` 触发 `Input redirection is not supported`
+  - `python -c` 内联命令在批处理中引号转义失败，导致 `SyntaxError`
+  - 前端目录切换与输出重定向组合不稳定
+- 继续实跑后确认：批处理层错误修掉后，服务真实依赖问题还包括 `Celery` 因本机未启动 `Redis` 而持续连接失败。
+
+### 已执行内容
+- `"start_all_services.bat"` 改为只做环境检查并委托 `"start_auto.py"` 启动，不再在批处理中内联拼接 3 个长命令。
+- `"start_auto.py"` 做以下收口：
+  - 改为立即刷新的控制台输出，确保在 bat 宿主中能看到完整启动过程
+  - 不再自动安装依赖，只做缺失检查并明确提示
+  - 前端启动统一使用 `5173`
+  - Celery 启动入口改为 `"app.tasks.celery"`
+  - Windows 下前端启动改为 `npm.cmd` + `shell=False`
+  - 增加 Redis 端口探测，未运行时跳过 Celery，避免无意义连接报错
+- 实跑验证后，后端与前端可正常启动；Celery 在 Redis 不可用时明确提示已跳过。
+
+### 当前状态
+- `"start_all_services.bat"` 现已切换为“bat 做最小检查 + Python supervisor 负责真实启动”的稳定方案。
+- 本轮为验证真实启动，已临时拉起服务并在结束后清理。
+
+### 记录时间
+- 2026-06-16 10:50:00
+
+---
+
+## 2026-06-16 Redis 启动前置校验
+
+### 用户问题
+- 没懂，redis影响项目正常运行吗
+- 那当然要启动了，你要确保radis启动
+
+### 实际发现
+- 当前 `.env` 中已配置：
+  - `REDIS_URL=redis://localhost:6379/0`
+  - `CELERY_BROKER_URL=redis://localhost:6379/1`
+  - `CELERY_RESULT_BACKEND=redis://localhost:6379/2`
+- 但本机当前没有 Redis 服务在监听 `6379`，且未找到 `redis-server(.exe)`（PATH 与常见目录均未命中）。
+
+### 已执行内容
+- `"start_auto.py"` 增加 `start_redis()`：
+  - 启动顺序调整为：Redis → 后端 → Celery → 前端
+  - 若未找到 `redis-server(.exe)`，直接失败退出并给出安装/设置 `REDIS_SERVER_PATH` 的提示
+  - Windows 下增加常见安装路径探测
+
+### 记录时间
+- 2026-06-16 11:05:00
+
+---
+
+## 2026-06-16 调整启动器为 Redis/Celery 可选
+
+### 用户问题
+- 你看下这个，然后修改启动器bat：...启动器应该改成 Redis/Celery 可选。没有 Redis 时仍启动后端和前端，只提示“视频下载/队列任务不可用”；视频 AI 解析仍可用。
+
+### 已确认
+- `"app/tasks/celery_app.py"` 当前确实使用 `settings.celery_broker_url` / `settings.celery_result_backend`
+- `"app/api/v1/endpoints/video_analysis.py"` 当前视频 AI 解析主流程走 `BackgroundTasks + threading`，不依赖 Celery
+- `"app/api/v1/endpoints/video_download.py"` 当前下载任务走 `download_video_task.delay(...)`，依赖 Celery
+
+### 已执行内容
+- `"start_auto.py"` 改为 Redis/Celery 可选启动：
+  - 尝试启动 Redis；若不可用，不再阻断整个启动器
+  - 无 Redis 时仅启动后端与前端
+  - 仅在 Redis 可用时启动 Celery
+  - 控制台明确提示：视频下载/队列任务不可用，但视频 AI 解析主流程仍可用
+- `"docs/changelog.md"` 已同步本轮行为调整记录。
+
+### 验证结果
+- `python -m py_compile "start_auto.py"`：通过
+
+### 记录时间
+- 2026-06-16 11:18:00
+
+---
+
+## 2026-06-16 优化启动器状态面板
+
+### 用户问题
+- 继续
+
+### 已执行内容
+- `"start_auto.py"` 新增运行状态摘要面板，启动完成后直接展示：
+  - 启动模式（`full` / `degraded`）
+  - Redis 是否已启动
+  - Celery 是否已启动
+  - 下载队列是否可用
+  - 队列任务是否可用
+  - 视频 AI 解析是否可用
+- 顺手修正了启动成功服务数量统计，避免 Redis/Celery 场景下多算 1 个服务。
+- `"docs/changelog.md"` 已同步本轮变更。
+
+### 验证结果
+- `python -m py_compile "start_auto.py"`：通过
+
+### 记录时间
+- 2026-06-16 11:25:00
+
+---
+
+## 2026-06-16 启动器输出统一为 ASCII
+
+### 用户问题
+- ok，但要确保中文信息不会让cmd报错
+
+### 已执行内容
+- 将启动链路相关文件的控制台输出统一改为 ASCII：
+  - `"start_auto.py"`
+  - `"start_all_services.bat"`
+  - `"stop_all_services.bat"`
+- `"start_auto.py"` 中原有中文/emoji 控制台提示全部替换为 ASCII 英文短句。
+- 继续保留文档与聊天记录中的中文说明，但不再让 `cmd/bat` 直接输出中文。
+
+### 验证结果
+- 启动链路相关 3 个文件非 ASCII 字符数均为 0
+- `python -m py_compile "start_auto.py"`：通过
+
+### 记录时间
+- 2026-06-16 11:33:00
+
+---
+
+## 2026-06-16 精简启动器交互
+
+### 用户问题
+- 1. 脚本不要设置字体颜色  2. 最后要自动打开前端网页
+
+### 已执行内容
+- `"start_all_services.bat"`：
+  - 移除 `color` 命令，不再修改终端颜色
+- `"start_auto.py"`：
+  - 新增自动打开前端页面逻辑
+  - 当前端健康检查通过后，自动调用默认浏览器打开 `http://localhost:5173`
+  - 仅触发一次，避免重复打开多个页面标签
+
+### 验证结果
+- `python -m py_compile "start_auto.py"`：通过
+- 启动链路相关 3 个文件非 ASCII 字符数均为 0
+
+### 记录时间
+- 2026-06-16 11:42:00
+
+---
+
 ## 2026-06-15 继续执行优化计划：生产配置、CI 对齐与页面拆分
 
 ### 用户问题
@@ -634,6 +1133,52 @@ pm run build 打包校验（0 errors）。
 
 ---
 
+## 2026-06-15 修复今日复查遗留问题
+
+### 用户问题
+- 你只看今天的记录，之前的忽略
+- 你快改吧
+
+### 复查结论
+- 仅看今天的记录，仍有 4 个关键问题未真正收口：
+  - `"app/app.py"` 使用同步 `lifespan`
+  - `"/uploads"` 仍公开挂载
+  - `"frontend/src/utils/markdown.ts"` 未拦截 `javascript:` 等危险协议
+  - `"app/api/v1/endpoints/file_manager.py"` 的 `"/stats"` 会把 `403` 包成 `500`
+
+### 已执行修复
+- `"app/app.py"`：
+  - `lifespan` 改为 `@asynccontextmanager` + `async def`
+  - 移除公开 `"/uploads"` 静态挂载
+- `"app/api/v1/endpoints/file_manager.py"`：
+  - 新增 `"/stream/{filename}"`，通过 query token 提供受保护的视频播放/直链访问
+  - `"/stats"` 补 `except HTTPException: raise`，确保非管理员返回 `403`
+- `"app/api/v1/endpoints/video_analysis.py"`：
+  - 生成视频 URL 时改为带 token 的受保护链接，不再依赖公开 `"/uploads"`
+- `"frontend/src/pages/VideoUpload.tsx"`：
+  - 播放器改为走 `"/api/v1/files/stream/{filename}?token=..."`
+- `"frontend/src/utils/markdown.ts"`：
+  - 增加危险协议检测与渲染后 `href/src` 清洗
+- 新增/更新测试：
+  - `"app/tests/test_app_smoke.py"`
+  - `"app/tests/test_file_manager_security.py"`
+  - `"frontend/src/utils/markdown.test.ts"`
+
+### 验证结果
+- `python -m compileall -q "app"`：通过
+- `python -m flake8 "app"`：通过
+- `python -m pytest -q app/tests/test_app_smoke.py app/tests/test_file_manager_security.py`：通过
+- `python -m pytest -q`：通过
+- `npm run test -- markdown api`：通过
+- `npx tsc --noEmit`：通过
+- `npm run lint`：通过
+- `npm run build`：通过
+
+### 记录时间
+- 2026-06-15 23:02:04
+
+---
+
 ## 2026-06-15 解决 pytest 卡住问题
 
 ### 用户问题
@@ -670,6 +1215,42 @@ pm run build 打包校验（0 errors）。
 ### 助手回答（摘要）
 - 可用诊断工具包括：`"LS"`、`"Glob"`、`"Grep"`、`"SearchCodebase"`、`"Read"`、`"RunCommand"`、`"CheckCommandStatus"`、`"OpenPreview"`。
 - 代码诊断常用链路：用 `"Glob"` 定位文件 → 用 `"Grep"` 搜索问题点 → 用 `"Read"` 精读上下文 → 需要时用 `"RunCommand"` 跑幂等校验（lint/test/type-check/build）。
+
+### 记录时间
+- 2026-06-15 (UTC+8)
+
+---
+
+## 2026-06-15 优化提交复查
+
+### 用户问题
+- 修改好了，检查优化提交。
+
+### 审查范围
+- 本地提交 `"4f2a6df feat(optimization): harden security and quality gates"`，相对 `"origin/main"` 共修改 85 个文件。
+
+### 主要问题
+- P0：`"app/app.py"` 使用同步 `@contextmanager` 作为 FastAPI lifespan，真实启动时报 `TypeError`，服务无法完成启动。
+- P0：`"/uploads"` 仍公开挂载整个上传目录，可绕过文件管理 API 鉴权直接访问视频。
+- P1：Markdown 方案只转义原始 HTML，仍会生成 `"javascript:"` 链接，XSS 修复不完整。
+- P1：文件统计接口把权限 403 捕获并转换为 500。
+- P2：扩大范围 mypy 有 26 个错误，当前 CI 仍只检查两个文件。
+- 测试缺口：现有 smoke test 使用 ASGITransport，未执行 lifespan，因此未发现启动失败。
+
+### 验证结果
+- compileall：通过。
+- flake8：通过。
+- CI 当前 mypy 两文件范围：通过。
+- 扩大范围 mypy：失败，26 errors。
+- pytest：51 passed。
+- 前端 lint：通过。
+- 前端测试：2 files / 3 tests passed。
+- 前端 build：通过。
+- FastAPI TestClient 生命周期启动：失败。
+
+### 未执行
+- 未修改业务代码。
+- 未执行 Git 写操作、外网访问、数据库迁移或部署。
 
 ### 记录时间
 - 2026-06-15 (UTC+8)
@@ -975,3 +1556,219 @@ pm run build 打包校验（0 errors）。
 
 ### 记录时间
 - 2026-03-27
+---
+
+## 2026-06-15 优化修复二次复查
+
+### 用户问题
+- 针对上一轮审查问题修改后再次检查。
+
+### 已确认修复
+- FastAPI lifespan 已改为 `"@asynccontextmanager"`，真实 TestClient 启动成功。
+- 已移除 `"/uploads"` 静态目录挂载，匿名静态路径不可用。
+- Markdown 已拦截测试覆盖的 `"javascript:"` 及实体编码变体。
+- 文件统计接口对普通用户正确返回 403。
+
+### 剩余问题
+- P0：视频解析生成的 URL 使用完整登录 access token，并将完整 URL 写入数据库、日志及发送给外部 AI 服务，令牌泄露后可访问用户全部 API。应改为短时、单文件、只读的媒体专用 token，且日志必须脱敏。
+- P1：流媒体接口 `FileResponse` 传入 filename 后默认 `Content-Disposition: attachment`，不适合作为播放器内联资源；应设置 `content_disposition_type="inline"`。
+- 测试缺口：尚无 stream endpoint 的无 token、跨用户、有效 token、响应头及 Range 请求测试。
+
+### 验证结果
+- compileall、flake8、CI 当前 mypy 范围：通过。
+- pytest：53 passed。
+- 前端 lint：通过。
+- 前端测试：2 files / 4 tests passed。
+- 前端 build：通过。
+- 真实 lifespan 启动：通过。
+
+### 未执行
+- 未修改业务代码，未执行 Git 写操作。
+
+### 记录时间
+- 2026-06-15 (UTC+8)
+---
+
+## 2026-06-16 媒体流 token 修复复查
+
+### 用户问题
+- 更新好了，检查一下。
+
+### 已确认修复
+- 媒体流后端改为只接受短时、单文件、只读的 media token。
+- 视频解析链路不再把带 token 的完整 URL 持久化到数据库；AI 服务日志不再记录敏感 URL。
+- 流媒体响应已设置 inline，`"/uploads"` 静态暴露仍保持移除。
+- Markdown 危险协议过滤、lifespan、403 状态码修复仍通过验证。
+
+### 剩余问题
+- P1：前端上传页播放仍把登录 `access_token` 作为 `"/files/stream/{filename}"` 的 query token，但后端明确拒绝非 media token，因此上传页播放会返回 401。需要提供一个登录鉴权接口生成当前文件的 media token，或让播放接口通过 Authorization 登录态换发短时媒体 token。
+
+### 验证结果
+- compileall、flake8、当前 CI mypy 范围：通过。
+- 后端 pytest：59 passed。
+- 前端 lint：通过。
+- 前端测试：2 files / 4 tests passed。
+- 前端 build：通过。
+
+### 未执行
+- 未修改业务代码，未执行 Git 写操作。
+
+### 记录时间
+- 2026-06-16 (UTC+8)
+---
+
+## 2026-06-16 播放 media token 闭环复查
+
+### 用户问题
+- 更新好了，检查一下。
+
+### 已确认
+- 后端新增 `"/api/v1/files/stream-token/{filename}"`，登录态可换发短时 media token。
+- 前端上传页播放前先请求 `stream-token`，再用 media token 调用 `"/files/stream/{filename}"`。
+- `"/files/stream/{filename}"` 拒绝完整 access token，只接受 `type=media` 且绑定文件名的 token。
+- 流响应为 `Content-Disposition: inline`，并保留 Range 支持。
+- 视频解析链路仍只持久化不含 token 的基础 URL，运行时 token URL 仅通过临时属性传给 AI 服务。
+
+### 验证结果
+- `python -m compileall -q "app"`：通过。
+- `python -m flake8 "app"`：通过。
+- 当前 CI mypy 范围：通过。
+- `python -m pytest -q`：62 passed。
+- `npm run lint`：通过。
+- `npm run test`：2 files / 4 tests passed。
+- `npm run build`：通过。
+- TestClient 实测：`stream-token -> stream` 返回 200，inline 响应正常；access token 直连 stream 返回 401。
+
+### 检查副作用
+- 为 TestClient 实测创建了本地测试文件 `uploads/videos/review-stream.mp4`。
+- 为 TestClient 实测创建或复用了数据库测试用户 `review-stream@example.com` 及对应 `UploadedFile` 记录。
+- 未执行删除清理，等待用户确认。
+
+### 记录时间
+- 2026-06-16 (UTC+8)
+
+## 2026-06-16 11:38:51 +08:00
+
+- 用户询问：项目之前可正常启动，现在突然要求 Redis，是否新增 .env 有问题；并提供另一 AI 的分析。
+- 当前动作：检查 .env、Celery 配置和启动脚本，仅做读取与判断。
+
+
+## 2026-06-16 11:41:04 +08:00
+
+- 用户询问：1. Celery 是否必须 Redis 才能启动；2. Celery 是否是视频 AI 解析的必须服务。
+- 当前动作：检查 Celery 配置和视频解析调用链，只做读取与判断。
+
+---
+
+## 2026-06-16 系统配置 500 / 获取标签失败
+
+### 用户问题
+- 系统配置报错 Request failed with status code 500
+- 还有获取标签失败
+
+### 已执行内容
+- 修复系统配置分类统计接口潜在 500：避免使用 `row.count`（与 Row/tuple 的 `count` 方法冲突风险），改为解包查询结果并使用 `config_count` 别名：[system_config.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/api/v1/endpoints/system_config.py)
+- 修复标签组列表在 `include_tags=false` 场景的响应模型校验：为 `tag_count` 提供默认值，避免响应构建阶段报错：[tag_group.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/schemas/tag_group.py)
+- 新增回归测试覆盖系统配置分类统计与标签组列表（含/不含 tags）：[test_system_config_and_tag_groups_endpoints.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/tests/test_system_config_and_tag_groups_endpoints.py)
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_system_config_and_tag_groups_endpoints.py"`：通过
+
+---
+
+## 2026-06-16 标签组列表 Network Error
+
+### 用户问题
+- network error，获取标签组列表失败
+
+### 根因定位
+- 前端请求使用 `"/tag-groups"`（无尾随 `/`），后端会返回 `307` 重定向到 `"/tag-groups/"`。
+- 在 Vite 代理场景下，该重定向可能变成指向 `http://localhost:8000/...` 的绝对地址，浏览器随即跨域直连后端，触发 CORS，从而在前端表现为 `Network Error`。
+
+### 已执行内容
+- 前端标签组列表与创建接口统一改为带尾随 `/`，避免触发 `307` 重定向：[tagGroup.ts](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/services/tagGroup.ts)
+- 同步修正系统配置列表/创建接口的尾随 `/`（同类问题）：[systemConfig.ts](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/services/systemConfig.ts)
+
+### 验证结果
+- `frontend` `npm.cmd run build`：通过
+
+---
+
+## 2026-06-16 排查其他类似 307/CORS 风险点
+
+### 用户问题
+- 检查下其他地方有没有类似错误
+
+### 排查结论
+- 后端存在 `@router.get("/")/@router.post("/")` 的前缀路由：`/system/config/`、`/tag-groups/`、`/ai-config/`、`/prompt-templates/`、`/video-analysis/`。
+- 若前端请求缺少尾随 `/`，会触发 `307` 重定向；在 Vite 代理场景下可能放大为跨域直连，从而在浏览器端表现为 `Network Error`。
+
+### 已执行内容
+- 统一前端对上述“根路径”接口的调用为带尾随 `/`：
+  - [tagGroup.ts](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/services/tagGroup.ts)
+  - [systemConfig.ts](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/services/systemConfig.ts)
+  - [aiConfig.ts](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/services/aiConfig.ts)
+  - [promptTemplate.ts](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/services/promptTemplate.ts)
+
+### 验证结果
+- `frontend` `npm.cmd run build`：通过
+
+---
+
+## 2026-06-16 修复运行时 500：AI 配置 full / 下载统计 stats
+
+### 用户问题
+- Request failed with status code 500
+
+### 根因定位
+- `GET /api/v1/ai-config/full`：若历史数据中存在无法解密的 `api_key`（`enc:` 前缀但内容不合法/密钥变更），在脱敏阶段解密抛错，触发 500。
+- `GET /api/v1/download/stats`：错误使用 `db.func`（`Session` 无此属性），运行时抛 `AttributeError` 触发 500。
+
+### 已执行内容
+- `ai-config/full`：脱敏函数 `_mask_api_key` 增加异常兜底，解密失败时返回 `"****"` 而不是抛错：[ai_config.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/api/v1/ai_config.py)
+- `download/stats`：改为 `from sqlalchemy import func` 并使用 `func.count(...)`，同时用解包构建 dict 避免属性名冲突：[download.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/api/v1/endpoints/download.py)
+- 补回归测试：
+  - [test_ai_config_security.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/tests/test_ai_config_security.py)
+  - [test_download_endpoints.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/tests/test_download_endpoints.py)
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_download_endpoints.py" "app/tests/test_ai_config_security.py"`：通过
+
+---
+
+## 2026-06-16 重启后仍 500（AI 配置不出）
+
+### 用户问题
+- 重启了还是报错 Request failed with status code 500，ai配置出不来
+
+### 现象复现（本机）
+- `GET "/api/v1/ai-config/full"`：仍返回 500
+- `GET "/api/v1/download/stats"`：仍返回 500
+- `GET "/api/v1/ai-config/"`：返回 200
+
+### 关键结论
+- 直接在当前代码环境中调用路由函数（同一个数据库）可返回 200，说明**运行在 8000 端口的后端进程并未加载到最新代码**（可能仍是旧进程/不同工作目录/不同 Python 环境）。
+
+### 后续处理
+- 因环境限制，无法结束占用 8000 的旧监听进程（netstat 显示 PID 仍在，但 Stop-Process 找不到该 PID）。
+- 临时方案：用当前仓库代码启动后端到 8001，并将前端 Vite 代理目标切到 8001。
+
+---
+
+## 2026-06-16 AI API 测试失败：API Key 无法解密
+
+### 用户问题
+- ai api 测试失败: 测试失败: Failed to decrypt value:
+
+### 根因定位
+- AI 配置的 `api_key` 以 `enc:` 前缀保存，解密依赖当前环境 `SECRET_KEY` 派生的 Fernet key。
+- 若历史 `SECRET_KEY` 发生变更（或数据库中存在非法的 `enc:` 值），会导致解密失败，进而测试接口无法发起真实请求。
+
+### 已执行内容
+- 后端测试接口在解密失败时返回可操作提示，不再给出空字符串错误：[ai_config.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/api/v1/ai_config.py)
+- 前端更新 AI 配置时，若当前 API Key 是 `****` 这类脱敏值则不提交，避免“把脱敏值再写回数据库”：[SystemConfig.tsx](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/SystemConfig.tsx)
+- 新增回归测试覆盖“解密失败提示”路径：[test_ai_config_security.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/tests/test_ai_config_security.py)
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_ai_config_security.py"`：通过
+

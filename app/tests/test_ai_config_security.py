@@ -12,6 +12,8 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.v1.ai_config import activate_ai_config, deactivate_ai_config
+from app.api.v1.ai_config import get_ai_configs_full
+from app.api.v1.ai_config import test_ai_config as run_ai_config_test
 from app.models.video import AIConfig
 from app.models.user import User
 from app.tests.factories import create_admin
@@ -70,3 +72,51 @@ async def test_ai_config_activate_rolls_back_on_commit_error() -> None:
 
     assert exc.value.status_code == 500
     assert db.rollback.called is True
+
+
+@pytest.mark.asyncio
+async def test_ai_config_full_list_masks_invalid_encrypted_key(override_db) -> None:
+    admin = create_admin(override_db, email="aiconfig-full@example.com")
+    override_db.add(
+        AIConfig(
+            name="cfg-invalid",
+            provider="custom",
+            api_key="enc:not-a-valid-fernet-payload",
+            api_base="http://example.com",
+            model="m",
+            max_tokens=10,
+            temperature=0.1,
+            is_active=True,
+        )
+    )
+    override_db.commit()
+
+    resp = await get_ai_configs_full(include_inactive=False, current_user=admin, db=override_db)
+    assert resp.code == 200
+    assert resp.data is not None
+    assert any(item.name == "cfg-invalid" and item.api_key == "****" for item in resp.data)
+
+
+@pytest.mark.asyncio
+async def test_ai_config_test_returns_hint_when_api_key_cannot_decrypt(override_db) -> None:
+    admin = create_admin(override_db, email="aiconfig-test@example.com")
+    override_db.add(
+        AIConfig(
+            name="cfg-test-invalid",
+            provider="custom",
+            api_key="enc:not-a-valid-fernet-payload",
+            api_base="http://example.com",
+            model="m",
+            max_tokens=10,
+            temperature=0.1,
+            is_active=True,
+        )
+    )
+    override_db.commit()
+
+    config_id = override_db.query(AIConfig).filter(AIConfig.name == "cfg-test-invalid").first().id
+    resp = await run_ai_config_test(config_id=config_id, current_user=admin, db=override_db)
+    assert resp.code == 200
+    assert resp.data is not None
+    assert resp.data.get("success") is False
+    assert "无法解密" in resp.data.get("message", "")

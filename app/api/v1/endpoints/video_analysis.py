@@ -460,6 +460,7 @@ def start_video_analysis(
         
         # 创建解析任务
         analysis = VideoAnalysis(
+            user_id=str(video_file.user_id),
             video_file_id=request.video_file_id,
             template_id=request.template_id,
             tag_group_ids=request.tag_group_ids,
@@ -918,21 +919,28 @@ async def process_video_analysis(analysis_id: int, db: Session):
                 # 设置视频文件路径（用于Base64编码备选方案）
                 analysis.video_file_path = video_file_path
                 
-                # 生成公网可访问的视频URL
+                # 生成媒体专用短时 URL，仅用于当前分析任务访问视频内容。
                 base_url = settings.get_base_url()
+                from app.core.security import create_media_access_token
                 # 从file_path中提取文件名
                 filename = os.path.basename(video_file.file_path)
-                video_url = f"{base_url}/uploads/videos/{filename}"
-                analysis.video_url = video_url
+                media_token = create_media_access_token(
+                    subject=video_file.user_id,
+                    saved_filename=filename,
+                )
+                video_url = f"{base_url}/api/v1/files/stream/{filename}?token={media_token}"
+                # 数据库存储不落敏感 token，仅保留基础地址用于调试排查。
+                analysis.video_url = f"{base_url}/api/v1/files/stream/{filename}"
+                analysis.runtime_video_url = video_url
                 db.commit()
                 
-                api_logger.info(f"Generated video URL for GLM model: {video_url}")
+                api_logger.info(f"Generated protected media stream for GLM model: {filename}")
                 api_logger.info(f"Video file path for Base64 fallback: {video_file_path}")
                 api_logger.info(f"Base URL source: {base_url} (ngrok: {settings.ngrok_url}, public: {settings.public_base_url})")
                 
                 # 验证URL格式
                 if not (video_url.startswith('http://') or video_url.startswith('https://')):
-                    api_logger.warning(f"Generated URL may not be accessible externally: {video_url}")
+                    api_logger.warning(f"Generated media URL may not be accessible externally: {filename}")
                     
             except Exception as e:
                 api_logger.error(f"Failed to generate video URL: {str(e)}")

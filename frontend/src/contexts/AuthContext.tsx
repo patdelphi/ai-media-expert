@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { authService, User } from '../services/auth';
 
 // 认证状态类型
@@ -19,17 +19,32 @@ interface AuthContextType extends AuthState {
   refreshUser: () => Promise<void>;
 }
 
+// 程序说明：当前通过 ".env" 中的管理员账号自动调用现有登录接口，获取真实登录态。
+const getAutoLoginCredentials = () => {
+  const username = (import.meta.env.VITE_AUTO_LOGIN_USERNAME || '').trim();
+  const password = (import.meta.env.VITE_AUTO_LOGIN_PASSWORD || '').trim();
+
+  return {
+    username,
+    password,
+    enabled: username !== '' && password !== '',
+  };
+};
+
+const createAnonymousState = (isLoading: boolean, error: string | null = null): AuthState => ({
+  user: null,
+  isAuthenticated: false,
+  isLoading,
+  error,
+});
+
 // 创建认证上下文
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // 认证提供者组件
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<AuthState>({
-    user: null,
-    isAuthenticated: false,
-    isLoading: true,
-    error: null,
-  });
+  const [state, setState] = useState<AuthState>(() => createAnonymousState(true));
+  const autoLoginAttemptedRef = useRef(false);
 
   // 初始化认证状态
   useEffect(() => {
@@ -52,52 +67,79 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [state.isAuthenticated]);
 
+  const setAuthenticatedState = (user: User) => {
+    setState({
+      user,
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+    });
+  };
+
+  const tryAutoLogin = async (): Promise<boolean> => {
+    const { username, password, enabled } = getAutoLoginCredentials();
+
+    if (!enabled || autoLoginAttemptedRef.current) {
+      return false;
+    }
+
+    autoLoginAttemptedRef.current = true;
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
+
+    try {
+      const response = await authService.login({
+        username,
+        password,
+      });
+
+      if (response.code !== 200) {
+        throw new Error(response.message || 'Automatic admin login failed');
+      }
+
+      setAuthenticatedState(response.data.user);
+      return true;
+    } catch (error) {
+      console.error('Automatic admin login error:', error);
+      setState(createAnonymousState(false, 'Automatic admin login failed'));
+      return false;
+    }
+  };
+
   // 初始化认证状态
   const initializeAuth = async () => {
     try {
       if (authService.isAuthenticated()) {
         const user = authService.getCurrentUserFromStorage();
         if (user) {
-          setState({
-            user,
-            isAuthenticated: true,
-            isLoading: false,
-            error: null,
-          });
+          setAuthenticatedState(user);
 
           // 验证token是否有效
           try {
             const response = await authService.getCurrentUser();
             if (response.code === 200) {
-              setState(prev => ({
-                ...prev,
-                user: response.data,
-              }));
+              setAuthenticatedState(response.data);
             }
           } catch (error) {
             // token无效，清除认证状态
-            handleLogout();
+            authService.clearAuthData();
+            if (!(await tryAutoLogin())) {
+              handleLogout();
+            }
           }
         } else {
-          setState(prev => ({
-            ...prev,
-            isLoading: false,
-          }));
+          authService.clearAuthData();
+          if (!(await tryAutoLogin())) {
+            setState(createAnonymousState(false));
+          }
         }
       } else {
-        setState(prev => ({
-          ...prev,
-          isLoading: false,
-        }));
+        if (!(await tryAutoLogin())) {
+          setState(createAnonymousState(false));
+        }
       }
     } catch (error) {
       console.error('Initialize auth error:', error);
-      setState({
-        user: null,
-        isAuthenticated: false,
-        isLoading: false,
-        error: 'Authentication initialization failed',
-      });
+      setState(createAnonymousState(false, 'Authentication initialization failed'));
     }
   };
 
@@ -109,12 +151,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await authService.login({ username, password });
       
       if (response.code === 200) {
-        setState({
-          user: response.data.user,
-          isAuthenticated: true,
-          isLoading: false,
-          error: null,
-        });
+        setAuthenticatedState(response.data.user);
       } else {
         throw new Error(response.message || 'Login failed');
       }
@@ -172,12 +209,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // 处理登出状态更新
   const handleLogout = () => {
     authService.clearAuthData();
-    setState({
-      user: null,
-      isAuthenticated: false,
-      isLoading: false,
-      error: null,
-    });
+    setState(createAnonymousState(false));
   };
 
   // 更新用户信息

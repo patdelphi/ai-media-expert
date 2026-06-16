@@ -108,7 +108,7 @@ export class ApiService {
             }
           } catch (refreshError) {
             this.clearTokens();
-            window.location.href = '/login';
+            window.location.assign('/login');
             return Promise.reject(refreshError);
           }
         }

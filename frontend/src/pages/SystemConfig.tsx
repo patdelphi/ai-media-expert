@@ -650,10 +650,11 @@ const SystemConfigPage: React.FC = () => {
 
     try {
       console.log('📡 发送PUT请求更新配置', { url: `/api/v1/ai-config/${editingApi.id}` });
+      const apiKeyToSubmit = editingApi.api_key?.includes('*') ? undefined : editingApi.api_key;
       const response = await aiConfigService.updateConfig(editingApi.id, {
         name: editingApi.name,
         provider: editingApi.provider,
-        api_key: editingApi.api_key,
+        api_key: apiKeyToSubmit,
         api_base: editingApi.api_base,
         model: editingApi.model,
         max_tokens: editingApi.max_tokens,

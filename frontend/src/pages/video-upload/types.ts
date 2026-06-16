@@ -58,3 +58,11 @@ export interface RecentFileItem {
   file_created_at?: number;
   upload_time: number;
 }
+
+export interface StreamTokenResponse {
+  success?: boolean;
+  token?: string;
+  saved_name?: string;
+  stream_path?: string;
+  expires_in?: number;
+}

@@ -164,7 +164,7 @@ const App: React.FC = () => {
           {/* 路由内容 */}
           <Suspense fallback={<RouteLoading />}>
             <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/" element={<Navigate to="/video/upload" replace />} />
               <Route path="/dashboard" element={
                 <ProtectedRoute>
                   <Dashboard />

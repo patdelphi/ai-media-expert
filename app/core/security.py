@@ -127,6 +127,30 @@ def create_refresh_token(
     return encoded_jwt
 
 
+def create_media_access_token(
+    subject: Union[str, Any],
+    saved_filename: str,
+    expires_delta: Optional[timedelta] = None,
+) -> str:
+    """创建媒体文件只读短时令牌。
+
+    该令牌仅用于受保护的媒体流接口，限制为单文件读取，避免复用完整登录 token。
+    """
+    expire = expires_delta or timedelta(minutes=5)
+    payload = {
+        "exp": utcnow() + expire,
+        "sub": str(subject),
+        "type": "media",
+        "scope": "read",
+        "file": saved_filename,
+    }
+    return jwt.encode(
+        payload,
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
 def verify_token(token: str) -> Optional[Dict[str, Any]]:
     """验证JWT令牌
     
@@ -145,6 +169,20 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
         return payload
     except JWTError:
         return None
+
+
+def verify_media_access_token(token: str) -> Optional[Dict[str, Any]]:
+    """验证媒体文件专用令牌。"""
+    payload = verify_token(token)
+    if not payload:
+        return None
+    if payload.get("type") != "media":
+        return None
+    if payload.get("scope") != "read":
+        return None
+    if not payload.get("file"):
+        return None
+    return payload
 
 
 def get_password_hash(password: str) -> str:

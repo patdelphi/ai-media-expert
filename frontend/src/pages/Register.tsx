@@ -18,7 +18,7 @@ const Register: React.FC = () => {
   // 如果已登录，重定向到dashboard
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/dashboard', { replace: true });
+      navigate('/video/upload', { replace: true });
     }
   }, [isAuthenticated, navigate]);
 

@@ -1,6 +1,11 @@
 import pytest
 
-from app.api.v1.endpoints.download import create_download_task, get_download_task, get_download_tasks
+from app.api.v1.endpoints.download import (
+    create_download_task,
+    get_download_stats,
+    get_download_task,
+    get_download_tasks,
+)
 from app.schemas.common import PaginationParams
 from app.schemas.video import DownloadTaskCreate
 from app.tests.factories import create_user
@@ -41,4 +46,39 @@ async def test_download_task_crud(db_session) -> None:
     assert get_resp.code == 200
     assert get_resp.data is not None
     assert get_resp.data.id == task_id
+
+
+def test_download_stats_returns_counts(db_session) -> None:
+    user = create_user(db_session, email="stats@example.com")
+
+    create_download_task(
+        DownloadTaskCreate(
+            url="https://example.com/a",
+            quality="best",
+            format_preference="mp4",
+            audio_only=False,
+            priority=1,
+            options=None,
+        ),
+        current_user=user,
+        db=db_session,
+    )
+    create_download_task(
+        DownloadTaskCreate(
+            url="https://example.com/b",
+            quality="best",
+            format_preference="mp4",
+            audio_only=False,
+            priority=1,
+            options=None,
+        ),
+        current_user=user,
+        db=db_session,
+    )
+
+    resp = get_download_stats(current_user=user, db=db_session)
+    assert resp.code == 200
+    assert resp.data is not None
+    assert resp.data["total_tasks"] == 2
+    assert resp.data["by_status"]["pending"] == 2
 

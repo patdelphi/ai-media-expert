@@ -20,4 +20,11 @@ describe('markdown 安全渲染', () => {
     expect(renderedHtml).not.toContain('<script>')
     expect(renderedHtml).toContain('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;')
   })
+
+  it('应移除 javascript 协议链接', () => {
+    const renderedHtml = renderSafeMarkdown('[危险链接](javascript:alert("xss"))')
+
+    expect(renderedHtml).toContain('<a')
+    expect(renderedHtml).not.toContain('href="javascript:alert(')
+  })
 })

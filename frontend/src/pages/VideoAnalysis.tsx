@@ -20,15 +20,9 @@ import type {
   TagGroup,
   VideoFile,
 } from './video-analysis/types';
+import apiService from '../services/api';
 
 const VideoAnalysis: React.FC = () => {
-  // API基础URL配置
-  const getApiBaseUrl = () => {
-    return import.meta.env.DEV 
-      ? 'http://localhost:8000' 
-      : window.location.origin;
-  };
-  
   // 状态管理
   const [currentStep, setCurrentStep] = useState(1); // 当前步骤：1-选择视频，2-配置参数，3-确认提示词，4-解析中，5-查看结果
   const [selectedVideo, setSelectedVideo] = useState<VideoFile | null>(null);
@@ -163,10 +157,12 @@ const VideoAnalysis: React.FC = () => {
 
   const loadVideos = async (page: number = 1) => {
     try {
-      const baseUrl = getApiBaseUrl();
-      const response = await fetch(`${baseUrl}/api/v1/video-analysis/videos?page=${page}&size=${videoPageSize}`);
-      if (!response.ok) return;
-      const result = await response.json();
+      const result = await apiService.get<{
+        items: VideoFile[];
+        total: number;
+        page: number;
+        pages: number;
+      }>('/video-analysis/videos', { page, size: videoPageSize });
       const data = result.data;
       setVideos(data?.items || []);
       setVideoTotal(data?.total || 0);
@@ -182,44 +178,29 @@ const VideoAnalysis: React.FC = () => {
     setLoading(true);
     try {
       // 并行加载所有数据
-      const baseUrl = getApiBaseUrl();
-      const [videosRes, templatesRes, tagGroupsRes, aiConfigsRes] = await Promise.all([
-        fetch(`${baseUrl}/api/v1/video-analysis/videos?page=1&size=${videoPageSize}`),
-        fetch(`${baseUrl}/api/v1/video-analysis/templates`),
-        fetch(`${baseUrl}/api/v1/video-analysis/tag-groups`),
-        fetch(`${baseUrl}/api/v1/video-analysis/ai-configs`)
+      const [videosResult, templatesResult, tagGroupsResult, aiConfigsResult] = await Promise.all([
+        apiService.get<{ items: VideoFile[]; total: number; page: number; pages: number }>(
+          '/video-analysis/videos',
+          { page: 1, size: videoPageSize },
+        ),
+        apiService.get<PromptTemplate[]>('/video-analysis/templates'),
+        apiService.get<TagGroup[]>('/video-analysis/tag-groups'),
+        apiService.get<AIConfig[]>('/video-analysis/ai-configs'),
       ]);
 
-      let loadedTemplates: PromptTemplate[] = [];
-      let loadedTagGroups: TagGroup[] = [];
-      let loadedAIConfigs: AIConfig[] = [];
+      const videosData = videosResult.data;
+      setVideos(videosData?.items || []);
+      setVideoTotal(videosData?.total || 0);
+      setVideoPage(videosData?.page || 1);
+      setVideoPages(videosData?.pages || 1);
 
-      if (videosRes.ok) {
-        const videosData = await videosRes.json();
-        const data = videosData.data;
-        setVideos(data?.items || []);
-        setVideoTotal(data?.total || 0);
-        setVideoPage(data?.page || 1);
-        setVideoPages(data?.pages || 1);
-      }
+      const loadedTemplates = templatesResult.data || [];
+      const loadedTagGroups = tagGroupsResult.data || [];
+      const loadedAIConfigs = aiConfigsResult.data || [];
 
-      if (templatesRes.ok) {
-        const templatesData = await templatesRes.json();
-        loadedTemplates = templatesData.data || [];
-        setTemplates(loadedTemplates);
-      }
-
-      if (tagGroupsRes.ok) {
-        const tagGroupsData = await tagGroupsRes.json();
-        loadedTagGroups = tagGroupsData.data || [];
-        setTagGroups(loadedTagGroups);
-      }
-
-      if (aiConfigsRes.ok) {
-        const aiConfigsData = await aiConfigsRes.json();
-        loadedAIConfigs = aiConfigsData.data || [];
-        setAIConfigs(loadedAIConfigs);
-      }
+      setTemplates(loadedTemplates);
+      setTagGroups(loadedTagGroups);
+      setAIConfigs(loadedAIConfigs);
 
       // 数据加载完成后恢复用户偏好设置
       restoreUserPreferences(loadedTemplates, loadedTagGroups, loadedAIConfigs);
@@ -310,26 +291,17 @@ const VideoAnalysis: React.FC = () => {
     // 保留调试信息，不清空currentDebugInfo
     
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const result = await apiService.post<{ analysis_id: number; status: string; message: string; stream_url?: string }>(
+        '/video-analysis/start',
+        {
           video_file_id: selectedVideo.id,
           template_id: selectedTemplate?.id,
           tag_group_ids: selectedTagGroups,
           custom_prompt: customPrompt,
           ai_config_id: selectedAIConfig.id,
-          transmission_method: transmissionMethod
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('启动解析失败');
-      }
-
-      const result = await response.json();
+          transmission_method: transmissionMethod,
+        },
+      );
       const analysisId = result.data.analysis_id;
       
       // 设置初始调试信息
@@ -363,51 +335,32 @@ const VideoAnalysis: React.FC = () => {
       eventSourceRef.current.close();
     }
 
-    // 使用完整的后端URL，避免代理问题
-    const streamUrl = `${getApiBaseUrl()}/api/v1/video-analysis/${analysisId}/stream`;
+    const streamUrl = `${apiService.getBaseUrl()}/video-analysis/${analysisId}/stream`;
     
     console.log(`Connecting to stream (attempt ${retryCount + 1}):`, streamUrl);
-    
-    // 先测试后端连通性
-    fetch(`${getApiBaseUrl()}/health`)
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`Backend health check failed: ${response.status}`);
-        }
-        console.log('Backend health check passed');
-        
-        // 后端正常，尝试建立EventSource连接
-        let eventSource: EventSource;
-        
-        try {
-          // 创建EventSource时添加配置选项
-          eventSource = new EventSource(streamUrl, {
-            withCredentials: false  // 跨域时不发送凭据
-          });
-          eventSourceRef.current = eventSource;
 
-          const connectionTimeout = setTimeout(() => {
-            if (eventSource.readyState === EventSource.CONNECTING) {
-              console.error('EventSource connection timeout');
-              eventSource.close();
-              handleStreamDisconnected(analysisId, '连接超时');
-            }
-          }, 10000);
-           
-           // 设置事件处理器
-           setupEventSourceHandlers(eventSource, analysisId, connectionTimeout as any);
-           
-         } catch (error) {
-           console.error('Failed to create EventSource:', error);
-           showNotification('error', '无法创建连接，请检查网络设置');
-           return;
-         }
-      })
-      .catch(healthError => {
-        console.error('Backend health check failed:', healthError);
-        showNotification('error', '后端服务不可用，请检查服务器状态');
-        return;
-       });
+    let eventSource: EventSource;
+
+    try {
+      eventSource = new EventSource(streamUrl, {
+        withCredentials: false,
+      });
+      eventSourceRef.current = eventSource;
+
+      const connectionTimeout = setTimeout(() => {
+        if (eventSource.readyState === EventSource.CONNECTING) {
+          console.error('EventSource connection timeout');
+          eventSource.close();
+          handleStreamDisconnected(analysisId, '连接超时');
+        }
+      }, 10000);
+
+      setupEventSourceHandlers(eventSource, analysisId, connectionTimeout as any);
+    } catch (error) {
+      console.error('Failed to create EventSource:', error);
+      showNotification('error', '无法创建连接，请检查网络设置');
+      return;
+    }
   };
 
   // EventSource消息处理函数
@@ -470,7 +423,7 @@ const VideoAnalysis: React.FC = () => {
     eventSource.onerror = (error) => {
       console.error('EventSource failed:', error);
       console.error('EventSource readyState:', eventSource.readyState);
-      console.error('EventSource URL:', `${getApiBaseUrl()}/api/v1/video-analysis/${analysisId}/stream`);
+      console.error('EventSource URL:', `${apiService.getBaseUrl()}/video-analysis/${analysisId}/stream`);
       
       // 清除连接超时定时器
       clearTimeout(connectionTimeout);
@@ -482,9 +435,7 @@ const VideoAnalysis: React.FC = () => {
 
   const fetchAnalysisData = async (analysisId: number): Promise<any | null> => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/${analysisId}`);
-      if (!response.ok) return null;
-      const result = await response.json();
+      const result = await apiService.get<any>(`/video-analysis/${analysisId}`);
       return result.data;
     } catch (err) {
       return null;
@@ -524,10 +475,8 @@ const VideoAnalysis: React.FC = () => {
   // 获取解析结果和调试信息
   const fetchAnalysisResult = async (analysisId: number) => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/${analysisId}`);
-      if (response.ok) {
-        const result = await response.json();
-        const analysisData = result.data;
+      const result = await apiService.get<any>(`/video-analysis/${analysisId}`);
+      const analysisData = result.data;
         
         // 更新当前分析结果
         setCurrentAnalysis(analysisData);
@@ -560,7 +509,6 @@ const VideoAnalysis: React.FC = () => {
         if (analysisData.analysis_result && analysisData.status === 'completed') {
           setStreamingResult(analysisData.analysis_result);
         }
-      }
     } catch (err) {
       console.error('Failed to fetch analysis result:', err);
     }
@@ -569,23 +517,21 @@ const VideoAnalysis: React.FC = () => {
   // 加载解析历史
   const loadAnalysisHistory = async (page: number = 1, statusFilter: 'all' | 'completed' | 'failed' = historyStatusFilter) => {
     try {
-      const params = new URLSearchParams({
-        page: String(page),
-        size: String(historyPageSize),
+      const result = await apiService.get<{
+        items: AnalysisHistoryItem[];
+        total: number;
+        page: number;
+        pages: number;
+      }>('/video-analysis/', {
+        page,
+        size: historyPageSize,
+        ...(statusFilter !== 'all' ? { status_filter: statusFilter } : {}),
       });
-      if (statusFilter !== 'all') {
-        params.set('status_filter', statusFilter);
-      }
-
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/?${params.toString()}`);
-      if (response.ok) {
-        const result = await response.json();
-        const data = result.data;
-        setAnalysisHistory(data?.items || []);
-        setHistoryTotal(data?.total || 0);
-        setHistoryPage(data?.page || page);
-        setHistoryPages(data?.pages || 1);
-      }
+      const data = result.data;
+      setAnalysisHistory(data?.items || []);
+      setHistoryTotal(data?.total || 0);
+      setHistoryPage(data?.page || page);
+      setHistoryPages(data?.pages || 1);
     } catch (err) {
       console.error('Failed to load analysis history:', err);
     }
@@ -597,11 +543,7 @@ const VideoAnalysis: React.FC = () => {
     setSelectedHistoryItem(null);
     setSelectedHistoryVideoTitle('');
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/${analysisId}`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const result = await response.json();
+      const result = await apiService.get<any>(`/video-analysis/${analysisId}`);
       const analysisData = result.data;
       setSelectedHistoryItem(analysisData);
 
@@ -621,9 +563,7 @@ const VideoAnalysis: React.FC = () => {
 
   const fetchVideoTitle = async (videoFileId: number): Promise<string | null> => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/videos/${videoFileId}`);
-      if (!response.ok) return null;
-      const result = await response.json();
+      const result = await apiService.get<any>(`/video-analysis/videos/${videoFileId}`);
       const data = result.data;
       return data?.title || data?.original_filename || null;
     } catch {
@@ -658,11 +598,7 @@ const VideoAnalysis: React.FC = () => {
 
   const exportHistoryResult = async (analysisId: number) => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/${analysisId}`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const result = await response.json();
+      const result = await apiService.get<any>(`/video-analysis/${analysisId}`);
       const analysisData = result.data;
       if (analysisData?.analysis_result) {
         const title = (analysisData.video_file_id && await fetchVideoTitle(analysisData.video_file_id)) || `analysis-${analysisId}`;
@@ -739,10 +675,8 @@ const VideoAnalysis: React.FC = () => {
     
     const pollInterval = window.setInterval(async () => {
       try {
-        const response = await fetch(`${getApiBaseUrl()}/api/v1/video-analysis/${analysisId}`);
-        if (response.ok) {
-          const result = await response.json();
-          const analysisData = result.data;
+        const result = await apiService.get<any>(`/video-analysis/${analysisId}`);
+        const analysisData = result.data;
           
           // 更新进度
           setStreamingProgress(analysisData.progress || 0);
@@ -798,7 +732,6 @@ const VideoAnalysis: React.FC = () => {
             showNotification('error', analysisData.error_message || '解析失败');
             setCurrentStep(3);
           }
-        }
       } catch (error) {
         console.error('Polling error:', error);
         // 继续轮询，不中断

@@ -117,19 +117,19 @@ def get_config_categories(
         )
     
     # 查询分类统计
-    result = db.query(
-        SystemConfig.category,
-        func.count(SystemConfig.id).label('count')
-    ).filter(
-        SystemConfig.is_active == True
-    ).group_by(SystemConfig.category).all()
-    
-    categories = [
-        SystemConfigCategory(
-            category=row.category,
-            count=row.count
+    result = (
+        db.query(
+            SystemConfig.category,
+            func.count(SystemConfig.id).label("config_count"),
         )
-        for row in result
+        .filter(SystemConfig.is_active == True)
+        .group_by(SystemConfig.category)
+        .all()
+    )
+
+    categories = [
+        SystemConfigCategory(category=category, count=config_count)
+        for category, config_count in result
     ]
     
     return ResponseModel(

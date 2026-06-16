@@ -3,15 +3,13 @@
 纯FastAPI API服务，前端已分离。
 """
 
-from collections.abc import Generator
-from contextlib import contextmanager
-from pathlib import Path
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi.responses import JSONResponse
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -23,8 +21,8 @@ from app.core.db_manager import ensure_database_ready
 from app.middleware.exception_handler import ExceptionHandlerMiddleware
 
 
-@contextmanager
-def lifespan(_app: FastAPI) -> Generator[None, None, None]:
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """应用生命周期钩子。"""
     if settings.is_development:
         ok = ensure_database_ready()
@@ -87,11 +85,6 @@ fastapi_app.add_middleware(
 
 # 添加全局异常处理中间件
 fastapi_app.add_middleware(ExceptionHandlerMiddleware)
-
-# 挂载静态文件目录
-uploads_dir = Path("uploads")
-if uploads_dir.exists():
-    fastapi_app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # 包含API路由
 fastapi_app.include_router(api_router, prefix="/api/v1")

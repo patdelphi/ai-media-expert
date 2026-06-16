@@ -16,7 +16,7 @@ const Login: React.FC = () => {
   // 如果已登录，重定向到目标页面
   useEffect(() => {
     if (isAuthenticated) {
-      const from = (location.state as any)?.from || '/dashboard';
+      const from = (location.state as any)?.from || '/video/upload';
       navigate(from, { replace: true });
     }
   }, [isAuthenticated, navigate, location]);

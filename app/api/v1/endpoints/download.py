@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 
 from app.api.deps import get_current_user, get_db
 from app.models.user import User
@@ -292,14 +292,17 @@ def get_download_stats(
     获取用户的下载任务统计数据。
     """
     # 统计各状态的任务数量
-    stats = db.query(
-        DownloadTask.status,
-        db.func.count(DownloadTask.id).label('count')
-    ).filter(
-        DownloadTask.user_id == current_user.id
-    ).group_by(DownloadTask.status).all()
-    
-    stats_dict = {status: count for status, count in stats}
+    stats = (
+        db.query(
+            DownloadTask.status,
+            func.count(DownloadTask.id).label("task_count"),
+        )
+        .filter(DownloadTask.user_id == current_user.id)
+        .group_by(DownloadTask.status)
+        .all()
+    )
+
+    stats_dict = {status: task_count for status, task_count in stats}
     
     # 计算总数
     total_tasks = sum(stats_dict.values())

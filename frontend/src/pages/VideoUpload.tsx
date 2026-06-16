@@ -3,15 +3,17 @@ import { FileItem } from '../types';
 import { formatFileSize, generateId } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
 import VideoPlayer from '../components/VideoPlayer';
+import { API_BASE_URL } from '../config';
 import type {
   RecentFileApiItem,
   RecentFileItem,
+  StreamTokenResponse,
   UploadNotification,
   UploadNotificationType,
 } from './video-upload/types';
 
 const VideoUpload: React.FC = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isLoading } = useAuth();
   const [files, setFiles] = useState<FileItem[]>([]);
   // 移除不再需要的uploadTasks状态
   const [isDragging, setIsDragging] = useState(false);
@@ -42,8 +44,7 @@ const VideoUpload: React.FC = () => {
     setTimeout(() => setNotification(null), 5000); // 5秒后自动消失
   };
 
-  const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8000/api/v1`;
-  const backendOrigin = apiBaseUrl.endsWith('/api/v1') ? apiBaseUrl.slice(0, -('/api/v1'.length)) : apiBaseUrl;
+  const apiBaseUrl = API_BASE_URL;
 
   // 加载最近上传的文件
   const loadRecentFiles = async (): Promise<RecentFileItem[] | null> => {
@@ -421,14 +422,36 @@ const VideoUpload: React.FC = () => {
   };
 
   // 播放视频
-  const playVideo = (filename: string, originalName?: string) => {
-    // 使用后端静态文件服务
-    const videoUrl = `${backendOrigin}/uploads/videos/${filename}`;
-    setCurrentVideo({
-      url: videoUrl,
-      title: originalName || filename
-    });
-    setIsPlayerOpen(true);
+  const playVideo = async (filename: string, originalName?: string) => {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      showNotification('error', '当前会话未提供播放凭证，暂时无法播放该视频');
+      return;
+    }
+    try {
+      // 先使用登录态换发短时 media token，避免把完整 access token 暴露给媒体流接口。
+      const response = await fetch(`${apiBaseUrl}/files/stream-token/${encodeURIComponent(filename)}`, {
+        method: 'GET',
+        mode: 'cors',
+        credentials: 'omit',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const result = await response.json() as StreamTokenResponse;
+      if (!response.ok || !result.success || !result.token) {
+        throw new Error('播放令牌获取失败');
+      }
+
+      const videoUrl = `${apiBaseUrl}/files/stream/${encodeURIComponent(filename)}?token=${encodeURIComponent(result.token)}`;
+      setCurrentVideo({
+        url: videoUrl,
+        title: originalName || filename
+      });
+      setIsPlayerOpen(true);
+    } catch (error) {
+      console.error('获取播放令牌失败:', error);
+      showNotification('error', '获取播放令牌失败，请稍后重试');
+    }
   };
 
   // 关闭播放器
@@ -538,11 +561,11 @@ const VideoUpload: React.FC = () => {
 
   useEffect(() => {
     // 页面加载时获取最近文件列表
-    if (!isAuthenticated) {
+    if (isLoading) {
       return;
     }
     loadRecentFiles();
-  }, [isAuthenticated]);
+  }, [isLoading]);
 
   useEffect(() => {
     // 计算上传速度和剩余时间
@@ -567,20 +590,6 @@ const VideoUpload: React.FC = () => {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-lg">加载中...</div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold mb-4">请先登录</h2>
-          <p className="text-gray-600 mb-4">您需要登录后才能上传视频</p>
-          <a href="/login" className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-            前往登录
-          </a>
-        </div>
       </div>
     );
   }

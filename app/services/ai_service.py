@@ -488,9 +488,9 @@ class AIService:
             
             if transmission_method == 'url':
                 # URL方式
-                video_url = getattr(analysis, 'video_url', None)
+                video_url = getattr(analysis, 'runtime_video_url', None) or getattr(analysis, 'video_url', None)
                 if video_url:
-                    api_logger.info(f"使用URL方式: {video_url}")
+                    api_logger.info("使用URL方式发送受保护媒体流")
                     return {
                         "type": "video_url",
                         "video_url": {

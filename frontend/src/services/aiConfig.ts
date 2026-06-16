@@ -67,7 +67,7 @@ class AIConfigService {
     const params: any = {};
     if (includeInactive) params.include_inactive = includeInactive;
     
-    return apiService.get('/ai-config', params);
+    return apiService.get('/ai-config/', params);
   }
 
   // 获取AI配置完整信息（包含API密钥，仅管理员使用）
@@ -85,7 +85,7 @@ class AIConfigService {
 
   // 创建AI配置
   async createConfig(data: CreateAIConfigRequest): Promise<ApiResponse<AIConfig>> {
-    return apiService.post('/ai-config', data);
+    return apiService.post('/ai-config/', data);
   }
 
   // 更新AI配置

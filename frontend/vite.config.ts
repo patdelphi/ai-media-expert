@@ -6,6 +6,7 @@ import path from 'path'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const sourcemapFlag = env.VITE_SOURCEMAP
+  const proxyTarget = env.VITE_DEV_PROXY_TARGET || 'http://localhost:8000'
   const sourcemap =
     sourcemapFlag === 'true'
       ? true
@@ -25,7 +26,7 @@ export default defineConfig(({ mode }) => {
       host: true,
       proxy: {
         '/api': {
-          target: 'http://localhost:8000',
+          target: proxyTarget,
           changeOrigin: true,
           secure: false,
         },

@@ -43,6 +43,7 @@ describe('ApiService.refreshAuthToken', () => {
   beforeEach(() => {
     axiosCreateMock.mockClear()
     axiosInstances.length = 0
+    window.localStorage.clear()
   })
 
   it('并发刷新时应复用同一个 refresh Promise', async () => {
@@ -82,5 +83,38 @@ describe('ApiService.refreshAuthToken', () => {
       expires_in: 1800,
     })
     expect(secondResult).toEqual(firstResult)
+  })
+
+  it('401 且刷新令牌失效时应清空本地认证数据', async () => {
+    const apiService = new ApiService()
+    const apiClient = axiosInstances[0] as {
+      interceptors: {
+        response: {
+          use: ReturnType<typeof vi.fn>
+        }
+      }
+    }
+    const refreshClient = axiosInstances[1] as {
+      post: ReturnType<typeof vi.fn>
+    }
+
+    const responseErrorHandler = apiClient.interceptors.response.use.mock.calls[0][1] as (
+      error: unknown,
+    ) => Promise<unknown>
+    const authError = {
+      response: { status: 401 },
+      config: { headers: {} },
+    }
+    window.localStorage.setItem('access_token', 'expired-access-token')
+    window.localStorage.setItem('refresh_token', 'expired-refresh-token')
+    window.localStorage.setItem('user', JSON.stringify({ id: 1 }))
+    const refreshError = new Error('refresh failed')
+    refreshClient.post.mockRejectedValue(refreshError)
+
+    await expect(responseErrorHandler(authError)).rejects.toBe(refreshError)
+    expect(window.localStorage.getItem('access_token')).toBeNull()
+    expect(window.localStorage.getItem('refresh_token')).toBeNull()
+    expect(window.localStorage.getItem('user')).toBeNull()
+    expect(apiService).toBeInstanceOf(ApiService)
   })
 })

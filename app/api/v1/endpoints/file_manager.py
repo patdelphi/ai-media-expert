@@ -8,11 +8,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.core.security import create_media_access_token, verify_media_access_token
 from app.models.uploaded_file import UploadedFile
 from app.models.user import User
 
@@ -50,6 +51,28 @@ def _ensure_path_in_upload_dir(file_path: Path) -> Path:
     except ValueError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="非法文件路径")
     return resolved
+
+
+def _authenticate_media_token(token: str | None, filename: str, db: Session) -> User:
+    """校验媒体文件专用 query token，供视频播放等受保护直链访问使用。"""
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="缺少认证token")
+
+    payload = verify_media_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效token")
+    if payload.get("file") != filename:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="token与文件不匹配")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效token")
+
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不可用")
+
+    return user
 
 
 @router.get("/files")
@@ -140,6 +163,68 @@ async def download_file(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"下载文件失败: {str(e)}")
+
+
+@router.get("/stream/{filename}")
+async def stream_file(
+    filename: str,
+    token: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """使用 query token 提供受保护的在线播放/直链访问。"""
+    try:
+        current_user = _authenticate_media_token(token, filename, db)
+        db_file = _get_owned_file_by_saved_name(db, current_user, filename)
+        file_path = _ensure_path_in_upload_dir(Path(db_file.file_path))
+
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="文件不存在")
+        if not file_path.is_file():
+            raise HTTPException(status_code=400, detail="不是有效的文件")
+
+        return FileResponse(
+            path=str(file_path),
+            filename=db_file.original_filename,
+            media_type=db_file.content_type or "application/octet-stream",
+            content_disposition_type="inline",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"播放文件失败: {str(e)}")
+
+
+@router.get("/stream-token/{filename}")
+async def create_stream_token(
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """为当前用户自己的文件换发短时媒体播放 token。"""
+    try:
+        db_file = _get_owned_file_by_saved_name(db, current_user, filename)
+        file_path = _ensure_path_in_upload_dir(Path(db_file.file_path))
+
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="文件不存在")
+        if not file_path.is_file():
+            raise HTTPException(status_code=400, detail="不是有效的文件")
+
+        media_token = create_media_access_token(
+            subject=current_user.id,
+            saved_filename=db_file.saved_filename,
+        )
+        return {
+            "success": True,
+            "token": media_token,
+            "saved_name": db_file.saved_filename,
+            "stream_path": f"/api/v1/files/stream/{db_file.saved_filename}",
+            "expires_in": 300,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"生成播放令牌失败: {str(e)}")
 
 
 @router.delete("/files/{filename}")
@@ -280,7 +365,8 @@ async def get_stats(
             "other_files": other_count,
             "upload_dir": str(UPLOAD_DIR)
         }
-        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取统计信息失败: {str(e)}")
 

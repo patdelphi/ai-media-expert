@@ -26,7 +26,7 @@ class PromptTemplateService {
   // 获取提示词模板列表
   async getTemplates(includeInactive?: boolean): Promise<ApiResponse<PromptTemplate[]>> {
     const params = includeInactive ? { include_inactive: includeInactive } : {};
-    return apiService.get('/prompt-templates', params);
+    return apiService.get('/prompt-templates/', params);
   }
 
   // 获取单个提示词模板详情
@@ -36,7 +36,7 @@ class PromptTemplateService {
 
   // 创建提示词模板
   async createTemplate(data: CreatePromptTemplateRequest): Promise<ApiResponse<PromptTemplate>> {
-    return apiService.post('/prompt-templates', data);
+    return apiService.post('/prompt-templates/', data);
   }
 
   // 更新提示词模板
