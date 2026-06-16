@@ -414,6 +414,119 @@
 
 ---
 
+## 2026-06-16 提交双 Key 改动并执行数据库迁移
+
+### 用户问题
+- 用户要求先提交当前改动，然后由助手执行数据库迁移
+
+### 已执行内容
+- 已创建提交：
+  - `f9cae88`
+  - `feat(video-analysis): support qwen upload key flow`
+- 已执行迁移脚本：
+  - `"scripts/add_ai_config_upload_api_key_migration.py"`
+
+### 迁移结果
+- 已成功为 `"ai_configs"` 表添加 `"upload_api_key"` 字段
+- 验证结果：
+  - 字段类型：`VARCHAR(500)`
+  - 允许为空：`True`
+  - 默认值：`None`
+
+### 记录时间
+- 2026-06-16 23:43:39
+
+---
+
+## 2026-06-16 双 Key 实测定位：上传成功，解析接口拒绝 oss 临时 URL
+
+### 用户问题
+- 用户反馈：`api key设好了，但解析时候报错，似乎是上传报错`
+
+### 日志定位结果
+- 本次任务 `105` 已正确走 `Qwen + 文件上传 + 双 Key` 链路
+- 上传阶段实际成功：
+  - 获取上传凭证：`GET https://dashscope.aliyuncs.com/api/v1/uploads?action=getPolicy&model=qwen3.7-plus` 返回 `200`
+  - OSS 上传：`POST https://dashscope-file-mgr.oss-cn-beijing.aliyuncs.com` 返回 `200`
+  - 已生成临时 URL：
+    - `oss://dashscope-instant/.../1396ad28-e24a-4151-8610-3b5dd0ed8ec2.mp4`
+- 真正失败发生在解析阶段：
+  - 请求地址：`https://coding.dashscope.aliyuncs.com/v1/chat/completions`
+  - 返回：`400 Bad Request`
+  - 错误内容：
+    - `"The provided URL does not appear to be valid. Ensure it is correctly formatted."`
+
+### 结论
+- 当前不是上传专用 Key 问题，上传链路已经打通。
+- 失败原因是：
+  - 上传得到的是百炼 `oss://` 临时 URL
+  - 但当前解析仍调用 `coding.dashscope.aliyuncs.com`
+  - 该解析接口不接受这类 `oss://` 临时 URL
+- 这说明上传接口与解析接口必须统一走标准百炼链路，不能“上传走 dashscope，解析走 coding.dashscope”混搭。
+
+### 记录时间
+- 2026-06-16 23:47:05
+
+---
+
+## 2026-06-17 收敛前端 provider 列表并完成回归验证
+
+### 用户问题
+- 用户要求先去掉 `智谱AI`，并确认前端 `provider` 是否应只保留：
+  - `openai`
+  - `anthropic`
+  - `custom`
+- 用户确认按该方案执行：`ok`
+
+### 已执行内容
+- 修改 `"frontend/src/services/aiConfig.ts"`：
+  - 将 `getSupportedProviders()` 收敛为仅返回 `openai`、`anthropic`、`custom`
+  - 同步删除不再展示的默认地址：
+    - `google`
+    - `zhipu`
+    - `ollama`
+- 修改 `"frontend/src/services/aiConfig.test.ts"`：
+  - 新增 `provider` 列表回归测试
+  - 断言当前真实支持项只剩：
+    - `openai`
+    - `anthropic`
+    - `custom`
+- 复核 `"frontend/src/pages/SystemConfig.tsx"` 对 `getSupportedProviders()` 的使用，确认系统设置页会直接继承本次收口结果
+
+### 验证结果
+- `npm test -- "src/services/aiConfig.test.ts" "src/pages/SystemConfig.test.tsx"`：通过
+- 测试结果：
+  - `Test Files`: `2 passed`
+  - `Tests`: `5 passed`
+
+### 记录时间
+- 2026-06-17 00:03:02
+
+---
+
+## 2026-06-16 再次核对 Coding Plan 与临时 URL 的兼容边界
+
+### 用户问题
+- 用户质疑“上传与解析的 key、base url 也可以不同”，并明确表示解析阶段必须继续使用 `coding plan` 的 URL，希望再次确认
+
+### 文档与实测结论
+- 官方文档确认：
+  - 百炼临时文件上传得到的 `oss://` URL 要求上传与模型调用的 API Key 同属一个阿里云主账号、模型一致，并在 HTTP 调用时加 `X-DashScope-OssResourceResolve: enable`
+  - 但文档并未说明 `coding.dashscope.aliyuncs.com` 支持解析这类 `oss://` 临时 URL
+  - Coding Plan 文档反而明确强调：`sk-sp-...` / `coding.dashscope.aliyuncs.com` 与标准百炼 `sk-...` / `dashscope.aliyuncs.com` **不互通，不要混用**
+- 本地实测也与文档边界一致：
+  - 上传走标准百炼 `dashscope.aliyuncs.com` 成功
+  - 解析走 `coding.dashscope.aliyuncs.com` 时，接口直接拒绝 `oss://` URL，返回“URL 无效”
+
+### 当前判断
+- 因此，当前不能把“标准百炼临时上传”当成“Coding Plan 解析”的前置步骤使用。
+- 这不是单纯双 Key 或同主账号问题，而是**接口能力边界**问题。
+
+### 记录时间
+- 2026-06-16 23:51:17
+
+---
+
 ## 2026-06-16 修复 Mimo Base64 传输链路
 
 ### 用户问题
@@ -434,6 +547,36 @@
 - 修改 `"app/utils/video_base64.py"`：
   - 将 Base64 可接受上限对齐到 Mimo 官方 `50MB` Base64 约束
   - 原始文件阈值提升为约 `37.5MB`
+
+---
+
+## 2026-06-17 排查新加百炼 API 的解析报错
+
+### 用户问题
+- 用户反馈：新加了一个 `bailian api`，视频解析时报错，希望直接查看日志定位
+
+### 日志定位结果
+- 已检查 `"logs/backend.log"`，本次失败对应任务为：
+  - `Analysis 106`
+  - AI 配置名：`Bailian`
+- 上传阶段是成功的：
+  - `GET https://dashscope.aliyuncs.com/api/v1/uploads?action=getPolicy&model=qwen3.7-plus` 返回 `200`
+  - OSS 上传返回 `200`
+  - 已成功生成 `oss://...` 临时 URL
+- 真正失败发生在解析调用阶段：
+  - 日志显示调用地址为：`https://dashscope.aliyuncs.com/compatible-mode/v1`
+  - 随后返回：`404 Not Found`
+
+### 结论
+- 这次不是上传失败，也不是 API Key 失效。
+- 根因是当前这条百炼配置的 `"api_base"` 少了具体接口路径，导致后端直接把请求发到了：
+  - `https://dashscope.aliyuncs.com/compatible-mode/v1`
+- 但当前项目会**原样使用** `"api_base"`，不会再自动补 `/chat/completions`，所以这个地址会返回 `404`。
+- 对于当前这套 OpenAI 兼容调用方式，百炼应配置为完整接口地址，例如：
+  - `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions`
+
+### 记录时间
+- 2026-06-17 00:08:25
   - 大文件压缩目标调整为更合理的 `30MB`
   - 新增基于文件后缀的 MIME 推断，如 `.mov -> video/quicktime`
 - 修改 `"app/services/ai_service.py"`：

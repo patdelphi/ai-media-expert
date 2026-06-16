@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-17
+
+- 收敛前端 AI `provider` 列表：`"frontend/src/services/aiConfig.ts"` 现在仅保留 `openai`、`anthropic`、`custom`，移除未真正支持的 `google`、`zhipu`、`ollama`
+- 新增前端回归测试：`"frontend/src/services/aiConfig.test.ts"` 断言 `provider` 列表只返回 `openai`、`anthropic`、`custom`
+- 明确百炼 OpenAI 兼容模式配置要求：当前系统会原样使用 `"api_base"`，不会自动补全路径；使用百炼时应填写完整接口地址 `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions`
+- 补充 Qwen 文件上传双 Key 约束说明：百炼临时上传使用 `"upload_api_key"`，模型解析继续使用 `"api_key"`，两者不混用
+- 追加运行与排障记录：`"chat_history.md"` 已记录百炼上传成功但解析地址少 `/chat/completions` 导致 `404` 的定位结论
+
 ## 2026-06-15
 
 - 新增阶段 0 安全基线：添加路由匿名访问拒绝测试与测试工厂（`"app/tests/test_route_security_baseline.py"`、`"app/tests/conftest.py"`、`"app/tests/factories.py"`）

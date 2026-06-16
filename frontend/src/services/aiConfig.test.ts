@@ -8,6 +8,14 @@ import { describe, expect, it } from 'vitest'
 
 import { aiConfigService } from './aiConfig'
 
+describe('AIConfigService.getSupportedProviders', () => {
+  it('应只返回当前真实支持的 provider', () => {
+    const providers = aiConfigService.getSupportedProviders()
+
+    expect(providers.map((provider) => provider.value)).toEqual(['openai', 'anthropic', 'custom'])
+  })
+})
+
 describe('AIConfigService.validateConfig', () => {
   it('应允许超大 max_tokens 整数值', () => {
     const errors = aiConfigService.validateConfig({

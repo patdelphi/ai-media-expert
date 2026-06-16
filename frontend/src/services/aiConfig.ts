@@ -133,21 +133,6 @@ class AIConfigService {
         models: ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku', 'claude-2.1']
       },
       {
-        value: 'google',
-        label: 'Google',
-        models: ['gemini-pro', 'gemini-pro-vision', 'gemini-1.5-pro']
-      },
-      {
-        value: 'zhipu',
-        label: '智谱AI',
-        models: ['glm-4', 'glm-4v', 'glm-3-turbo']
-      },
-      {
-        value: 'ollama',
-        label: 'Ollama',
-        models: ['llama2', 'codellama', 'mistral', 'qwen']
-      },
-      {
         value: 'custom',
         label: '自定义',
         models: []
@@ -160,9 +145,6 @@ class AIConfigService {
     const defaults: Record<string, string> = {
       openai: 'https://api.openai.com/v1',
       anthropic: 'https://api.anthropic.com',
-      google: 'https://generativelanguage.googleapis.com/v1',
-      zhipu: 'https://open.bigmodel.cn/api/paas/v4',
-      ollama: 'http://localhost:11434/v1',
       custom: ''
     };
     

@@ -86,11 +86,9 @@ class VideoAnalysis(Base):
 ### 3. AI API集成方案
 
 #### 3.1 支持的AI服务提供商
-- OpenAI (GPT-4, GPT-3.5)
-- Anthropic (Claude)
-- Google (Gemini)
-- 百度 (文心一言)
-- 阿里 (通义千问)
+- OpenAI
+- Anthropic
+- Custom（用于接入 OpenAI 兼容接口，如百炼）
 
 #### 3.2 AI API配置
 ```python
@@ -99,15 +97,28 @@ class AIConfig:
         'openai': {
             'api_key': 'OPENAI_API_KEY',
             'base_url': 'https://api.openai.com/v1',
-            'models': ['gpt-4', 'gpt-3.5-turbo']
+            'models': ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo']
         },
         'anthropic': {
             'api_key': 'ANTHROPIC_API_KEY',
             'base_url': 'https://api.anthropic.com',
-            'models': ['claude-3-opus', 'claude-3-sonnet']
+            'models': ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku']
+        },
+        'custom': {
+            'api_key': 'CUSTOM_API_KEY',
+            'base_url': 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+            'upload_api_key': 'DASHSCOPE_UPLOAD_API_KEY',  # 仅 Qwen 文件上传使用
+            'models': ['qwen3.7-plus']
         }
     }
 ```
+
+#### 3.3 百炼兼容模式配置说明
+- 百炼在本项目中通过 `custom` provider 接入。
+- `api_base` 必须填写完整接口路径：`https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions`
+- 系统会原样使用 `api_base`，不会自动补 `/chat/completions`
+- 如果只填写到 `https://dashscope.aliyuncs.com/compatible-mode/v1`，解析阶段会返回 `404`
+- Qwen 文件上传场景可额外配置 `upload_api_key`，仅用于百炼临时文件上传，解析阶段仍使用 `api_key`
 
 ## 🔧 开发阶段规划
 
