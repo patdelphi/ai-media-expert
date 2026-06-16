@@ -109,7 +109,10 @@ brew services start redis
 
 5. **启动应用**
 ```bash
-# 使用启动脚本 (推荐)
+# 使用 bat / 自动启动脚本（推荐，本地开发）
+start_all_services.bat
+
+# 或使用 Python 启动脚本
 python start.py
 
 # 或直接启动
@@ -118,8 +121,15 @@ python -m app.main
 
 6. **访问界面**
 - 前端: http://localhost:5173
-- API 文档: http://localhost:8000/docs
-- 健康检查: http://localhost:8000/health
+- API 文档: 默认 http://localhost:8000/docs
+- 健康检查: 默认 http://localhost:8000/health
+
+### 启动脚本说明
+
+- `"start_all_services.bat"` 会调用 `"start_auto.py"` 启动前后端。
+- 若 `8000` 已被占用，启动脚本会自动切换到下一个可用后端端口（如 `8001`、`8002`）。
+- 前端 dev server 会自动把代理目标指向实际后端端口，无需手工修改 `"frontend/.env"`。
+- Redis/Celery 在本地开发中为可选项；即使 Redis 不可用，主 Web 应用和 AI 视频分析主流程仍可启动。
 
 ### 默认管理员账号（开发环境）
 

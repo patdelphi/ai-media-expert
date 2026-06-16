@@ -101,6 +101,28 @@
 
 ---
 
+## 2026-06-16 更新 README 并提交剩余文件
+
+### 用户问题
+- 更新一下 `"README.md"`，然后把当前剩余未提交文件全部提交
+
+### 已执行内容
+- 更新 `"README.md"`：
+  - 补充推荐使用 `"start_all_services.bat"` 的本地开发启动方式
+  - 说明后端端口会自动避开被占用的 `8000`，并自动切换到后续可用端口
+  - 说明前端代理会自动跟随后端实际端口
+  - 说明 Redis/Celery 在本地开发中可选降级
+- 复核当前暂存文件，确认本次待提交内容为：
+  - `"README.md"`
+  - `"chat_history.md"`
+  - `"logs/smoke_frontend_autologin.png"`
+- 根据用户明确要求，准备执行本次 Git 提交
+
+### 记录时间
+- 2026-06-16 20:56:54
+
+---
+
 *记录时间: 2025-01-21*
 
 ---
@@ -1951,6 +1973,17 @@ pm run build 打包校验（0 errors）。
 - `python -m pytest -q "app/tests/test_ai_config_security.py"`：通过
 - `frontend` `npm.cmd test -- src/services/aiConfig.test.ts`：通过
 - `frontend` `npm.cmd run lint`：通过
+
+---
+
+## 2026-06-16 20:52:35 +08:00
+
+### 用户问题
+- 更新一下 `README`，然后把剩余未提交文件全部提交
+
+### 已执行内容
+- 更新根目录 [`README.md`](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/README.md)，补充 `start_all_services.bat` 的启动方式、自动切换后端端口、前端代理自动跟随、Redis/Celery 可选降级说明。
+- 准备将当前剩余未提交文件统一提交。
 
 ---
 
