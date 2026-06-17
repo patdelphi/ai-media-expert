@@ -291,6 +291,9 @@ class Tag(BaseModel):
     category = Column(String(50), nullable=True, index=True)
     description = Column(Text, nullable=True)
     color = Column(String(7), nullable=True)  # 十六进制颜色代码
+    source_type = Column(String(20), default="library", nullable=False)  # library, free_promoted
+    tag_group_id = Column(Integer, ForeignKey("tag_groups.id"), nullable=True, index=True)
+    is_active = Column(Boolean, default=True, nullable=False)
     
     # 层级关系
     parent_id = Column(Integer, ForeignKey("tags.id"), nullable=True)
@@ -313,6 +316,9 @@ class Tag(BaseModel):
             "category": self.category,
             "description": self.description,
             "color": self.color,
+            "source_type": self.source_type,
+            "tag_group_id": self.tag_group_id,
+            "is_active": self.is_active,
             "parent_id": self.parent_id,
             "usage_count": self.usage_count,
             "created_at": self.created_at,

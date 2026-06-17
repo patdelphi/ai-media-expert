@@ -108,3 +108,98 @@ export interface StreamChunk {
   metadata?: Record<string, unknown>
   timestamp: string
 }
+
+export interface AutoTagItem {
+  id: number
+  tag_id?: number
+  tag_name: string
+  tag_group_id?: number
+  tag_source: string
+  match_type: string
+  confidence: number
+  evidence_text?: string
+  evidence_start_seconds?: number
+  evidence_end_seconds?: number
+  reason?: string
+  is_promoted: boolean
+}
+
+export interface AutoTagTask {
+  id: number
+  video_file_id: number
+  ai_config_id: number
+  tag_group_ids?: number[]
+  prompt_version?: string
+  prompt_content: string
+  transmission_method: string
+  status: string
+  progress: number
+  structured_summary?: Record<string, unknown> | string
+  result_metadata?: Record<string, unknown>
+  token_usage?: Record<string, unknown>
+  cost_estimate?: number
+  error_message?: string
+  created_at: string
+  updated_at: string
+  started_at?: string
+  completed_at?: string
+  items: AutoTagItem[]
+}
+
+export interface AutoTagTaskHistoryItem {
+  id: number
+  video_file_id: number
+  ai_config_id: number
+  status: string
+  progress: number
+  prompt_version?: string
+  transmission_method: string
+  structured_summary?: Record<string, unknown> | string
+  error_message?: string
+  created_at: string
+  updated_at: string
+  started_at?: string
+  completed_at?: string
+  items: AutoTagItem[]
+}
+
+export interface EffectiveTag {
+  id: number
+  video_file_id: number
+  tag_id?: number
+  tag_name: string
+  tag_name_snapshot?: string
+  source: string
+  confidence: number
+  auto_tag_task_id?: number
+  revision_id?: number
+  is_effective: boolean
+  evidence_start_seconds?: number
+  evidence_end_seconds?: number
+  reason?: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface TagRevisionItem {
+  id: number
+  tag_id?: number
+  tag_name: string
+  action: string
+  confidence?: number
+  note?: string
+  created_at: string
+}
+
+export interface TagRevision {
+  id: number
+  video_file_id: number
+  base_task_id?: number
+  revision_number: number
+  change_reason?: string
+  created_by: string
+  created_at: string
+  updated_at: string
+  items: TagRevisionItem[]
+}

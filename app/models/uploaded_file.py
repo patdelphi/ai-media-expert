@@ -70,3 +70,6 @@ class UploadedFile(Base):
     # 关联关系
     user = relationship("User", back_populates="uploaded_files")
     video_analyses = relationship("VideoAnalysis", back_populates="video_file", cascade="all, delete-orphan", lazy="dynamic")
+    auto_tag_tasks = relationship("VideoAutoTagTask", back_populates="video_file", cascade="all, delete-orphan")
+    effective_tags = relationship("UploadedFileTag", back_populates="video_file", cascade="all, delete-orphan")
+    tag_revisions = relationship("UploadedFileTagRevision", back_populates="video_file", cascade="all, delete-orphan")

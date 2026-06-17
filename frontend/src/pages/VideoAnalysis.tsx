@@ -21,6 +21,7 @@ import type {
   TagGroup,
   VideoFile,
 } from './video-analysis/types';
+import VideoTaggingPanel from './video-analysis/VideoTaggingPanel';
 import apiService from '../services/api';
 
 const VideoAnalysis: React.FC = () => {
@@ -31,6 +32,7 @@ const VideoAnalysis: React.FC = () => {
   // 状态管理
   const [currentStep, setCurrentStep] = useState(1); // 当前步骤：1-选择视频，2-配置参数，3-确认提示词，4-解析中，5-查看结果
   const [selectedVideo, setSelectedVideo] = useState<VideoFile | null>(null);
+  const [pageMode, setPageMode] = useState<'analysis' | 'tagging'>('analysis');
   const [selectedTemplate, setSelectedTemplate] = useState<PromptTemplate | null>(null);
   const [selectedTagGroups, setSelectedTagGroups] = useState<number[]>([]);
   const [selectedAIConfig, setSelectedAIConfig] = useState<AIConfig | null>(null);
@@ -176,6 +178,7 @@ const VideoAnalysis: React.FC = () => {
 
     initialAutoSelectedRef.current = true;
     setSelectedVideo(matched);
+    setPageMode('analysis');
     setCurrentStep(2);
   };
 
@@ -946,8 +949,29 @@ const VideoAnalysis: React.FC = () => {
 
         {/* 主要内容区域 */}
         <div className="bg-white rounded-lg shadow-sm">
+          {pageMode === 'tagging' && selectedVideo && (
+            <div className="p-6">
+              <VideoTaggingPanel
+                video={selectedVideo}
+                aiConfigs={aiConfigs}
+                tagGroups={tagGroups}
+                selectedAIConfig={selectedAIConfig}
+                setSelectedAIConfig={setSelectedAIConfig}
+                selectedTagGroups={selectedTagGroups}
+                setSelectedTagGroups={setSelectedTagGroups}
+                transmissionMethod={transmissionMethod}
+                setTransmissionMethod={setTransmissionMethod}
+                showNotification={showNotification}
+                onBack={() => {
+                  setPageMode('analysis');
+                  setCurrentStep(1);
+                }}
+              />
+            </div>
+          )}
+
           {/* 步骤1：选择视频 */}
-          {currentStep === 1 && (
+          {pageMode !== 'tagging' && currentStep === 1 && (
             <div className="p-6">
               <h2 className="text-xl font-semibold mb-4">选择要解析的视频</h2>
               {loading ? (
@@ -1033,12 +1057,28 @@ const VideoAnalysis: React.FC = () => {
               
               {selectedVideo && (
                 <div className="mt-6 flex justify-end">
-                  <button
-                    onClick={() => setCurrentStep(2)}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    下一步
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPageMode('analysis');
+                        setCurrentStep(2);
+                      }}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      视频解析
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPageMode('tagging');
+                        setCurrentStep(1);
+                      }}
+                      className="px-6 py-2 border border-purple-200 bg-white text-purple-700 rounded-lg hover:bg-purple-50 transition-colors"
+                    >
+                      视频打标
+                    </button>
+                  </div>
                 </div>
               )}
               
@@ -1397,6 +1437,26 @@ const VideoAnalysis: React.FC = () => {
                     className="w-full h-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
+
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900">视频打标</h3>
+                      <p className="text-sm text-gray-600">打标已独立为单独入口（历史标签集合/排除/恢复/自动打标历史）。</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPageMode('tagging');
+                        setCurrentStep(1);
+                      }}
+                      className="px-4 py-2 border border-purple-200 bg-white text-purple-700 rounded-lg hover:bg-purple-50 transition-colors"
+                    >
+                      去视频打标
+                    </button>
+                  </div>
+                </div>
+
               </div>
 
               <div className="mt-6 flex justify-between items-center">

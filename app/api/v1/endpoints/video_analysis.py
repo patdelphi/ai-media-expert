@@ -16,6 +16,7 @@ from app.models.uploaded_file import UploadedFile
 from app.models.prompt_template import PromptTemplate
 from app.models.tag_group import TagGroup
 from app.models.video import AIConfig
+from app.models.video_auto_tag import UploadedFileTag, VideoAutoTagTask
 from app.models.video_analysis import VideoAnalysis
 from app.schemas.video_analysis import (
     VideoAnalysisCreate,
@@ -31,6 +32,39 @@ from app.schemas.video_analysis import (
 from app.schemas.common import ResponseModel, PaginatedResponse, PaginationParams
 
 router = APIRouter()
+
+
+def _build_auto_tag_context(video_file_id: int, db: Session) -> str:
+    """构建自动打标复用上下文。"""
+    effective_tags = (
+        db.query(UploadedFileTag)
+        .filter(
+            UploadedFileTag.video_file_id == video_file_id,
+            UploadedFileTag.is_effective == True,
+        )
+        .order_by(UploadedFileTag.confidence.desc(), UploadedFileTag.id.asc())
+        .all()
+    )
+    latest_auto_tag_task = (
+        db.query(VideoAutoTagTask)
+        .filter(
+            VideoAutoTagTask.video_file_id == video_file_id,
+            VideoAutoTagTask.status == "completed",
+            VideoAutoTagTask.is_active == True,
+        )
+        .order_by(VideoAutoTagTask.id.desc())
+        .first()
+    )
+
+    sections: list[str] = []
+    if effective_tags:
+        tag_text = ", ".join(tag.tag_name_snapshot for tag in effective_tags)
+        sections.append(f"当前有效标签: {tag_text}")
+
+    if latest_auto_tag_task and latest_auto_tag_task.structured_summary:
+        sections.append(f"自动打标摘要: {latest_auto_tag_task.structured_summary}")
+
+    return "\n".join(sections).strip()
 
 
 @router.get("/videos/recent", response_model=ResponseModel[List[VideoFileInfo]])
@@ -458,6 +492,10 @@ def start_video_analysis(
                 tags_text = ", ".join(all_tags)
                 prompt_content += f"\n\n相关标签: {tags_text}"
         
+        auto_tag_context = _build_auto_tag_context(request.video_file_id, db)
+        if auto_tag_context:
+            prompt_content = f"{prompt_content}\n\n{auto_tag_context}" if prompt_content else auto_tag_context
+
         # 创建解析任务
         analysis = VideoAnalysis(
             user_id=str(video_file.user_id),

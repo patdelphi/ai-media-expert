@@ -10,6 +10,8 @@ from app.api.v1.endpoints import (
     users,
     system_config,
     tag_groups,
+    video_auto_tags,
+    uploaded_file_tags,
     video_upload,
     video_processing,
     simple_upload,
@@ -32,6 +34,8 @@ api_router.include_router(auth.router, prefix="/auth", tags=["认证"])
 api_router.include_router(users.router, prefix="/users", tags=["用户管理"])
 api_router.include_router(system_config.router, prefix="/system/config", tags=["系统配置"])
 api_router.include_router(tag_groups.router, prefix="/tag-groups", tags=["标签组管理"])
+api_router.include_router(video_auto_tags.router, prefix="/video-auto-tags", tags=["自动打标任务"])
+api_router.include_router(uploaded_file_tags.router, prefix="/uploaded-files", tags=["上传文件标签"])
 api_router.include_router(video_upload.router, prefix="/upload", tags=["视频上传"])
 api_router.include_router(simple_upload.router, prefix="/simple-upload", tags=["简单上传"])
 api_router.include_router(file_manager.router, prefix="/files", tags=["文件管理"])

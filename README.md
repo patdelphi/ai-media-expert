@@ -25,6 +25,22 @@
    - 管理员用户管理：创建/禁用/删除（软删除）/修改用户密码
    - 系统配置页基础能力
 
+4. **AI 配置管理**
+   - 支持配置多套模型连接信息（API Key / Base URL / Model 等）
+   - Provider 下拉收口为：`"openai"` / `"anthropic"` / `"custom"`
+   - 支持 Qwen “上传专用 API Key”（用于临时文件上传）与“解析/推理 API Key”分离配置（避免混用）
+
+5. **标签体系（自动打标 + 人工修订）**
+   - 支持对已上传视频启动“自动打标”任务并查询任务状态
+   - 选择视频后提供“视频解析 / 视频打标”两个入口（打标为独立模式切换）
+   - 历史标签集合：展示历史出现过的所有标签，并标记是否“已排除”
+   - 标签交互：`x` 统一用于“排除/恢复”，且均带二次确认
+   - 标签来源仅用颜色区分：AI 自动打标 / 人工修订（不在标签文字上加“人工”字样）
+   - 支持修订历史（版本号/原因/明细）查询与回溯
+
+6. **模板解析复用自动打标上下文**
+   - 启动模板解析时默认复用“当前有效标签 + 自动打标摘要”，减少二次读视频成本
+
 ## 🧪 其他功能（未完全闭环/开发中）
 
 - **视频下载**：页面与部分后端模块已存在，但稳定性/平台适配/队列闭环仍在完善中
@@ -204,6 +220,16 @@ print(response.json())
 | `DEVICE` | AI模型运行设备 | `cpu` |
 | `LOG_LEVEL` | 日志级别 | `INFO` |
 
+### 数据库迁移脚本
+
+- 自动打标/标签体系表结构迁移脚本：`"scripts/add_auto_tagging_tables_migration.py"`
+  - 建议先备份数据库文件（例如复制 `"ai_media_expert.db"`）
+  - 执行示例：
+
+```bash
+python "scripts/add_auto_tagging_tables_migration.py" "./ai_media_expert.db"
+```
+
 ## 🧰 手工脚本
 
 根目录存在若干 `"test_*.py"` / `"debug_*.py"` 手工验证脚本，默认不纳入 pytest 自动化测试。清单见 ["manual_tools.md"](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/scripts/manual_tools.md)。
@@ -245,4 +271,3 @@ docker-compose down
 
 **⭐ 如果这个项目对你有帮助，请给我们一个星标！**
 AI新媒体专家
-

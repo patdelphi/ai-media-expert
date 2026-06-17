@@ -897,6 +897,293 @@
 
 ---
 
+## 2026-06-17 评估标签体系与自动打标方案
+
+### 用户问题
+- 用户提出下一个任务：系统原本设计的“标签体系（AI 自动打标）”功能尚未实现，希望先评估并给出开发计划；若需求不清晰，需要先确认
+- 用户进一步明确：
+  - 目标是正式标签系统
+  - 自动打标与基于模板的解析要分开
+  - 需要评估应采用：
+    - 模型一次读取视频后分两次输出
+    - 还是二次读取视频
+- 用户随后确认偏好：
+  - 解析策略采用“混合模式”
+  - 标签来源采用“固定标签库 + 自由标签”
+
+### 当前结论
+- 当前系统已有：
+  - 提示词模板
+  - 标签组
+  - 视频解析页中模板/标签组选择
+- 但“AI 自动打标”核心闭环尚未实现：
+  - 没有结构化标签生成
+  - 没有标签落库
+  - 没有置信度/证据片段
+  - 没有人工校正闭环
+- 方案上更适合：
+  - 先独立做自动打标
+  - 模板解析默认复用打标沉淀结果
+  - 必要时才二次读取视频
+
+### 已执行内容
+- 已检索后端、前端与文档中与标签体系相关的现状和缺口
+- 已将本轮复杂需求的规划草案追加到 `"todo.md"`
+- 用户进一步确认：
+  - 标签结果挂载采用“两层都要”
+  - 即分析记录保留原始打标结果，视频主记录同步保存当前生效主标签
+  - 生效策略采用“折中”：
+    - AI 自动打标先直接生效
+    - 允许人工后改
+    - 需要保留版本与变更记录
+  - 第一阶段范围：
+    - 先不做复杂标签关系、冲突规则、统计看板
+    - 接受总体架构草案，继续细化数据模型设计
+  - 已确认数据模型设计方向：
+    - 自动打标与模板解析分表建模
+    - 保留自动打标任务、打标命中项、视频当前生效标签、标签修订版本/明细
+    - 现有标签组继续作为固定标签库使用
+  - 用户要求不要再逐个确认，改为一次性完成完整设计
+
+### 已执行内容补充
+- 已编写完整设计文档：
+  - `"docs/superpowers/specs/2026-06-17-auto-tagging-design.MD"`
+- 已按用户要求继续拆出实施计划文档：
+  - `"docs/superpowers/specs/2026-06-17-auto-tagging-implementation-plan.MD"`
+- 设计文档已覆盖：
+  - 方案对比与推荐
+  - 总体架构
+  - 数据模型
+  - API 设计
+  - 自动打标流程
+  - 人工修订流程
+  - 模板解析复用策略
+  - 错误处理与事务边界
+  - 前后端测试方案
+  - 分阶段实施计划
+- 自检时额外确认并修正：
+  - 老的 `"video_tags"` 绑定 `"videos.id"`，与当前视频解析主链路 `"uploaded_files.id"` 不一致
+  - 因此 spec 最终采用：
+    - 复用 `"tags"` 作为正式标签主表
+    - 新增 `"uploaded_file_tags"` 作为当前视频主标签层
+- 实施计划已拆分为 7 个批次：
+  - 数据层打底
+  - Schema 与 API 骨架
+  - 自动打标服务
+  - 主标签同步
+  - 人工修订与版本历史
+  - 模板解析复用自动打标结果
+  - 前端展示与修订交互
+- 按用户规则，本次仅写设计文档，**未执行** `git commit`
+
+### 记录时间
+- 2026-06-17 08:25:48
+
+### 补充记录时间
+- 2026-06-17 08:44:57
+
+### 再补充记录时间
+- 2026-06-17 08:46:02
+
+---
+
+## 2026-06-17 开始执行自动打标实现并打通后端最小闭环
+
+### 用户问题
+- 用户要求：
+  - 不要中间提问，除非必须由用户回答
+  - 直接开始执行
+  - 持续推进直到功能“可以测试”
+
+### 本轮实现范围
+- 已按实施计划优先完成前三批：
+  - 批次 1：数据层与迁移脚本
+  - 批次 2：Schema 与 API 骨架
+  - 批次 3：自动打标服务最小闭环
+
+### 已新增/修改内容
+- 新增模型文件：
+  - `"app/models/video_auto_tag.py"`
+  - 定义：
+    - `VideoAutoTagTask`
+    - `VideoAutoTagItem`
+    - `UploadedFileTag`
+    - `UploadedFileTagRevision`
+    - `UploadedFileTagRevisionItem`
+- 修改：
+  - `"app/models/uploaded_file.py"`
+    - 增加自动打标任务、当前有效标签、修订历史关系
+  - `"app/models/video.py"`
+    - 增强 `Tag`，补 `source_type`、`tag_group_id`、`is_active`
+  - `"app/models/__init__.py"`
+  - `"app/core/database.py"`
+    - 创建表时统一导入全部模型
+- 新增 schema：
+  - `"app/schemas/video_auto_tag.py"`
+- 新增服务：
+  - `"app/services/video_auto_tag_service.py"`
+  - 已实现：
+    - 自动打标任务创建
+    - 受保护视频访问地址生成
+    - 视频模型调用
+    - JSON 结构化结果解析
+    - 自动打标命中项落库
+    - 当前有效标签同步
+- 新增接口：
+  - `"app/api/v1/endpoints/video_auto_tags.py"`
+    - `POST /api/v1/video-auto-tags/start`
+    - `GET /api/v1/video-auto-tags/{task_id}`
+  - `"app/api/v1/endpoints/uploaded_file_tags.py"`
+    - `GET /api/v1/uploaded-files/{video_file_id}/tags`
+- 修改：
+  - `"app/api/v1/api.py"`
+    - 注册新路由
+- 新增迁移脚本：
+  - `"scripts/add_auto_tagging_tables_migration.py"`
+- 新增后端测试：
+  - `"app/tests/test_video_auto_tagging.py"`
+
+### 当前已可测试能力
+- 可启动自动打标任务
+- 可处理自动打标任务并保存结构化结果
+- 可同步当前有效标签到 `uploaded_file_tags`
+- 可查询任务详情
+- 可查询上传文件当前有效标签
+
+### 测试结果
+- 已执行：
+  - `python -m pytest app/tests/test_video_auto_tagging.py -q`
+  - `python -m pytest app/tests/test_video_auto_tagging.py app/tests/test_registered_routes.py -q`
+- 结果：
+  - 全部通过
+
+### 备注
+- 本轮尚未继续实现：
+  - 人工修订与版本历史接口
+  - 模板解析复用自动打标结果
+  - 前端展示与修订交互
+- 按用户规则，本轮尚未执行 `git commit`
+
+### 记录时间
+- 2026-06-17 09:02:32
+
+---
+
+## 2026-06-17 继续实现自动打标：修订历史与模板解析复用
+
+### 本轮实现范围
+- 在自动打标最小闭环基础上，继续完成：
+  - 批次 4：主标签同步稳定化
+  - 批次 5：人工修订与版本历史
+  - 批次 6：模板解析复用自动打标结果
+
+### 已新增/修改内容
+- 修改 `"app/api/v1/endpoints/uploaded_file_tags.py"`：
+  - 新增：
+    - `POST /api/v1/uploaded-files/{video_file_id}/tags/revisions`
+    - `GET /api/v1/uploaded-files/{video_file_id}/tags/revisions`
+    - `GET /api/v1/uploaded-files/{video_file_id}/tags/revisions/{revision_id}`
+  - 已实现：
+    - `add/remove/adjust` 修订操作
+    - 修订版本号递增
+    - 修订明细留痕
+    - 修订后重建 `uploaded_file_tags` 当前有效标签
+- 修改 `"app/api/v1/endpoints/video_analysis.py"`：
+  - 新增自动打标上下文拼装逻辑
+  - 模板解析启动时默认复用：
+    - 当前有效标签
+    - 最近一次成功自动打标的结构化摘要
+- 修改测试：
+  - `"app/tests/test_video_auto_tagging.py"`
+    - 增加人工修订与修订历史回归测试
+  - `"app/tests/test_video_analysis_endpoints.py"`
+    - 增加模板解析复用自动打标上下文测试
+
+### 当前已可测试能力补充
+- 可创建标签修订版本
+- 可查询标签修订历史与修订详情
+- 修订后当前有效标签会更新为最新版本
+- 模板解析默认会复用自动打标标签与摘要
+
+### 测试结果
+- 已执行：
+  - `python -m pytest app/tests/test_video_auto_tagging.py app/tests/test_video_analysis_endpoints.py -q`
+  - `python -m pytest app/tests/test_video_auto_tagging.py app/tests/test_video_analysis_endpoints.py app/tests/test_registered_routes.py -q`
+- 结果：
+  - 全部通过
+
+### 备注
+- 当前后端已覆盖到批次 6
+- 尚未继续实现：
+  - 前端自动打标结果展示
+  - 前端标签修订交互
+  - 前端修订历史展示
+- 按用户规则，本轮仍未执行 `git commit`
+
+### 记录时间
+- 2026-06-17 09:21:03
+
+---
+
+## 2026-06-17 继续实现自动打标前端：展示、修订与历史
+
+### 本轮实现范围
+- 继续完成：
+  - 批次 7：前端展示与修订交互
+
+### 已新增/修改内容
+- 修改 `"frontend/src/pages/video-analysis/types.ts"`：
+  - 新增自动打标相关前端类型：
+    - `AutoTagTask`
+    - `AutoTagItem`
+    - `EffectiveTag`
+    - `TagRevision`
+    - `TagRevisionItem`
+- 修改 `"frontend/src/pages/VideoAnalysis.tsx"`：
+  - 新增自动打标面板
+  - 支持：
+    - 启动自动打标
+    - 轮询自动打标任务详情
+    - 展示当前有效标签
+    - 展示最近自动打标摘要与命中项
+    - 人工新增标签
+    - 人工移除当前有效标签
+    - 展示修订历史
+  - 页面切换与组件卸载时，会清理自动打标轮询定时器
+- 修改 `"frontend/src/pages/VideoAnalysis.test.tsx"`：
+  - 新增前端回归测试：
+    - 步骤 2 展示自动打标结果与修订历史
+    - 支持启动自动打标并展示任务摘要
+    - 支持人工添加标签修订
+
+### 当前前端已可测试能力
+- 在视频解析页步骤 2 中：
+  - 查看当前有效标签
+  - 查看修订历史
+  - 点击“开始自动打标”
+  - 观察自动打标任务状态和摘要
+  - 手动添加标签
+  - 点击已有标签上的关闭按钮移除标签
+
+### 测试结果
+- 已执行：
+  - `npm test -- "src/pages/VideoAnalysis.test.tsx" "src/pages/SystemConfig.test.tsx"`
+- 结果：
+  - `2` 个测试文件通过
+  - `8` 个测试通过
+
+### 备注
+- 现在后端与前端都已具备“可以测试”的自动打标主流程
+- 仍待手工执行的事项：
+  - 数据库迁移脚本实际执行
+  - 端到端联调
+  - 按用户确认后再 `git commit`
+
+### 记录时间
+- 2026-06-17 09:33:47
+
+---
+
 ## 2026-03-25 结构性清理：隔离手工脚本与自动化测试（P2）
 
 ### 用户问题
@@ -2546,6 +2833,171 @@ pm run build 打包校验（0 errors）。
 
 ---
 
+## 2026-06-17 15:37:05 +08:00
+
+### 用户反馈
+- AI 打标的标签也显示成“人工”（用户口径：人工=人工修订；标签本身不加“人工”字样，仅颜色区分）
+
+### 已执行内容
+- 后端历史标签集合构建时，修订记录的 `remove` 操作不再参与来源合并，避免 AI 标签因为“被手动排除”而被覆盖成 `manual_override`（仅 `add/adjust` 才会标记为手动来源）：[uploaded_file_tags.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/api/v1/endpoints/uploaded_file_tags.py)
+
+### 验证结果
+- `python -m pytest "app/tests/test_video_auto_tagging.py" -q`：通过
+- `frontend` `npm test`：通过
+
+---
+
+## 2026-06-17 15:53:40 +08:00
+
+### 用户需求
+1. 去掉标签里的“当前生效”
+2. 排序按先 AI 生成，然后人工修订，最后已排除，每组里面按拼音顺序
+3. 确认 AI 新生成的标签会先查重再进入结果集
+
+### 已执行内容
+- 前端标签 chip 不再显示“当前生效”标识，仅在已排除标签上显示“已排除”：["VideoTaggingPanel.tsx"](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/video-analysis/VideoTaggingPanel.tsx)
+- 前端标签排序调整为：AI（生效）→ 手动（生效）→ 已排除（不区分来源），组内按拼音排序：["VideoTaggingPanel.tsx"](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/video-analysis/VideoTaggingPanel.tsx)
+- 更新前端测试：移除“当前生效”断言，并新增排序用例：["VideoAnalysis.test.tsx"](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/VideoAnalysis.test.tsx)
+
+### 验证结果
+- `frontend` `npm test`：通过
+
+---
+
+## 2026-06-17 16:17:47 +08:00
+
+### 用户需求
+- 更新相关文档（包含 README）覆盖最新功能点，然后 commit & push
+
+### 已执行内容
+- 更新文档：
+  - 根目录 README：补充“视频解析/视频打标”双入口、历史标签集合、排除/恢复、颜色区分等口径：["README.md"](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/README.md)
+  - API 路由清单：补充自动打标与标签修订相关端点：["api-route-inventory.md"](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/docs/api-route-inventory.md)
+  - 变更记录：补充自动打标/修订/UX 变更摘要：["changelog.md"](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/docs/changelog.md)
+  - UX 设计文档：补充“仅已排除显示 badge + 排序规则 + 颜色区分”落地口径：["2026-06-17-video-tagging-ux-split-design.md"](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/docs/superpowers/specs/2026-06-17-video-tagging-ux-split-design.md)
+- 修复前端 build TypeScript 报错：
+  - 移除 `VideoAnalysis.tsx` 残留的 `clearAutoTagPolling()` 调用
+  - 移除 `SystemConfig.test.tsx` 未使用的 `React` import
+
+### 验证结果
+- 后端：`python -m pytest -q`：通过
+- 前端：`npm run lint`、`npm test`、`npm run build`：通过
+
+---
+
+## 2026-06-17 14:43:30 +08:00
+
+### 用户问题
+- 需要把打标功能独立拆出来成为单独功能（选视频后两个入口：视频解析、视频打标）
+- 已排除标签后面跟一个 x：点击弹出确认框“是否恢复”，确认则恢复
+- 总体优化打标页面 UX
+
+### 已执行内容
+- 前端 Step1（选视频）增加双入口按钮：`视频解析` / `视频打标`
+- 打标功能抽离为独立面板组件并在同页模式切换接入：[VideoTaggingPanel.tsx](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/video-analysis/VideoTaggingPanel.tsx)
+- “历史标签集合”标签 chip 统一使用 `x`：
+  - 当前生效：确认后提交 `remove`（排除）
+  - 已排除：确认后提交 `add`（恢复）
+- 打标 UX 优化：标签筛选（全部/当前生效/已排除）、顶部操作区（刷新/开始自动打标/人工修订）
+- 解析 Step2 移除打标面板，改为引导入口“去视频打标”，避免打标与解析耦合
+
+### 验证结果
+- `frontend` `npm.cmd test`：通过
+
+---
+
+## 2026-06-17 15:03:20 +08:00
+
+### 用户问题
+- 人工打标颜色换一下，区别于 ai 打标
+
+### 已执行内容
+- 打标页“历史标签集合”中，人工标签（`source="manual_override"`）使用绿色系样式，并增加“人工”标识；AI 标签保持原蓝色系
+- 更新前端测试断言：人工标签出现“人工”标识
+
+### 验证结果
+- `frontend` `npm.cmd test`：通过
+
+---
+
+## 2026-06-17 15:32:10 +08:00
+
+### 用户问题
+- 不对呀，ai打标的怎么也变成人工了？我说的人工是人工修订。另外标签本身不要加人工字样，颜色区别即可
+
+### 已执行内容
+- 修复“AI 标签被误标为 manual_override”的根因：人工修订重建当前有效标签时，不再把所有标签 source 统一写成 `manual_override`，而是保留未变更标签的原 source（例如 `ai_auto`）
+- 历史标签集合合并逻辑不再强制把“曾出现过人工修订”的标签 source 覆盖为 `manual_override`
+- 前端移除标签 chip 的“人工”字样，仅通过颜色区分：`manual_override` 用绿色系，`ai_auto` 用蓝色系
+
+### 验证结果
+- 后端：`python -m pytest "app/tests/test_video_auto_tagging.py" "app/tests/test_video_analysis_endpoints.py" -q`：通过
+- 前端：`frontend` 下 `npm.cmd test`：通过
+
+---
+
+## 2026-06-17 10:52:10 +08:00
+
+### 用户问题
+- 你自己作迁移与验证，然后整体测试
+
+### 已执行内容
+- 迁移脚本增强：支持传入数据库文件路径，并在未传参时优先读取环境变量 `DATABASE_URL`（sqlite），回退到项目根目录的 `"ai_media_expert.db"` / `"app.db"`：[add_auto_tagging_tables_migration.py](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/scripts/add_auto_tagging_tables_migration.py)
+- 迁移执行（已备份）：对 `"ai_media_expert.db"` 生成备份 `"ai_media_expert.db.bak-20260617_104846"`，然后执行自动打标相关表结构迁移
+- 迁移验证：确认以下表存在 `video_auto_tag_tasks`、`video_auto_tag_items`、`uploaded_file_tags`、`uploaded_file_tag_revisions`、`uploaded_file_tag_revision_items`；确认 `tags` 表新增字段 `source_type/tag_group_id/is_active`
+
+### 验证结果
+- 后端：`python -m pytest "app/tests" -q`：通过
+- 前端：在 `"frontend"` 下 `npm test`：通过
+
+---
+
+## 2026-06-17 10:57:20 +08:00
+
+### 用户问题
+- 先更新一下readme，然后用1234...总结一下当前项目的主要功能
+
+### 已执行内容
+- 更新根目录 ["README.md"](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/README.md)：补充 AI 配置管理、标签体系（自动打标 + 人工修订）、模板解析复用自动打标上下文、以及自动打标迁移脚本用法
+
+---
+
+## 2026-06-17 13:27:10 +08:00
+
+### 用户问题
+- 自动打标，每次打标结果都不一样，看不到历史打标结果，当前有效标签只显示%
+
+### 已执行内容
+- 后端新增自动打标历史列表接口：`"/api/v1/video-auto-tags/video-files/{video_file_id}/tasks"`，用于查看同一视频的多次自动打标结果
+- 后端 `"uploaded-files/{video_file_id}/tags"` 改为返回非 alias 字段，避免前端只拿到 `"tag_name_snapshot"` 导致标签名丢失
+- 前端 `"VideoAnalysis"` 页面新增“自动打标历史”展示，并支持点击历史任务查看详情
+- 前端对当前有效标签增加字段兼容：优先读 `"tag_name"`，回退到 `"tag_name_snapshot"`，避免只显示百分比
+- 自动打标请求温度固定为低温度模式（`temperature = 0`），降低同一视频重复打标的结果抖动
+
+### 验证结果
+- 后端：`python -m pytest "app/tests/test_video_auto_tagging.py" "app/tests/test_video_analysis_endpoints.py" -q`：通过
+- 前端：在 `"frontend"` 下 `npm test -- "src/pages/VideoAnalysis.test.tsx"`：通过
+
+---
+
+## 2026-06-17 13:58:20 +08:00
+
+### 用户问题
+- 当前有效标签，应为历史所有标签的集合。点x删除需要弹出确认框。另外这个%是怎么算出来的？
+
+### 已执行内容
+- 后端标签语义调整：当前生效标签改为“历史所有标签并集 - 人工排除标签”，不再只看最近一次自动打标结果
+- 后端 `"/uploaded-files/{video_file_id}/tags"` 改为返回“历史标签集合 + is_effective 状态”，并按历史最高 `confidence` 聚合展示
+- 自动打标同步逻辑调整：新一次自动打标不会丢掉旧标签；若标签被人工 remove，则保留在历史集合里但不再生效
+- 前端“历史标签集合”支持显示 `当前生效 / 已排除` 状态，点 `x` 前会弹确认框
+- 百分比说明已落到页面文案：显示的是该标签历史上的最高置信度；人工新增标签默认按 `100%` 展示
+
+### 验证结果
+- 后端：`python -m pytest "app/tests/test_video_auto_tagging.py" "app/tests/test_video_analysis_endpoints.py" -q`：通过
+- 前端：在 `"frontend"` 下 `npm test -- "src/pages/VideoAnalysis.test.tsx"`：通过
+
+---
+
 ## 2026-06-16 19:18:26 +08:00
 
 ### 用户问题
@@ -2598,6 +3050,19 @@ pm run build 打包校验（0 errors）。
 
 ### 当前结果
 - `8001` 已释放。
+
+---
+
+## 2026-06-17 14:05:00 +08:00
+
+### 用户问题
+- 需要把打标功能独立拆出来成为单独的功能（选视频后有两个入口：视频解析、视频打标）
+- 已排除标签后面跟一个 x：点击弹出确认框“是否恢复”，确认则恢复
+- 总体优化打标页面 UX
+
+### 已执行内容
+- 输出并确认设计方案（同页模式切换 + 拆分打标组件 + 标签 x 行为按状态分流）
+- 新增设计文档：["2026-06-17-video-tagging-ux-split-design.md"](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/docs/superpowers/specs/2026-06-17-video-tagging-ux-split-design.md)
 - `8000` 仍有异常监听残留，需要后续换新端口或在更高权限环境下进一步处理。
 
 ---

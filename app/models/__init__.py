@@ -10,6 +10,13 @@ from app.models.video import (
 from app.models.uploaded_file import UploadedFile
 from app.models.prompt_template import PromptTemplate
 from app.models.video_analysis import VideoAnalysis
+from app.models.video_auto_tag import (
+    VideoAutoTagTask,
+    VideoAutoTagItem,
+    UploadedFileTag,
+    UploadedFileTagRevision,
+    UploadedFileTagRevisionItem,
+)
 from app.models.download_history import (
     DownloadHistory, DownloadStatistics, PlatformStatistics, 
     DownloadTag, DownloadHistoryTag
@@ -29,6 +36,11 @@ __all__ = [
     "UploadedFile",
     "PromptTemplate",
     "VideoAnalysis",
+    "VideoAutoTagTask",
+    "VideoAutoTagItem",
+    "UploadedFileTag",
+    "UploadedFileTagRevision",
+    "UploadedFileTagRevisionItem",
     "DownloadHistory",
     "DownloadStatistics",
     "PlatformStatistics",
