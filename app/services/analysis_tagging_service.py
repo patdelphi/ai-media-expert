@@ -21,6 +21,46 @@ from app.services.ai_service import ai_service
 
 
 class AnalysisTaggingService:
+    def _extract_usage(self, payload: dict[str, Any]) -> Optional[dict[str, Any]]:
+        usage = payload.get("usage")
+        if not isinstance(usage, dict) or not usage:
+            return None
+
+        prompt_tokens = usage.get("prompt_tokens")
+        completion_tokens = usage.get("completion_tokens")
+        total_tokens = usage.get("total_tokens")
+
+        input_tokens = usage.get("input_tokens")
+        output_tokens = usage.get("output_tokens")
+
+        def _to_int(value: Any) -> Optional[int]:
+            if value is None:
+                return None
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
+        normalized_prompt = _to_int(prompt_tokens)
+        normalized_completion = _to_int(completion_tokens)
+        normalized_total = _to_int(total_tokens)
+
+        if normalized_prompt is None and input_tokens is not None:
+            normalized_prompt = _to_int(input_tokens)
+        if normalized_completion is None and output_tokens is not None:
+            normalized_completion = _to_int(output_tokens)
+        if normalized_total is None and normalized_prompt is not None and normalized_completion is not None:
+            normalized_total = normalized_prompt + normalized_completion
+
+        if normalized_total is None and normalized_prompt is None and normalized_completion is None:
+            return None
+
+        return {
+            "prompt_tokens": normalized_prompt or 0,
+            "completion_tokens": normalized_completion or 0,
+            "total_tokens": normalized_total or 0,
+        }
+
     def _extract_openai_compatible_text(self, payload: dict[str, Any]) -> str:
         choices = payload.get("choices") or []
         if not isinstance(choices, list) or not choices:
@@ -248,7 +288,7 @@ class AnalysisTaggingService:
 
         return list(dedup.values())
 
-    async def _call_openai_compatible(self, *, ai_config: AIConfig, prompt: str) -> str:
+    async def _call_openai_compatible(self, *, ai_config: AIConfig, prompt: str) -> tuple[str, Optional[dict[str, Any]]]:
         api_url = ai_config.api_base or "https://api.openai.com/v1/chat/completions"
         api_key = ai_service._decrypt_config_secret(ai_config.api_key, "解析结果打标 API Key")
 
@@ -280,8 +320,9 @@ class AnalysisTaggingService:
             snippet = str(payload)[:1200].replace("\n", "\\n")
             raise ValueError(f"解析结果打标响应不是合法 JSON，响应片段={snippet}")
 
+        token_usage = self._extract_usage(payload)
         try:
-            return self._extract_openai_compatible_text(payload)
+            return self._extract_openai_compatible_text(payload), token_usage
         except ValueError as exc:
             try:
                 payload_snippet = json.dumps(payload, ensure_ascii=False)[:1200].replace("\n", "\\n")
@@ -294,7 +335,7 @@ class AnalysisTaggingService:
             suffix = f"，finish_reason={finish_reason}" if finish_reason else ""
             raise ValueError(f"{str(exc)}{suffix}，响应JSON片段={payload_snippet}") from exc
 
-    async def _call_anthropic(self, *, ai_config: AIConfig, prompt: str) -> str:
+    async def _call_anthropic(self, *, ai_config: AIConfig, prompt: str) -> tuple[str, Optional[dict[str, Any]]]:
         api_base = ai_config.api_base or "https://api.anthropic.com"
         api_url = f"{api_base.rstrip('/')}/v1/messages"
         api_key = ai_service._decrypt_config_secret(ai_config.api_key, "解析结果打标 API Key")
@@ -331,7 +372,8 @@ class AnalysisTaggingService:
         output = "".join(text_parts).strip()
         if not output:
             raise ValueError("解析结果打标响应缺少可解析文本内容")
-        return output
+        token_usage = self._extract_usage(payload)
+        return output, token_usage
 
     async def generate_tag_candidates(
         self,
@@ -340,7 +382,7 @@ class AnalysisTaggingService:
         analysis: VideoAnalysis,
         ai_config: AIConfig,
         tag_group_ids: Optional[list[int]] = None,
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], Optional[dict[str, Any]]]:
         analysis_text_parts = []
         if analysis.result_summary:
             analysis_text_parts.append(str(analysis.result_summary))
@@ -363,14 +405,14 @@ class AnalysisTaggingService:
         api_logger.info(f"开始基于解析结果生成候选标签: analysis_id={analysis.id}, provider={provider}, model={ai_config.model}")
 
         if provider in {"openai", "custom"}:
-            raw_text = await self._call_openai_compatible(ai_config=ai_config, prompt=prompt)
+            raw_text, token_usage = await self._call_openai_compatible(ai_config=ai_config, prompt=prompt)
         elif provider == "anthropic":
-            raw_text = await self._call_anthropic(ai_config=ai_config, prompt=prompt)
+            raw_text, token_usage = await self._call_anthropic(ai_config=ai_config, prompt=prompt)
         else:
             raise ValueError(f"解析结果打标不支持的 provider: {ai_config.provider}")
 
         payload = self._extract_structured_payload(raw_text)
-        return self._normalize_candidates(payload)
+        return self._normalize_candidates(payload), token_usage
 
 
 analysis_tagging_service = AnalysisTaggingService()

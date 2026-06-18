@@ -121,6 +121,20 @@ class AnalysisTagCandidatesResponse(BaseModel):
     tag_candidates: List[AnalysisTagCandidate] = Field(default_factory=list)
 
 
+class TokenUsageSummary(BaseModel):
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
+class VideoTokenSummaryResponse(BaseModel):
+    video_file_id: int
+    analysis: TokenUsageSummary
+    auto_tag: TokenUsageSummary
+    analysis_derived_tagging: TokenUsageSummary
+    total: TokenUsageSummary
+
+
 
 
 

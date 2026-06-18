@@ -3601,6 +3601,21 @@ pm run build 打包校验（0 errors）。
 
 ---
 
+## 2026-06-18 15:09:07 +08:00
+
+### 用户问题
+- 先提交当前进度
+- 将“解析历史详情”从弹窗改为完整页面，在主内容区域显示
+
+### 已执行内容
+- 提交本轮阶段性代码变更（按用户要求）
+- 新增设计文档：`"docs/superpowers/specs/2026-06-18-analysis-history-detail-full-page-design.md"`，用于把历史详情从弹窗迁移到独立路由页面
+
+### 记录时间
+- 2026-06-18 15:09:07 +08:00
+
+---
+
 ## 2026-06-18 14:29:04 +08:00
 
 ### 用户问题
@@ -3671,3 +3686,122 @@ pm run build 打包校验（0 errors）。
 
 ### 记录时间
 - 2026-06-18 14:57:20 +08:00
+
+---
+
+## 2026-06-18 +08:00
+
+### 用户反馈
+- 用户确认继续：`ok`
+
+### 当前进展
+- 已更新 `"todo.md"`，新增“解析历史详情弹窗 -> 完整页面”的待办与校验项
+
+### 下一步
+- 修复 `"frontend/src/pages/VideoAnalysis.test.tsx"` 中残留的非路由渲染用例，确保点击“查看 / 打标”能进入 `/video/analysis/history/:analysisId` 并通过测试
+
+---
+
+## 2026-06-18 +08:00（续）
+
+### 已执行内容
+- 更新 `"frontend/src/pages/VideoAnalysis.test.tsx"`：
+  - 将两处涉及路由跳转的用例改为 `<Routes>` 包裹渲染，确保点击“查看 / 打标”后能渲染 `"VideoAnalysisHistoryDetail"`
+- 更新 `"todo.md"`：补充本次“弹窗 -> 完整页面”迁移待办
+
+### 幂等校验
+- `frontend`：`npm test`：通过
+- `frontend`：`npm run lint`：通过
+- `frontend`：`npm run build`：通过
+
+---
+
+## 2026-06-18 +08:00（Token 口径统一与汇总展示）
+
+### 已执行内容
+- 后端 `"app/services/analysis_tagging_service.py"`：
+  - 解析结果打标从模型响应中提取 `usage` 并归一化为 `{prompt_tokens, completion_tokens, total_tokens}`
+  - `generate_tag_candidates` 返回候选 + token_usage
+- 后端 `"app/api/v1/endpoints/video_analysis.py"`：
+  - 解析结果打标生成时，在 `"video_analyses.result_metadata"` 追加 `analysis_tagging_runs[]`（包含 token_usage、ai_config_id、tag_group_ids）
+  - 新增按视频汇总接口：`GET /video-analysis/videos/{video_file_id}/token-summary`
+- 前端 `"frontend/src/pages/video-analysis/VideoTagsSummary.tsx"`：
+  - 增加“Token 汇总”区块：解析（估算）/ 上传视频打标 / 根据解析结果打标 / 总计
+- 前端 `"frontend/src/pages/VideoAnalysis.tsx"`、`"frontend/src/pages/video-analysis/VideoAnalysisHistoryDetail.tsx"`：
+  - 历史与详情中 token 文案明确为“本次解析Tokens(估算)”
+- 测试新增/更新：
+  - 后端：`"app/tests/test_video_token_summary.py"`、`"app/tests/test_analysis_derived_tagging.py"`
+  - 前端：`"frontend/src/pages/video-analysis/VideoTagsSummary.test.tsx"`
+
+### 幂等校验
+- `app`：`python -m pytest -q`：通过
+- `app`：`python -m compileall -q "app"`：通过
+- `frontend`：`npm test`：通过
+- `frontend`：`npm run lint`：通过
+- `frontend`：`npm run build`：通过
+
+---
+
+## 2026-06-18 +08:00
+
+### 用户需求
+- 先这样：更新文档
+- 提交并推送代码（commit & push）
+
+### 已执行内容
+- 更新文档：
+  - `"README.md"`：补充 Token 汇总说明与按钮文案
+  - `"docs/api-route-inventory.md"`：补充 token-summary 路由
+  - `"docs/changelog.md"`：补充 2026-06-18 变更条目
+  - `".gitignore"`：忽略本地 DB 备份文件 `*.db.bak-*`
+
+---
+
+## 2026-06-18 +08:00（Token 口径排查）
+
+### 用户问题
+- 用户反馈：`解析历史` 里的 token 数似乎不对
+- 用户追问：一个视频会经历“解析、上传视频打标、根据解析结果打标、多次重复操作”，这些 token 到底应该怎么算
+
+### 排查结论
+- `"frontend/src/pages/VideoAnalysis.tsx"` 历史列表展示的 token，仅来自 `"video_analyses"` 表中的 `prompt_tokens/completion_tokens/total_tokens`
+- `"app/services/ai_service.py"` 中视频解析任务的 token 目前是**估算值**，不是严格的模型实际返回值：
+  - `prompt_tokens = max(50, len(prompt) // 4)`
+  - `completion_tokens += len(content_chunk) // 4`
+- `"app/services/video_auto_tag_service.py"` 的“上传视频打标”任务会单独保存 `token_usage = payload.get("usage")`，属于另一套记录，不会汇总到解析历史
+- `"app/services/analysis_tagging_service.py"` 的“根据解析结果打标”当前**没有持久化 token 使用量**，因此这部分消耗现在既不在解析历史里，也没有统一累计口径
+
+### 当前口径
+- `解析历史` 里的 token = 单次解析记录自己的 token 字段，且当前实现更接近“估算”
+- `上传视频打标` token = 自动打标任务自己的 `token_usage`
+- `根据解析结果打标` token = 当前未落库、未展示
+- `人工修订/排除/恢复标签` 不调用模型，不产生 token
+
+---
+
+## 2026-06-18 +08:00
+
+### 用户反馈
+- 用户确认继续：`好`
+
+### 当前动作
+- 已更新 `"todo.md"`，新增“Token 口径统一与汇总展示”的实施清单
+
+---
+
+## 2026-06-18 +08:00（文案调整）
+
+### 用户需求
+- “选择视频”下方打标按钮文案改为：`上传视频打标`
+- “解析历史”里的按钮文案改为：`查看详情/根据解析结果打标`
+
+### 已执行内容
+- 前端 `"frontend/src/pages/VideoAnalysis.tsx"`：
+  - `视频打标` -> `上传视频打标`
+  - `查看 / 打标` -> `查看详情/根据解析结果打标`
+- 前端测试 `"frontend/src/pages/VideoAnalysis.test.tsx"`：同步更新按钮文案断言
+
+### 幂等校验
+- `frontend`：`npm test`：通过
+- `frontend`：`npm run lint`：通过
+- `frontend`：`npm run build`：通过

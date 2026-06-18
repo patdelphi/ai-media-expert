@@ -64,6 +64,7 @@ db.sqlite3-journal
 # AI Media Expert database
 ai_media_expert.db
 *.db
+*.db.bak-*
 
 # Sensitive local auth/cookies
 cookie.txt

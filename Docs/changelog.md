@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-18
+
+- 新增 Token 汇总能力：按视频维度汇总“解析（估算）/ 上传视频打标 / 根据解析结果打标 / 总计”，用于解释同一视频多次处理的累计消耗
+- 解析历史与详情页 token 文案明确为“本次解析Tokens(估算)”，避免误解为视频累计消耗
+
 ## 2026-06-17
 
 - 收敛前端 AI `provider` 列表：`"frontend/src/services/aiConfig.ts"` 现在仅保留 `openai`、`anthropic`、`custom`，移除未真正支持的 `google`、`zhipu`、`ollama`

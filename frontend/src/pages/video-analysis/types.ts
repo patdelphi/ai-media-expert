@@ -205,3 +205,17 @@ export interface TagRevision {
   updated_at: string
   items: TagRevisionItem[]
 }
+
+export interface TokenUsageSummary {
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+}
+
+export interface VideoTokenSummary {
+  video_file_id: number
+  analysis: TokenUsageSummary
+  auto_tag: TokenUsageSummary
+  analysis_derived_tagging: TokenUsageSummary
+  total: TokenUsageSummary
+}

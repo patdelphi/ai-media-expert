@@ -207,15 +207,18 @@ async def test_generate_analysis_tag_candidates_caches_result(
 
     async def fake_generate(*_args, **_kwargs):
         calls["count"] += 1
-        return [
-            {
-                "tag_name": "品牌曝光",
-                "confidence": 0.91,
-                "reason": "解析中多次出现品牌露出",
-                "evidence_start_seconds": None,
-                "evidence_end_seconds": None,
-            }
-        ]
+        return (
+            [
+                {
+                    "tag_name": "品牌曝光",
+                    "confidence": 0.91,
+                    "reason": "解析中多次出现品牌露出",
+                    "evidence_start_seconds": None,
+                    "evidence_end_seconds": None,
+                }
+            ],
+            {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+        )
 
     monkeypatch.setattr("app.services.analysis_tagging_service.analysis_tagging_service.generate_tag_candidates", fake_generate)
 
@@ -235,6 +238,10 @@ async def test_generate_analysis_tag_candidates_caches_result(
     db_session.refresh(analysis)
     assert analysis.result_metadata is not None
     assert analysis.result_metadata.get("tag_candidates")[0]["tag_name"] == "品牌曝光"
+    runs = analysis.result_metadata.get("analysis_tagging_runs")
+    assert isinstance(runs, list)
+    assert len(runs) == 1
+    assert runs[0]["token_usage"]["total_tokens"] == 30
     assert calls["count"] == 1
 
     cached = await generate_analysis_tag_candidates(
@@ -246,6 +253,10 @@ async def test_generate_analysis_tag_candidates_caches_result(
         db=db_session,
     )
     assert cached.data.tag_candidates[0].tag_name == "品牌曝光"
+    db_session.refresh(analysis)
+    runs = analysis.result_metadata.get("analysis_tagging_runs")
+    assert isinstance(runs, list)
+    assert len(runs) == 1
     assert calls["count"] == 1
 
     override_no_cache = await generate_analysis_tag_candidates(
@@ -257,11 +268,18 @@ async def test_generate_analysis_tag_candidates_caches_result(
         db=db_session,
     )
     assert override_no_cache.data.tag_candidates[0].tag_name == "品牌曝光"
+    db_session.refresh(analysis)
+    runs = analysis.result_metadata.get("analysis_tagging_runs")
+    assert isinstance(runs, list)
+    assert len(runs) == 2
     assert calls["count"] == 2
 
     async def fake_generate_second(*_args, **_kwargs):
         calls["count"] += 1
-        return [{"tag_name": "教程", "confidence": 0.66, "reason": "偏教程", "evidence_start_seconds": None, "evidence_end_seconds": None}]
+        return (
+            [{"tag_name": "教程", "confidence": 0.66, "reason": "偏教程", "evidence_start_seconds": None, "evidence_end_seconds": None}],
+            {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3},
+        )
 
     monkeypatch.setattr(
         "app.services.analysis_tagging_service.analysis_tagging_service.generate_tag_candidates",
@@ -276,6 +294,10 @@ async def test_generate_analysis_tag_candidates_caches_result(
         db=db_session,
     )
     assert forced.data.tag_candidates[0].tag_name == "教程"
+    db_session.refresh(analysis)
+    runs = analysis.result_metadata.get("analysis_tagging_runs")
+    assert isinstance(runs, list)
+    assert len(runs) == 3
     assert calls["count"] == 3
 
     with pytest.raises(HTTPException) as exc_info:

@@ -11,7 +11,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type {
   AIConfig,
   AnalysisHistoryItem,
@@ -23,10 +23,10 @@ import type {
 } from './video-analysis/types';
 import VideoTaggingPanel from './video-analysis/VideoTaggingPanel';
 import AnalysisDerivedTaggingPanel from './video-analysis/AnalysisDerivedTaggingPanel';
-import VideoTagsSummary from './video-analysis/VideoTagsSummary';
 import apiService from '../services/api';
 
 const VideoAnalysis: React.FC = () => {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialSavedFilename = (searchParams.get('saved_filename') || '').trim();
   const initialAutoSelectedRef = useRef(false);
@@ -37,8 +37,6 @@ const VideoAnalysis: React.FC = () => {
   const [pageMode, setPageMode] = useState<'analysis' | 'tagging'>('analysis');
   const [taggingReturn, setTaggingReturn] = useState<{
     step: number;
-    showHistoryModal: boolean;
-    selectedHistoryId: number | null;
   } | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<PromptTemplate | null>(null);
   const [selectedTagGroups, setSelectedTagGroups] = useState<number[]>([]);
@@ -82,13 +80,6 @@ const VideoAnalysis: React.FC = () => {
   // 调试信息
   const [currentDebugInfo, setCurrentDebugInfo] = useState<any>({});
   
-  // 历史记录展示
-  const [selectedHistoryItem, setSelectedHistoryItem] = useState<AnalysisResult | null>(null);
-  const [selectedHistoryId, setSelectedHistoryId] = useState<number | null>(null);
-  const [selectedHistoryVideoTitle, setSelectedHistoryVideoTitle] = useState('');
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
-  const [historyDetailError, setHistoryDetailError] = useState<string | null>(null);
 
   /**
    * 统一兼容历史数据里的多种状态写法，避免旧数据因为状态值不完全一致而被误判。
@@ -631,30 +622,6 @@ const VideoAnalysis: React.FC = () => {
     }
   };
 
-  const loadHistoryDetail = async (analysisId: number) => {
-    setHistoryDetailLoading(true);
-    setHistoryDetailError(null);
-    setSelectedHistoryItem(null);
-    setSelectedHistoryVideoTitle('');
-    try {
-      const result = await apiService.get<any>(`/video-analysis/${analysisId}`);
-      const analysisData = result.data;
-      setSelectedHistoryItem(analysisData);
-
-      if (analysisData?.video_file_id) {
-        const title = await fetchVideoTitle(analysisData.video_file_id);
-        if (title) {
-          setSelectedHistoryVideoTitle(title);
-        }
-      }
-    } catch (err: any) {
-      console.error('Failed to load analysis detail:', err);
-      setHistoryDetailError('加载解析结果详情失败，请重试');
-    } finally {
-      setHistoryDetailLoading(false);
-    }
-  };
-
   const fetchVideoTitle = async (videoFileId: number): Promise<string | null> => {
     try {
       const result = await apiService.get<any>(`/video-analysis/videos/${videoFileId}`);
@@ -745,10 +712,6 @@ const VideoAnalysis: React.FC = () => {
       await apiService.delete(`/video-analysis/${analysisId}`);
       showNotification('success', '解析历史已隐藏');
 
-      if (selectedHistoryId === analysisId) {
-        closeHistoryModal();
-      }
-
       const nextPage = analysisHistory.length === 1 && historyPage > 1
         ? historyPage - 1
         : historyPage;
@@ -772,29 +735,14 @@ const VideoAnalysis: React.FC = () => {
     URL.revokeObjectURL(url);
   };
   
-  // 查看历史记录详情
-  const viewHistoryDetails = async (analysis: AnalysisHistoryItem) => {
-    setShowHistoryModal(true);
-    setSelectedHistoryId(analysis.id);
-    await loadHistoryDetail(analysis.id);
-  };
-
   const tagFromHistoryItem = async (analysis: AnalysisHistoryItem) => {
-    await viewHistoryDetails(analysis);
-    if (isCompletedAnalysis(analysis)) {
-      showNotification('info', '已打开解析详情，请手动点击“生成候选标签”再执行解析结果打标');
-    }
+    navigate(`/video/analysis/history/${encodeURIComponent(String(analysis.id))}`);
   };
 
   const enterTaggingMode = () => {
     setTaggingReturn({
       step: currentStep,
-      showHistoryModal,
-      selectedHistoryId,
     });
-    if (showHistoryModal) {
-      setShowHistoryModal(false);
-    }
     setPageMode('tagging');
     setCurrentStep(1);
   };
@@ -808,21 +756,7 @@ const VideoAnalysis: React.FC = () => {
 
     setPageMode('analysis');
     setCurrentStep(taggingReturn.step);
-    if (taggingReturn.showHistoryModal && taggingReturn.selectedHistoryId) {
-      setShowHistoryModal(true);
-      setSelectedHistoryId(taggingReturn.selectedHistoryId);
-      await loadHistoryDetail(taggingReturn.selectedHistoryId);
-    }
     setTaggingReturn(null);
-  };
-  
-  // 关闭历史记录模态框
-  const closeHistoryModal = () => {
-    setShowHistoryModal(false);
-    setSelectedHistoryItem(null);
-    setSelectedHistoryId(null);
-    setHistoryDetailLoading(false);
-    setHistoryDetailError(null);
   };
 
   // 重置到第一步
@@ -1177,7 +1111,7 @@ const VideoAnalysis: React.FC = () => {
                       }}
                       className="px-6 py-2 border border-purple-200 bg-white text-purple-700 rounded-lg hover:bg-purple-50 transition-colors"
                     >
-                      视频打标
+                      上传视频打标
                     </button>
                   </div>
                 </div>
@@ -1227,7 +1161,7 @@ const VideoAnalysis: React.FC = () => {
                                 className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
                               >
                                 <i className="fas fa-eye mr-1"></i>
-                                查看 / 打标
+                                查看详情/根据解析结果打标
                               </button>
                               {isCompletedAnalysis(analysis) && (
                                 <button
@@ -1263,7 +1197,7 @@ const VideoAnalysis: React.FC = () => {
                               )}
                               {analysis.total_tokens !== undefined && analysis.total_tokens !== null && (
                                 <span className="whitespace-nowrap">
-                                  Tokens: {analysis.total_tokens}
+                                  本次解析Tokens(估算): {analysis.total_tokens}
                                   {analysis.prompt_tokens !== undefined && analysis.prompt_tokens !== null && analysis.completion_tokens !== undefined && analysis.completion_tokens !== null
                                     ? ` (${analysis.prompt_tokens}+${analysis.completion_tokens})`
                                     : ''}
@@ -2353,260 +2287,6 @@ const VideoAnalysis: React.FC = () => {
         </div>
 
 
-        
-        {/* 历史记录详情模态框 */}
-        {showHistoryModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-              <div className="flex justify-between items-center p-6 border-b shrink-0">
-                <h3 className="text-xl font-semibold">分析结果详情{selectedHistoryId ? ` - ID: ${selectedHistoryId}` : ''}</h3>
-                <button
-                  onClick={closeHistoryModal}
-                  className="text-gray-500 hover:text-gray-600 text-2xl"
-                >
-                  ×
-                </button>
-              </div>
-              
-              <div className="p-6 overflow-y-auto flex-1">
-                {historyDetailLoading && (
-                  <div className="flex items-center justify-center py-12">
-                    <i className="fas fa-spinner fa-spin text-2xl text-blue-600 mr-3"></i>
-                    <span className="text-gray-600">加载解析详情...</span>
-                  </div>
-                )}
-
-                {!historyDetailLoading && historyDetailError && (
-                  <div className="py-10 text-center">
-                    <i className="fas fa-exclamation-circle text-3xl text-red-500 mb-3"></i>
-                    <p className="text-gray-700 mb-4">{historyDetailError}</p>
-                    <button
-                      onClick={() => selectedHistoryId && loadHistoryDetail(selectedHistoryId)}
-                      disabled={!selectedHistoryId}
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
-                    >
-                      重试
-                    </button>
-                  </div>
-                )}
-
-                {!historyDetailLoading && !historyDetailError && selectedHistoryItem && (
-                  <>
-                {/* 基本信息 */}
-                <div className="mb-6">
-                  <h4 className="text-lg font-medium mb-3">基本信息</h4>
-                  <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm">
-                    <div className="whitespace-nowrap"><span className="font-medium">视频ID:</span> {selectedHistoryItem.video_file_id}</div>
-                    <div className="whitespace-nowrap"><span className="font-medium">状态:</span> 
-                      <span className={`ml-2 px-2 py-1 rounded text-xs ${getAnalysisStatusBadgeClass(selectedHistoryItem)}`}>
-                        {getAnalysisStatusLabel(selectedHistoryItem)}
-                      </span>
-                    </div>
-                    <div className="whitespace-nowrap"><span className="font-medium">创建时间:</span> {new Date(selectedHistoryItem.created_at).toLocaleString()}</div>
-                    {selectedHistoryItem.completed_at && (
-                      <div className="whitespace-nowrap"><span className="font-medium">完成时间:</span> {new Date(selectedHistoryItem.completed_at).toLocaleString()}</div>
-                    )}
-                    {selectedHistoryItem.processing_time && (
-                      <div className="whitespace-nowrap"><span className="font-medium">处理时间:</span> {selectedHistoryItem.processing_time.toFixed(2)}秒</div>
-                    )}
-                  </div>
-                </div>
-
-                <VideoTagsSummary videoFileId={selectedHistoryItem.video_file_id} />
-
-                {isCompletedAnalysis(selectedHistoryItem) && (
-                  <AnalysisDerivedTaggingPanel
-                    analysisId={selectedHistoryItem.id}
-                    videoFileId={selectedHistoryItem.video_file_id}
-                    aiConfigs={aiConfigs}
-                    tagGroups={tagGroups}
-                    defaultAIConfigId={(selectedHistoryItem as any)?.ai_config_id as any}
-                    defaultTagGroupIds={(selectedHistoryItem as any)?.tag_group_ids as any}
-                    showNotification={showNotification}
-                  />
-                )}
-                
-                {/* AI API 调试信息 */}
-                {isCompletedAnalysis(selectedHistoryItem) && (
-                  <div className="mb-6">
-                    <h4 className="text-lg font-medium mb-3">AI API 调试信息</h4>
-                    <div className="bg-white border border-gray-200 text-gray-800 rounded-lg overflow-hidden shadow-sm">
-                      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            <i className="fas fa-bug text-gray-500 mr-2"></i>
-                            <span className="font-medium text-gray-900">调试信息</span>
-                          </div>
-                          <div className="flex items-center text-green-600">
-                            <i className="fas fa-check-circle mr-1"></i>
-                            <span className="text-xs font-medium">已完成</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="p-4 space-y-4">
-                        {/* 基本信息 */}
-                        <div>
-                          <h5 className="text-sm font-medium text-gray-700 mb-2">基本信息</h5>
-                          <div className="space-y-1 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">模型:</span>
-                              <span className="text-gray-900">{selectedHistoryItem.model_name || 'N/A'}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">提供商:</span>
-                              <span className="text-gray-900">{selectedHistoryItem.api_provider || 'N/A'}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">请求ID:</span>
-                              <span className="text-gray-900 text-xs truncate">{selectedHistoryItem.request_id || 'N/A'}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* 时间信息 */}
-                        <div>
-                          <h5 className="text-sm font-medium text-gray-700 mb-2">时间信息</h5>
-                          <div className="space-y-1 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">调用时间:</span>
-                              <span className="text-gray-900">
-                                {selectedHistoryItem.api_call_time ? new Date(selectedHistoryItem.api_call_time).toLocaleTimeString() : 'N/A'}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">耗时:</span>
-                              <span className={`${selectedHistoryItem.api_duration && selectedHistoryItem.api_duration > 10 ? 'text-red-500' : 'text-green-600'}`}>
-                                {selectedHistoryItem.api_duration ? `${selectedHistoryItem.api_duration.toFixed(3)}秒` : 'N/A'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Token使用情况 */}
-                        <div>
-                          <h5 className="text-sm font-medium text-gray-700 mb-2">Token 使用</h5>
-                          <div className="space-y-1 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">输入:</span>
-                              <span className="text-blue-600">{selectedHistoryItem.prompt_tokens || 0}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">输出:</span>
-                              <span className="text-green-600">{selectedHistoryItem.completion_tokens || 0}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">总计:</span>
-                              <span className="text-purple-600">{selectedHistoryItem.total_tokens || 0}</span>
-                            </div>
-                          </div>
-                          
-                          {/* Token使用可视化 */}
-                          {selectedHistoryItem.total_tokens && selectedHistoryItem.total_tokens > 0 && (
-                            <div className="mt-2">
-                              <div className="flex h-1 bg-gray-200 rounded overflow-hidden">
-                                <div 
-                                  className="bg-blue-500"
-                                  style={{
-                                    width: `${((selectedHistoryItem.prompt_tokens || 0) / selectedHistoryItem.total_tokens) * 100}%`
-                                  }}
-                                ></div>
-                                <div 
-                                  className="bg-green-500"
-                                  style={{
-                                    width: `${((selectedHistoryItem.completion_tokens || 0) / selectedHistoryItem.total_tokens) * 100}%`
-                                  }}
-                                ></div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        
-                        {/* 性能指标 */}
-                        <div>
-                          <h5 className="text-sm font-medium text-gray-700 mb-2">性能指标</h5>
-                          <div className="space-y-1 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">处理时间:</span>
-                              <span className={`${selectedHistoryItem.processing_time && selectedHistoryItem.processing_time > 30 ? 'text-red-500' : 'text-green-600'}`}>
-                                {selectedHistoryItem.processing_time ? `${selectedHistoryItem.processing_time.toFixed(2)}秒` : 'N/A'}
-                              </span>
-                            </div>
-                            {selectedHistoryItem.temperature && (
-                              <div className="flex justify-between">
-                                <span className="text-gray-500">温度:</span>
-                                <span className="text-cyan-600">{selectedHistoryItem.temperature}</span>
-                              </div>
-                            )}
-                            {selectedHistoryItem.max_tokens && (
-                              <div className="flex justify-between">
-                                <span className="text-gray-500">最大Token:</span>
-                                <span className="text-cyan-600">{selectedHistoryItem.max_tokens}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* 提示词内容 */}
-                {selectedHistoryItem.prompt_content && (
-                  <div className="mb-6">
-                    <h4 className="text-lg font-medium mb-3">提示词内容</h4>
-                    <div className="bg-gray-50 p-4 rounded-lg text-sm whitespace-pre-wrap">
-                      {selectedHistoryItem.prompt_content}
-                    </div>
-                  </div>
-                )}
-                
-                {/* 分析结果 */}
-                {selectedHistoryItem.analysis_result && (
-                  <div className="mb-6">
-                    <div className="flex justify-between items-center mb-3">
-                      <h4 className="text-lg font-medium">分析结果</h4>
-                      <button
-                        onClick={() => exportResult(selectedHistoryItem.analysis_result!, buildExportFilename(selectedHistoryVideoTitle || `analysis-${selectedHistoryItem.video_file_id}`, selectedHistoryItem.completed_at || selectedHistoryItem.created_at))}
-                        className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                      >
-                        <i className="fas fa-download mr-1"></i>
-                        导出结果
-                      </button>
-                    </div>
-                    <div className="bg-white border rounded-lg p-4 max-h-96 overflow-y-auto">
-                      <div className="prose max-w-none">
-                        <ReactMarkdown>
-                          {selectedHistoryItem.analysis_result}
-                        </ReactMarkdown>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* 结果摘要 */}
-                {selectedHistoryItem.result_summary && (
-                  <div className="mb-6">
-                    <h4 className="text-lg font-medium mb-3">结果摘要</h4>
-                    <div className="bg-gray-50 p-4 rounded-lg text-sm">
-                      {selectedHistoryItem.result_summary}
-                    </div>
-                  </div>
-                )}
-                  </>
-                )}
-              </div>
-              
-              <div className="flex justify-end p-6 border-t bg-gray-50 shrink-0">
-                <button
-                  onClick={closeHistoryModal}
-                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
-                >
-                  关闭
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
       
 

@@ -11,6 +11,7 @@ const VideoUpload = lazy(() => import('./pages/VideoUpload'));
 const VideoDownload = lazy(() => import('./pages/VideoDownload'));
 const VideoList = lazy(() => import('./pages/VideoList'));
 const VideoAnalysis = lazy(() => import('./pages/VideoAnalysis'));
+const VideoAnalysisHistoryDetail = lazy(() => import('./pages/video-analysis/VideoAnalysisHistoryDetail'));
 const SystemConfig = lazy(() => import('./pages/SystemConfig'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Settings = lazy(() => import('./pages/Settings'));
@@ -196,6 +197,11 @@ const App: React.FC = () => {
               <Route path="/video/analysis" element={
                 <ProtectedRoute>
                   <VideoAnalysis />
+                </ProtectedRoute>
+              } />
+              <Route path="/video/analysis/history/:analysisId" element={
+                <ProtectedRoute>
+                  <VideoAnalysisHistoryDetail />
                 </ProtectedRoute>
               } />
               <Route path="/system/config" element={

@@ -28,6 +28,7 @@ from app.schemas.video_analysis import (
     AnalysisStartResponse,
     AnalysisStreamChunk,
     AnalysisTagCandidatesResponse,
+    VideoTokenSummaryResponse,
     PromptTemplateResponse,
     TagGroupResponse,
     VideoFileInfo
@@ -35,6 +36,14 @@ from app.schemas.video_analysis import (
 from app.schemas.common import ResponseModel, PaginatedResponse, PaginationParams
 
 router = APIRouter()
+
+def _get_owned_video_file(video_file_id: int, current_user: User, db: Session) -> UploadedFile:
+    video_file = db.query(UploadedFile).filter(UploadedFile.id == video_file_id).first()
+    if not video_file:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video file not found")
+    if current_user.role != "admin" and str(video_file.user_id) != str(current_user.id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission to access this video")
+    return video_file
 
 
 def _get_owned_analysis(analysis_id: int, current_user: User, db: Session) -> VideoAnalysis:
@@ -63,7 +72,7 @@ async def generate_analysis_tag_candidates(
     if analysis.status != "completed" or not analysis.analysis_result:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analysis result is not ready")
 
-    metadata = analysis.result_metadata if isinstance(analysis.result_metadata, dict) else {}
+    metadata = dict(analysis.result_metadata) if isinstance(analysis.result_metadata, dict) else {}
     cached = metadata.get("tag_candidates")
     should_use_cache = force is False and ai_config_id is None and tag_group_ids is None
     if should_use_cache and isinstance(cached, list) and cached:
@@ -87,13 +96,28 @@ async def generate_analysis_tag_candidates(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="AI config not found or inactive")
 
     try:
-        tag_candidates = await analysis_tagging_service.generate_tag_candidates(
+        tag_candidates, token_usage = await analysis_tagging_service.generate_tag_candidates(
             db=db,
             analysis=analysis,
             ai_config=ai_config,
             tag_group_ids=tag_group_ids,
         )
+        resolved_tag_group_ids = tag_group_ids if tag_group_ids is not None else analysis.tag_group_ids
         metadata["tag_candidates"] = tag_candidates
+        existing_runs = metadata.get("analysis_tagging_runs")
+        runs = list(existing_runs) if isinstance(existing_runs, list) else []
+        runs.append(
+            {
+                "created_at": time.time(),
+                "ai_config_id": ai_config.id,
+                "provider": ai_config.provider,
+                "model": ai_config.model,
+                "tag_group_ids": resolved_tag_group_ids,
+                "force": bool(force),
+                "token_usage": token_usage,
+            }
+        )
+        metadata["analysis_tagging_runs"] = runs
         analysis.result_metadata = metadata
         db.commit()
         db.refresh(analysis)
@@ -113,6 +137,102 @@ async def generate_analysis_tag_candidates(
             tag_candidates=tag_candidates,
         ),
     )
+
+
+def _extract_usage_ints(payload: Any) -> tuple[int, int, int]:
+    if not isinstance(payload, dict):
+        return (0, 0, 0)
+    prompt_tokens = payload.get("prompt_tokens")
+    completion_tokens = payload.get("completion_tokens")
+    total_tokens = payload.get("total_tokens")
+    input_tokens = payload.get("input_tokens")
+    output_tokens = payload.get("output_tokens")
+
+    def _to_int(value: Any) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
+    prompt = _to_int(prompt_tokens) or _to_int(input_tokens)
+    completion = _to_int(completion_tokens) or _to_int(output_tokens)
+    total = _to_int(total_tokens)
+    if total <= 0:
+        total = prompt + completion
+    return (prompt, completion, total)
+
+
+@router.get(
+    "/videos/{video_file_id}/token-summary",
+    response_model=ResponseModel[VideoTokenSummaryResponse],
+)
+def get_video_token_summary(
+    video_file_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Any:
+    try:
+        _get_owned_video_file(video_file_id=video_file_id, current_user=current_user, db=db)
+
+        analysis_query = db.query(VideoAnalysis).filter(VideoAnalysis.video_file_id == video_file_id, VideoAnalysis.is_active == True)
+        auto_tag_query = db.query(VideoAutoTagTask).filter(VideoAutoTagTask.video_file_id == video_file_id, VideoAutoTagTask.is_active == True)
+        if current_user.role != "admin":
+            analysis_query = analysis_query.filter(VideoAnalysis.user_id == str(current_user.id))
+            auto_tag_query = auto_tag_query.filter(VideoAutoTagTask.user_id == str(current_user.id))
+
+        analysis_prompt = 0
+        analysis_completion = 0
+        analysis_total = 0
+        derived_prompt = 0
+        derived_completion = 0
+        derived_total = 0
+
+        for analysis in analysis_query.all():
+            analysis_prompt += int(analysis.prompt_tokens or 0)
+            analysis_completion += int(analysis.completion_tokens or 0)
+            analysis_total += int(analysis.total_tokens or 0)
+
+            metadata = analysis.result_metadata if isinstance(analysis.result_metadata, dict) else {}
+            runs = metadata.get("analysis_tagging_runs")
+            if not isinstance(runs, list):
+                continue
+            for run in runs:
+                if not isinstance(run, dict):
+                    continue
+                p, c, t = _extract_usage_ints(run.get("token_usage"))
+                derived_prompt += p
+                derived_completion += c
+                derived_total += t
+
+        auto_prompt = 0
+        auto_completion = 0
+        auto_total = 0
+        for task in auto_tag_query.all():
+            p, c, t = _extract_usage_ints(task.token_usage)
+            auto_prompt += p
+            auto_completion += c
+            auto_total += t
+
+        total_prompt = analysis_prompt + auto_prompt + derived_prompt
+        total_completion = analysis_completion + auto_completion + derived_completion
+        total_total = analysis_total + auto_total + derived_total
+
+        return ResponseModel(
+            code=200,
+            message="Video token summary retrieved successfully",
+            data=VideoTokenSummaryResponse(
+                video_file_id=video_file_id,
+                analysis={"prompt_tokens": analysis_prompt, "completion_tokens": analysis_completion, "total_tokens": analysis_total},
+                auto_tag={"prompt_tokens": auto_prompt, "completion_tokens": auto_completion, "total_tokens": auto_total},
+                analysis_derived_tagging={"prompt_tokens": derived_prompt, "completion_tokens": derived_completion, "total_tokens": derived_total},
+                total={"prompt_tokens": total_prompt, "completion_tokens": total_completion, "total_tokens": total_total},
+            ),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        api_logger.error(f"Failed to get video token summary: {str(exc)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get video token summary") from exc
 
 
 def _build_auto_tag_context(video_file_id: int, db: Session) -> str:

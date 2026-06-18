@@ -1,8 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import VideoAnalysis from './VideoAnalysis'
+import VideoAnalysisHistoryDetail from './video-analysis/VideoAnalysisHistoryDetail'
 
 const { apiServiceMock } = vi.hoisted(() => ({
   apiServiceMock: {
@@ -74,8 +75,11 @@ describe('VideoAnalysis', () => {
     })
 
     render(
-      <MemoryRouter>
-        <VideoAnalysis />
+      <MemoryRouter initialEntries={['/video/analysis']}>
+        <Routes>
+          <Route path="/video/analysis" element={<VideoAnalysis />} />
+          <Route path="/video/analysis/history/:analysisId" element={<VideoAnalysisHistoryDetail />} />
+        </Routes>
       </MemoryRouter>,
     )
 
@@ -142,8 +146,11 @@ describe('VideoAnalysis', () => {
     })
 
     render(
-      <MemoryRouter>
-        <VideoAnalysis />
+      <MemoryRouter initialEntries={['/video/analysis']}>
+        <Routes>
+          <Route path="/video/analysis" element={<VideoAnalysis />} />
+          <Route path="/video/analysis/history/:analysisId" element={<VideoAnalysisHistoryDetail />} />
+        </Routes>
       </MemoryRouter>,
     )
 
@@ -212,8 +219,11 @@ describe('VideoAnalysis', () => {
     vi.stubGlobal('confirm', vi.fn(() => true))
 
     render(
-      <MemoryRouter>
-        <VideoAnalysis />
+      <MemoryRouter initialEntries={['/video/analysis']}>
+        <Routes>
+          <Route path="/video/analysis" element={<VideoAnalysis />} />
+          <Route path="/video/analysis/history/:analysisId" element={<VideoAnalysisHistoryDetail />} />
+        </Routes>
       </MemoryRouter>,
     )
 
@@ -408,14 +418,17 @@ describe('VideoAnalysis', () => {
     })
 
     render(
-      <MemoryRouter>
-        <VideoAnalysis />
+      <MemoryRouter initialEntries={['/video/analysis']}>
+        <Routes>
+          <Route path="/video/analysis" element={<VideoAnalysis />} />
+          <Route path="/video/analysis/history/:analysisId" element={<VideoAnalysisHistoryDetail />} />
+        </Routes>
       </MemoryRouter>,
     )
 
     await screen.findByText('选择要解析的视频')
     fireEvent.click(await screen.findByText('视频1'))
-    fireEvent.click(screen.getByRole('button', { name: '视频打标' }))
+    fireEvent.click(screen.getByRole('button', { name: '上传视频打标' }))
 
     await screen.findByText('自动打标')
     const aiTag = screen.getByText('品牌曝光')
@@ -563,14 +576,17 @@ describe('VideoAnalysis', () => {
     })
 
     render(
-      <MemoryRouter>
-        <VideoAnalysis />
+      <MemoryRouter initialEntries={['/video/analysis']}>
+        <Routes>
+          <Route path="/video/analysis" element={<VideoAnalysis />} />
+          <Route path="/video/analysis/history/:analysisId" element={<VideoAnalysisHistoryDetail />} />
+        </Routes>
       </MemoryRouter>,
     )
 
     await screen.findByText('选择要解析的视频')
     fireEvent.click(await screen.findByText('视频1'))
-    fireEvent.click(screen.getByRole('button', { name: '视频打标' }))
+    fireEvent.click(screen.getByRole('button', { name: '上传视频打标' }))
     await screen.findByText('自动打标')
 
     const actionButtons = screen.getAllByRole('button', { name: /^(排除标签|恢复标签) / })
@@ -741,7 +757,7 @@ describe('VideoAnalysis', () => {
 
     await screen.findByText('选择要解析的视频')
     fireEvent.click(await screen.findByText('视频1'))
-    fireEvent.click(screen.getByRole('button', { name: '视频打标' }))
+    fireEvent.click(screen.getByRole('button', { name: '上传视频打标' }))
     await screen.findByText('自动打标')
     vi.useFakeTimers()
     fireEvent.click(screen.getByText('Qwen AutoTag'))
@@ -880,7 +896,7 @@ describe('VideoAnalysis', () => {
 
     await screen.findByText('选择要解析的视频')
     fireEvent.click(screen.getByText('视频1'))
-    fireEvent.click(screen.getByRole('button', { name: '视频打标' }))
+    fireEvent.click(screen.getByRole('button', { name: '上传视频打标' }))
     await screen.findByText('自动打标')
 
     fireEvent.change(screen.getByPlaceholderText('输入要添加的标签'), {
@@ -1003,7 +1019,7 @@ describe('VideoAnalysis', () => {
 
     await screen.findByText('选择要解析的视频')
     fireEvent.click(await screen.findByText('视频1'))
-    fireEvent.click(screen.getByRole('button', { name: '视频打标' }))
+    fireEvent.click(screen.getByRole('button', { name: '上传视频打标' }))
     await screen.findByText('历史标签集合')
 
     fireEvent.click(screen.getByRole('button', { name: '排除标签 品牌曝光' }))
@@ -1074,7 +1090,7 @@ describe('VideoAnalysis', () => {
     fireEvent.click(await screen.findByText('视频1'))
 
     expect(screen.getByRole('button', { name: '视频解析' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '视频打标' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '上传视频打标' })).toBeInTheDocument()
   })
 
   it('解析历史列表点击“查看 / 打标”只打开详情，不自动生成候选', async () => {
@@ -1197,16 +1213,19 @@ describe('VideoAnalysis', () => {
     })
 
     render(
-      <MemoryRouter>
-        <VideoAnalysis />
+      <MemoryRouter initialEntries={['/video/analysis']}>
+        <Routes>
+          <Route path="/video/analysis" element={<VideoAnalysis />} />
+          <Route path="/video/analysis/history/:analysisId" element={<VideoAnalysisHistoryDetail />} />
+        </Routes>
       </MemoryRouter>,
     )
 
     await screen.findByText('选择要解析的视频')
 
-    fireEvent.click(await screen.findByRole('button', { name: '查看 / 打标' }))
+    fireEvent.click(await screen.findByRole('button', { name: '查看详情/根据解析结果打标' }))
 
-    await screen.findByText(/分析结果详情/)
+    await screen.findByText(/解析结果详情 #10/)
     await screen.findByText('当前标签')
     await screen.findByText('品牌曝光')
   })
@@ -1409,16 +1428,19 @@ describe('VideoAnalysis', () => {
     })
 
     render(
-      <MemoryRouter>
-        <VideoAnalysis />
+      <MemoryRouter initialEntries={['/video/analysis']}>
+        <Routes>
+          <Route path="/video/analysis" element={<VideoAnalysis />} />
+          <Route path="/video/analysis/history/:analysisId" element={<VideoAnalysisHistoryDetail />} />
+        </Routes>
       </MemoryRouter>,
     )
 
-    const tagButton = await screen.findByRole('button', { name: '查看 / 打标' })
+    const tagButton = await screen.findByRole('button', { name: '查看详情/根据解析结果打标' })
 
     fireEvent.click(tagButton)
 
-    await screen.findByText(/分析结果详情/)
+    await screen.findByText(/解析结果详情 #11/)
     await screen.findByText('解析结果打标')
     await screen.findByText('当前标签')
   })
