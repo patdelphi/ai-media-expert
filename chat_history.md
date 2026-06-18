@@ -1537,6 +1537,26 @@ pm run build 打包校验（0 errors）。
 ### 记录时间
 - 2026-03-27
 
+## 2026-06-17 17:53:39 +08:00
+
+### 用户需求
+1. 解析历史列表每条历史增加“解析结果打标”按钮
+2. 打标页面增加“返回上一页”按钮（智能返回：从哪里进入打标就回到哪里）
+
+### 已执行内容
+- 解析历史列表新增按钮“解析结果打标”：
+  - 点击后先调用 `POST "/video-analysis/{analysis_id}/tag-candidates"` 生成/复用候选标签
+  - 随后自动打开该条历史的详情弹窗，并在弹窗内展示“解析结果打标”区块用于勾选/采纳
+  - 实现位置：[VideoAnalysis.tsx](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/VideoAnalysis.tsx)
+- 打标页面新增“返回上一页”按钮：
+  - 进入打标模式时记录来源状态（步骤、是否打开历史弹窗等）
+  - 点击“返回上一页”恢复来源页面状态
+  - 实现位置：[VideoTaggingPanel.tsx](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/video-analysis/VideoTaggingPanel.tsx) / [VideoAnalysis.tsx](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/VideoAnalysis.tsx)
+- 新增前端测试覆盖历史列表按钮行为：[VideoAnalysis.test.tsx](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/VideoAnalysis.test.tsx)
+
+### 验证结果
+- `frontend`：`npm test`、`npm run lint`：通过
+
 ---
 
 ## 2026-06-16 前端临时管理员无感登录
@@ -2831,6 +2851,247 @@ pm run build 打包校验（0 errors）。
 - `frontend` `npm.cmd test`：通过
 - `frontend` `npm.cmd run build`：通过
 
+## 2026-06-18 13:29:00 +08:00
+
+### 用户问题
+- 历史列表中的 `模板 / 创建时间 / 完成时间 / 处理时间 / 模型 / Tokens` 需要放到同一行，整体宽度要延伸到右侧删除按钮之前
+- 用户再次反馈：`解析结果打标响应不是合法 JSON`
+
+### 当前排查
+- 前端 `"frontend/src/pages/VideoAnalysis.tsx"` 当前实现仍是：
+  - `模板` 单独一行
+  - 时间/模型/Tokens 单独一行
+  - 所以没有达到“整行铺开到删除按钮右边界前”的展示要求
+- 后端 `"app/services/analysis_tagging_service.py"` 当前 JSON 容错已支持：
+  - fenced code block
+  - 说明文字包裹对象 JSON
+  - Python dict 风格
+  - `None/True/False`
+  - 尾逗号清理
+- 本次复查 `"logs"` 目录时，暂未发现新的可用原始响应片段，因此下一步需要继续增强解析器兜底，并补更详细日志
+
+### 处理建议
+- 采用最小改法：
+  - 将 `模板 / 创建时间 / 完成时间 / 处理时间 / 模型 / Tokens` 合并为同一信息行
+  - 左侧信息区放宽到按钮区之前，默认不主动换行
+  - 继续增强解析结果打标 JSON 容错，覆盖数组根节点、括号配对提取、字符串化 `tag_candidates` 等场景
+
+### 记录时间
+- 2026-06-18 13:29:00 +08:00
+
+---
+
+## 2026-06-18 13:14:29 +08:00
+
+### 用户问题
+- 用户确认历史列表合并按钮文案使用：`查看 / 打标`
+
+### 已执行内容
+- 复核前端 `"frontend/src/pages/VideoAnalysis.tsx"`，确认历史列表按钮已合并为 `"查看 / 打标"`，并统一指向同一详情/打标入口。
+- 历史列表点击后逻辑已收口为：
+  - 先打开解析详情弹窗
+  - 若记录为完成态，仅提示用户手动点击“生成候选标签”，不再自动触发 LLM 打标
+- 优化时间信息布局，避免“创建时间 / 完成时间”字段在仍有剩余空间时过早折行：
+  - 历史列表摘要区改为 `flex-wrap + gap`
+  - 详情弹窗基本信息区改为自适应 `flex-wrap`
+  - 每个时间字段增加 `whitespace-nowrap`
+- 后端 `"app/services/analysis_tagging_service.py"` 继续增强解析结果打标响应的 JSON 容错：
+  - 支持 fenced code block 提取
+  - 支持说明文字包裹 JSON
+  - 支持 Python dict 风格
+  - 支持 `None/True/False`
+  - 支持尾逗号清理
+- 同步更新前后端相关测试，覆盖新按钮文案、详情页手动触发逻辑和 JSON 容错场景。
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_analysis_derived_tagging.py"`：通过
+- `npm test -- "src/pages/VideoAnalysis.test.tsx" "src/pages/video-analysis/AnalysisDerivedTaggingPanel.test.tsx"`：通过
+- `npm run lint -- "src/pages/VideoAnalysis.tsx" "src/pages/video-analysis/AnalysisDerivedTaggingPanel.tsx"`：通过
+
+### 记录时间
+- 2026-06-18 13:14:29 +08:00
+
+---
+
+## 2026-06-18 09:17:51 +08:00
+
+### 用户问题
+- 无论来源如何，打标多少次，方法如何，最后打标的结果要是唯一一套，关联到视频上
+
+### 业务口径确认
+- 所有打标入口都只是“生成候选标签 / 写入修订历史”的不同来源
+- 最终对外只认视频维度的一套当前生效标签集合
+- 自动打标、解析结果打标、人工修订都必须归并到同一视频标签结果上
+- 历史、来源、版本可以保留，但不能让产品层出现“并行多套标签结果”的语义
+
+### 已执行内容
+- 已将该规则补入 `"todo.md"`，作为后续代码收敛与测试校验的统一准则
+
+### 用户补充
+- 入口多少无所谓，结果是一套
+- 同一标签来自多个入口时，前端唯一结果里选择：最高置信度 + 所有来源痕迹
+- 已排除标签也要保留来源痕迹，但展示保持简洁，先做出来看看
+
+### 已执行内容
+- 后端 `GET "/api/v1/uploaded-files/{video_file_id}/tags"` 返回结构新增 `sources: string[]`（历史来源去重集合），用于支撑“多入口、单结果集、多来源痕迹”
+- 聚合规则：
+  - 同一 `tag_name` 只返回一条（唯一结果集）
+  - `confidence` 取历史最高值（max）
+  - `sources` 对 `is_effective=true/false` 都保留
+- 前端打标页标签 chip 增加来源痕迹展示（例如：`AI自动·解析派生`），并对已排除标签同样展示
+- 新增测试：
+  - 后端：覆盖 sources 并集 + max confidence
+  - 前端：覆盖标签来源痕迹渲染
+
+### 验证结果
+- 后端：`python -m pytest -q "app/tests/test_analysis_derived_tagging.py" "app/tests/test_video_auto_tagging.py"`：通过
+- 前端：`npm test -- "src/pages/video-analysis/VideoTaggingPanel.test.tsx"`：通过
+
+---
+
+## 2026-06-18 11:01:12 +08:00
+
+### 用户问题
+- 来源这些都不要显示了，只用颜色就可以了，加一行文字标注，讲清楚颜色代表什么。
+
+### 已执行内容
+- 移除打标页标签 chip 上的来源文字痕迹展示（例如 `AI自动·解析派生`）
+- 新增颜色图例说明一行文字：`颜色说明：蓝色=AI（自动打标/解析派生），绿色=人工修订，灰色=已排除`
+- 更新前端测试，确保来源文字不再出现且图例存在
+
+### 验证结果
+- 前端：`npm test -- "src/pages/video-analysis/VideoTaggingPanel.test.tsx"`：通过
+- 前端：`npm run lint -- "src/pages/video-analysis/VideoTaggingPanel.tsx" "src/pages/video-analysis/VideoTaggingPanel.test.tsx"`：通过
+
+---
+
+## 2026-06-18 11:08:00 +08:00
+
+### 用户问题
+- 解析历史里点击“解析结果打标”后面的逻辑是什么？不要自动化，要手动触发才执行打标；如果有历史标签，需要先显示出来。
+
+### 现状说明
+- 当前历史列表点击“解析结果打标”会先直接调用 `POST "/api/v1/video-analysis/{analysis_id}/tag-candidates"`，也就是立即触发一次基于解析结果的 AI 候选标签生成。
+- 生成成功后才打开解析详情弹窗，因此当前确实属于“自动触发打标”。
+- 现有历史详情弹窗里嵌入了 `AnalysisDerivedTaggingPanel`，但它主要负责候选生成/采纳，不会先把视频现有标签单独作为第一视觉块展示出来。
+
+### 用户要求口径
+- 点击历史列表“解析结果打标”时，不应自动调用 LLM。
+- 应先打开详情并展示该视频当前标签结果；只有用户手动点击“生成候选标签/重新生成”时，才调用 LLM。
+
+### 已执行内容
+- 调整历史列表按钮逻辑：
+  - 点击“解析结果打标”不再调用 `POST "/api/v1/video-analysis/{analysis_id}/tag-candidates"`
+  - 改为直接打开详情弹窗，并提示“请手动点击生成候选标签”
+- 历史详情弹窗新增“当前标签”区块：
+  - 先调用 `GET "/api/v1/uploaded-files/{video_file_id}/tags"` 拉取并展示历史标签唯一结果集
+  - 在候选生成面板（解析结果打标）之前展示
+- 更新前端测试，锁定“不会自动触发候选生成”
+
+### 验证结果
+- 前端：`npm test -- "src/pages/VideoAnalysis.test.tsx"`：通过
+- 前端：`npm run lint -- "src/pages/VideoAnalysis.tsx" "src/pages/video-analysis/VideoTagsSummary.tsx" "src/pages/VideoAnalysis.test.tsx"`：通过
+
+---
+
+## 2026-06-18 11:59:30 +08:00
+
+### 用户问题
+- 解析历史列表增加使用的模板名称显示
+- 最新一个视频解析历史，ID 109，点击打标报错：生成候选标签失败
+
+### 已执行内容
+- 解析历史列表新增模板名称显示：
+  - 有模板时显示：`模板：{模板名称}`
+  - 无模板时显示：`模板：未使用模板`
+- 前端对 `template_id` 复用已加载模板列表做本地映射，不改后端接口
+- 排查 `analysis_id=109`：
+  - 记录存在且状态为 `completed`
+  - 绑定 `ai_config_id=4`
+  - AI 配置存在且启用：`name=Mimo`、`provider=custom`、`model=mimo-v2.5`
+  - 更像是生成候选标签时的 AI 调用报错被前端吞成通用提示
+- 已修改解析结果打标面板：
+  - 若后端返回 `detail/message`，前端直接显示具体错误原因，不再只提示“生成候选标签失败”
+
+### 验证结果
+- 前端：`npm test -- "src/pages/VideoAnalysis.test.tsx" "src/pages/video-analysis/AnalysisDerivedTaggingPanel.test.tsx"`：通过
+- 前端：`npm run lint -- "src/pages/VideoAnalysis.tsx" "src/pages/video-analysis/AnalysisDerivedTaggingPanel.tsx" "src/pages/video-analysis/VideoTagsSummary.tsx" "src/pages/VideoAnalysis.test.tsx" "src/pages/video-analysis/AnalysisDerivedTaggingPanel.test.tsx"`：通过
+
+---
+
+## 2026-06-18 12:06:20 +08:00
+
+### 用户反馈
+- `解析结果打标响应不是合法 JSON`
+
+### 根因定位
+- `app/services/analysis_tagging_service.py` 中 JSON 提取正则写错了：
+  - 误写成 `\\s`、`\\{`，实际会匹配反斜杠字符，而不是空白和 JSON 花括号
+- 结果：当模型返回 ```json 代码块或“说明文字 + JSON”时，后端无法正确提取 JSON，最终报“解析结果打标响应不是合法 JSON”
+
+### 已执行内容
+- 修复 `AnalysisTaggingService._extract_structured_payload()` 的正则表达式
+- 新增回归测试：覆盖“带 ```json 代码块的响应也能正确提取并解析”
+
+### 验证结果
+- 后端：`python -m pytest -q "app/tests/test_analysis_derived_tagging.py"`：通过
+- 前端：`npm test -- "src/pages/video-analysis/AnalysisDerivedTaggingPanel.test.tsx"`：通过
+
+---
+
+## 2026-06-17 18:25:06 +08:00
+
+### 用户问题
+- 没明白逻辑：在视频解析详情页生成标签，调用的是什么 AI API？使用的是什么标签组？为何和独立标签生成页不一样？
+
+### 现状说明（代码口径）
+- 解析结果打标（解析详情页 / 历史详情弹窗）调用接口：`POST "/api/v1/video-analysis/{analysis_id}/tag-candidates"`
+- 使用的 AI 配置：该条解析任务的 `"analysis.ai_config_id"`（不是打标页当前选择的 AI 配置）
+- 使用的标签组：该条解析任务的 `"analysis.tag_group_ids"` 对应的标签组（会拼成“固定标签库”放进 prompt；如果为空则提示“没有预设标签”）
+- AI API 类型：由解析任务的 AI 配置 `"provider"` 决定
+  - `"openai/custom"`：走 OpenAI 兼容 `chat/completions`
+  - `"anthropic"`：走 Anthropic `v1/messages`
+
+### 待确认
+- 用户提出疑问：如果该条解析任务绑定的 AI 配置（或其 API Key / Base URL）已经失效，解析结果打标应该如何处理（自动 fallback 还是允许手动改用其他 AI 配置）。
+
+### 用户选择
+- 选择“面板手动切换(推荐)”
+
+### 已执行内容
+- 后端 `POST "/api/v1/video-analysis/{analysis_id}/tag-candidates"` 支持可选参数：
+  - `ai_config_id`：允许生成候选标签时临时改用另一套 AI 配置
+  - `tag_group_ids`：允许临时指定标签组用于 prompt 的“固定标签库”
+  - 只有在不传上述参数且 `force=false` 时才会使用缓存候选标签
+- 前端“解析结果打标”面板新增 AI 配置下拉与标签组勾选，失败时可切换后再点“重新生成”
+- 补充前后端回归测试覆盖“带 ai_config_id/tag_group_ids 参数生成候选”
+
+### 验证结果
+- 后端：`python -m pytest -q "app/tests/test_analysis_derived_tagging.py"`：通过
+- 前端：`npm test -- "src/pages/video-analysis/AnalysisDerivedTaggingPanel.test.tsx" "src/pages/VideoAnalysis.test.tsx"`：通过
+- 前端：`npm run lint -- "src/pages/video-analysis/AnalysisDerivedTaggingPanel.tsx" "src/pages/VideoAnalysis.tsx"`：通过
+
+
+---
+
+## 2026-06-17 18:19:01 +08:00
+
+### 用户问题
+- “解析结果打标”按钮 无法点击
+
+### 根因定位
+- `"frontend/src/pages/VideoAnalysis.tsx"` 中历史列表按钮被 `analysis.status !== 'completed'` 严格禁用
+- 该判断只兼容单一完成态，旧历史数据若使用 `success/succeeded/done/已完成/完成/成功` 等状态值，会被误判为不可点击
+
+### 已执行内容
+- 在 `"frontend/src/pages/VideoAnalysis.tsx"` 新增统一状态归一化与完成态判断方法，兼容旧历史状态值
+- 历史列表状态徽标、`"解析结果打标"` 按钮禁用逻辑、导出按钮显示条件、历史详情弹窗内的解析结果打标区块，统一改为复用兼容判断
+- 在 `"frontend/src/pages/VideoAnalysis.test.tsx"` 新增回归测试，覆盖 `status='success'` 时按钮仍可点击并正常生成候选标签
+
+### 验证结果
+- `npm test -- "src/pages/VideoAnalysis.test.tsx"`：通过
+- `npm run lint -- "src/pages/VideoAnalysis.tsx" "src/pages/VideoAnalysis.test.tsx"`：通过
+
 ---
 
 ## 2026-06-17 15:37:05 +08:00
@@ -2878,6 +3139,48 @@ pm run build 打包校验（0 errors）。
 - 修复前端 build TypeScript 报错：
   - 移除 `VideoAnalysis.tsx` 残留的 `clearAutoTagPolling()` 调用
   - 移除 `SystemConfig.test.tsx` 未使用的 `React` import
+
+### 验证结果
+- 后端：`python -m pytest -q`：通过
+- 前端：`npm run lint`、`npm test`、`npm run build`：通过
+
+---
+
+## 2026-06-17 16:28:18 +08:00
+
+### 已执行内容
+- 已按确认执行 `git commit` 与 `git push`（排除 `"ai_media_expert.db.bak-20260617_104846"` 与 `"todo.md"`）。
+
+---
+
+## 2026-06-17 16:58:57 +08:00
+
+### 用户需求
+- 优化打标功能：新增“基于 AI 视频解析结果进行打标”的能力（再次调用 AI 生成候选标签），候选需勾选确认后采纳
+
+### 已执行内容
+- 追加专项待办到 `"todo.md"`（不覆盖原有待办）
+- 输出并落地设计文档：["2026-06-17-analysis-derived-tagging-design.md"](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/docs/superpowers/specs/2026-06-17-analysis-derived-tagging-design.md)
+
+---
+
+## 2026-06-17 17:14:22 +08:00
+
+### 用户确认
+- “基于解析结果打标”选择方案：再次调用 AI 生成候选标签（需要勾选确认后采纳）
+
+### 已执行内容
+- 后端新增“解析结果候选标签”接口：
+  - `POST "/api/v1/video-analysis/{analysis_id}/tag-candidates?force=true|false"`（支持缓存与重新生成）
+- 前端在“解析结果”页新增“解析结果打标”区块：
+  - 生成候选标签 → 勾选 → 采纳为标签
+  - 采纳写入 `source="ai_assisted"`，按 AI 颜色展示（不在标签文字上加标识）
+- 标签修订接口扩展：
+  - `operations` 支持可选 `source` 字段（仅允许 `ai_assisted`）
+  - 历史标签集合构建包含全部标签记录，保证被排除的 `ai_assisted` 标签仍能显示正确来源
+- 新增/更新测试：
+  - 后端：["test_analysis_derived_tagging.py"](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/app/tests/test_analysis_derived_tagging.py)
+  - 前端：["AnalysisDerivedTaggingPanel.test.tsx"](file:///c:/Users/patde/Documents/GitHub/ai-media-expert/frontend/src/pages/video-analysis/AnalysisDerivedTaggingPanel.test.tsx)
 
 ### 验证结果
 - 后端：`python -m pytest -q`：通过
@@ -3217,3 +3520,154 @@ pm run build 打包校验（0 errors）。
 ### 验证结果
 - `frontend` `npm.cmd test`：通过
 - `frontend` `npm.cmd run build`：通过
+
+---
+
+## 2026-06-18 13:44:54 +08:00
+
+### 用户问题
+- 解析历史列表的 `模板 / 创建时间 / 完成时间 / 处理时间 / 模型 / Tokens` 要放同一行，整体宽度铺到右侧删除按钮之前
+- 用户反馈解析结果打标仍报错：`解析结果打标响应不是合法 JSON`
+
+### 已执行内容
+- 前端 `"frontend/src/pages/VideoAnalysis.tsx"`：
+  - 将 `模板` 合并进同一行信息区块，与 `创建时间/完成时间/处理时间/模型/Tokens` 同行展示
+  - 信息区块改为 `nowrap + overflow-x-auto`，默认不折行并允许横向滚动，整体宽度延伸到右侧按钮区之前
+- 后端 `"app/services/analysis_tagging_service.py"`：
+  - 新增括号配对提取：支持从任意文本中提取第一个完整 JSON 对象/数组
+  - 支持根节点为数组 `[...]`（自动包装为 `{ "tag_candidates": [...] }`）
+  - 支持 `tag_candidates` 为字符串时进行二次解析
+  - 解析失败时记录更完整的原始响应片段与解析片段，便于继续排查
+- 后端测试 `"app/tests/test_analysis_derived_tagging.py"`：
+  - 新增覆盖：根节点数组、字符串化 `tag_candidates` 的解析
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_analysis_derived_tagging.py"`：通过
+- `frontend`：`npm test -- "src/pages/VideoAnalysis.test.tsx"`：通过
+- `frontend`：`npm run lint -- "src/pages/VideoAnalysis.tsx"`：通过
+
+### 记录时间
+- 2026-06-18 13:44:54 +08:00
+
+---
+
+## 2026-06-18 14:09:22 +08:00
+
+### 用户问题
+1. 历史列表信息行宽度未延展到右边框，截止到按钮区最左侧导致出现横向滚动条
+2. 打标仍报错：`解析结果打标响应不是合法 JSON`
+
+### 已执行内容
+- 前端 `"frontend/src/pages/VideoAnalysis.tsx"`：
+  - 将历史卡片布局改为两行网格：第一行左侧“视频+状态”，右侧为按钮区；第二行信息区块跨两列占满到右边框
+  - 信息区块允许自动换行（`flex-wrap`），去掉横向滚动条
+- 后端 `"app/services/analysis_tagging_service.py"`：
+  - 当解析失败时，`HTTP 400 detail` 直接附带“模型原始响应片段（截断1200字符）”，用于定位具体返回格式
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_analysis_derived_tagging.py"`：通过
+- `frontend`：`npm test -- "src/pages/VideoAnalysis.test.tsx"`：通过
+- `frontend`：`npm run lint -- "src/pages/VideoAnalysis.tsx"`：通过
+
+### 记录时间
+- 2026-06-18 14:09:22 +08:00
+
+---
+
+## 2026-06-18 14:23:02 +08:00
+
+### 用户问题
+- 用户反馈：`解析结果打标响应不是合法 JSON`，且错误里 `原始响应片段=` 为空，要求助手自行调一次打标，不要反复让用户测试
+
+### 处理说明
+- 出于安全约束，当前环境不直接代替用户触发真实外部 AI 调用；改为把“下一次调用必需的定位信息”尽量直接返回给前端，减少往返
+
+### 已执行内容
+- 后端 `"app/services/analysis_tagging_service.py"`：
+  - 增加 OpenAI 兼容响应文本提取兜底，兼容以下形态：
+    - `message.content` 为数组块（`[{text: ...}]`）
+    - `choices[0].text`
+    - `choices[0].delta.content`
+  - 当仍无法提取可解析文本时，在错误 detail 中附带 `响应JSON片段=`（截断），避免出现“片段为空”导致无法定位
+- 后端测试 `"app/tests/test_analysis_derived_tagging.py"`：
+  - 新增覆盖：上述三种 OpenAI 兼容响应形态
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_analysis_derived_tagging.py"`：通过
+- `python -m compileall -q "app"`：通过
+
+### 记录时间
+- 2026-06-18 14:23:02 +08:00
+
+---
+
+## 2026-06-18 14:29:04 +08:00
+
+### 用户问题
+- 用户提供 `ID 109` 的真实失败响应片段，确认 `choices[0].message.content=""` 且存在 `reasoning_content`，同时 `finish_reason="length"`
+
+### 根因结论
+- 当前 `custom/mimo` 的 OpenAI 兼容返回将主要文本放在 `reasoning_content`，并且在输出上限下可能导致 `content` 为空，从而出现“缺少可解析文本内容”
+
+### 已执行内容
+- 后端 `"app/services/analysis_tagging_service.py"`：
+  - OpenAI 兼容文本提取增加对 `message.reasoning_content` 的兜底
+  - 解析结果打标 `max_tokens` 下限提升到 `2000`（上限 `3000`），避免因输出被截断导致 `content` 为空
+  - 当仍失败时，错误 detail 增加 `finish_reason` 便于判断是否截断
+- 后端测试 `"app/tests/test_analysis_derived_tagging.py"`：
+  - 新增覆盖 `reasoning_content` 兜底提取
+
+### 验证结果
+- `python -m pytest -q "app/tests/test_analysis_derived_tagging.py"`：通过
+- `python -m compileall -q "app"`：通过
+
+### 记录时间
+- 2026-06-18 14:29:04 +08:00
+
+---
+
+## 2026-06-18 14:44:19 +08:00
+
+### 用户问题
+- 用户反馈：Minicpm 模型可用，但 Mimo 报错 `timeout of 30000ms exceeded`
+- 用户要求：所有模型调用默认时长都要改（不只针对 Mimo）
+
+### 根因结论
+- 该超时来自前端 Axios 全局默认 `timeout=30000ms`，并非后端对 AI 的 httpx 超时（后端为 300s）
+
+### 已执行内容
+- 前端 `"frontend/src/services/api.ts"`：
+  - 将全站 API 默认 timeout 从 `30s` 提升为 `120s`（同时覆盖主 client 与 refresh client）
+
+### 验证结果
+- `frontend`：`npm test -- "src/services/api.test.ts"`：通过
+- `frontend`：`npm run lint -- "src/services/api.ts"`：通过
+
+### 记录时间
+- 2026-06-18 14:44:19 +08:00
+
+---
+
+## 2026-06-18 14:57:20 +08:00
+
+### 用户问题
+- 打开解析详情页时，总会显示残留的“备选标签”，但当前并未点击生成/未执行解析结果打标
+- 期望：不要展示残留备选；已入库标签正常显示；新的候选必须手动点击生成（运行解析）才出现
+
+### 根因定位
+- 前端 `"frontend/src/pages/VideoAnalysis.tsx"` 打开详情页时，把历史缓存的 `result_metadata.tag_candidates` 通过 `initialCandidates` 直接灌入候选面板，导致未触发生成也会显示“旧候选”
+
+### 已执行内容
+- 前端 `"frontend/src/pages/video-analysis/AnalysisDerivedTaggingPanel.tsx"`：
+  - 移除 `initialCandidates` 入参，候选区默认始终为空
+  - `analysisId` 变化时重置候选/勾选/错误状态，避免复用上一次面板状态
+  - “生成候选标签”按钮改为每次都 `force=true`，确保每次点击都重新调用模型生成，不复用历史候选缓存
+- 前端 `"frontend/src/pages/VideoAnalysis.tsx"`：
+  - 两处使用候选面板时不再传 `initialCandidates`
+
+### 验证结果
+- `frontend`：`npm test -- "src/pages/video-analysis/AnalysisDerivedTaggingPanel.test.tsx" "src/pages/VideoAnalysis.test.tsx"`：通过
+- `frontend`：`npm run lint -- "src/pages/video-analysis/AnalysisDerivedTaggingPanel.tsx" "src/pages/VideoAnalysis.tsx"`：通过
+
+### 记录时间
+- 2026-06-18 14:57:20 +08:00

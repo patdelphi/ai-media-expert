@@ -18,6 +18,7 @@
 - `"/api/v1/ai-config/*"`: 正式 AI 配置接口
 - `"/api/v1/prompt-templates/*"`: 正式提示词模板接口
 - `"/api/v1/video-auto-tags/*"`: 正式视频自动打标任务接口
+- `"/api/v1/video-analysis/{analysis_id}/tag-candidates"`: 基于解析结果生成候选标签
 - `"/api/v1/uploaded-files/{video_file_id}/tags"`: 视频历史标签集合（含生效/排除状态）
 - `"/api/v1/uploaded-files/{video_file_id}/tags/revisions*"`: 视频标签修订（创建/列表/详情）
 - `"/api/v1/websocket/ws?token=..."`: 正式 WebSocket 认证入口

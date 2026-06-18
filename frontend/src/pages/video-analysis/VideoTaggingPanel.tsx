@@ -23,6 +23,7 @@ export interface VideoTaggingPanelProps {
   transmissionMethod: 'url' | 'base64' | 'upload'
   setTransmissionMethod: (value: 'url' | 'base64' | 'upload') => void
   showNotification: (type: 'success' | 'error' | 'info', message: string) => void
+  onBackPrev?: () => void
   onBack: () => void
 }
 
@@ -37,6 +38,7 @@ const VideoTaggingPanel: React.FC<VideoTaggingPanelProps> = ({
   transmissionMethod,
   setTransmissionMethod,
   showNotification,
+  onBackPrev,
   onBack,
 }) => {
   const autoTagPollingRef = useRef<number | null>(null)
@@ -285,7 +287,7 @@ const VideoTaggingPanel: React.FC<VideoTaggingPanelProps> = ({
       if (!tag.is_effective) {
         return 2
       }
-      if (tag.source === 'ai_auto') {
+      if (tag.source === 'ai_auto' || tag.source === 'ai_assisted') {
         return 0
       }
       return 1
@@ -329,6 +331,13 @@ const VideoTaggingPanel: React.FC<VideoTaggingPanelProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onBackPrev || onBack}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              返回上一页
+            </button>
             <button
               type="button"
               onClick={onBack}
@@ -593,6 +602,9 @@ const VideoTaggingPanel: React.FC<VideoTaggingPanelProps> = ({
               )}
 
               <div className="mt-3 text-xs text-gray-500">
+                颜色说明：蓝色=AI（自动打标/解析派生），绿色=人工修订，灰色=已排除
+              </div>
+              <div className="mt-1 text-xs text-gray-500">
                 百分比显示为该标签在历史自动打标/人工修订中的最高置信度；人工新增/恢复标签默认按 100% 展示。
               </div>
             </div>

@@ -65,6 +65,7 @@ export interface AnalysisResult {
   progress: number
   analysis_result?: string
   result_summary?: string
+  result_metadata?: Record<string, unknown>
   processing_time?: number
   api_call_time?: string
   api_response_time?: string
@@ -170,6 +171,7 @@ export interface EffectiveTag {
   tag_name: string
   tag_name_snapshot?: string
   source: string
+  sources?: string[]
   confidence: number
   auto_tag_task_id?: number
   revision_id?: number

@@ -315,6 +315,7 @@ async def test_get_uploaded_file_tags_returns_effective_tags(
     assert len(response.data) == 1
     assert response.data[0].tag_name == "正式"
     assert response.data[0].source == "ai_auto"
+    assert response.data[0].sources == ["ai_auto"]
 
 
 @pytest.mark.asyncio
@@ -431,7 +432,9 @@ async def test_create_uploaded_file_tag_revision_creates_history_and_rebuilds_ef
     result_by_name = {item.tag_name: item for item in effective_tags.data}
     assert result_by_name["教程"].is_effective is True
     assert result_by_name["教程"].source == "manual_override"
+    assert set(result_by_name["教程"].sources) == {"manual_override"}
     assert result_by_name["专业"].is_effective is False
+    assert "ai_auto" in set(result_by_name["专业"].sources)
 
     revision_row = (
         db_session.query(UploadedFileTagRevision)

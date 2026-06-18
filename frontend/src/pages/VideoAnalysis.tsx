@@ -22,6 +22,8 @@ import type {
   VideoFile,
 } from './video-analysis/types';
 import VideoTaggingPanel from './video-analysis/VideoTaggingPanel';
+import AnalysisDerivedTaggingPanel from './video-analysis/AnalysisDerivedTaggingPanel';
+import VideoTagsSummary from './video-analysis/VideoTagsSummary';
 import apiService from '../services/api';
 
 const VideoAnalysis: React.FC = () => {
@@ -33,6 +35,11 @@ const VideoAnalysis: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1); // 当前步骤：1-选择视频，2-配置参数，3-确认提示词，4-解析中，5-查看结果
   const [selectedVideo, setSelectedVideo] = useState<VideoFile | null>(null);
   const [pageMode, setPageMode] = useState<'analysis' | 'tagging'>('analysis');
+  const [taggingReturn, setTaggingReturn] = useState<{
+    step: number;
+    showHistoryModal: boolean;
+    selectedHistoryId: number | null;
+  } | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<PromptTemplate | null>(null);
   const [selectedTagGroups, setSelectedTagGroups] = useState<number[]>([]);
   const [selectedAIConfig, setSelectedAIConfig] = useState<AIConfig | null>(null);
@@ -82,6 +89,63 @@ const VideoAnalysis: React.FC = () => {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
   const [historyDetailError, setHistoryDetailError] = useState<string | null>(null);
+
+  /**
+   * 统一兼容历史数据里的多种状态写法，避免旧数据因为状态值不完全一致而被误判。
+   */
+  const normalizeAnalysisStatus = (status?: string | null) => (status || '').trim().toLowerCase();
+
+  const isCompletedAnalysis = (analysis: { status?: string | null; completed_at?: string | null }) => {
+    const normalizedStatus = normalizeAnalysisStatus(analysis.status);
+    if (['completed', 'success', 'succeeded', 'done', '已完成', '完成', '成功'].includes(normalizedStatus)) {
+      return true;
+    }
+    return Boolean(analysis.completed_at) && !['failed', 'error', 'cancelled', 'processing', 'pending', 'queued', '等待中', '处理中'].includes(normalizedStatus);
+  };
+
+  const isFailedAnalysis = (status?: string | null) => {
+    const normalizedStatus = normalizeAnalysisStatus(status);
+    return ['failed', 'error', 'cancelled', '失败', '已失败', '错误', '取消'].includes(normalizedStatus);
+  };
+
+  const isProcessingAnalysis = (status?: string | null) => {
+    const normalizedStatus = normalizeAnalysisStatus(status);
+    return ['processing', 'running', 'in_progress', '处理中', '进行中'].includes(normalizedStatus);
+  };
+
+  const getAnalysisStatusBadgeClass = (analysis: { status?: string | null; completed_at?: string | null }) => {
+    if (isCompletedAnalysis(analysis)) {
+      return 'bg-green-100 text-green-800';
+    }
+    if (isFailedAnalysis(analysis.status)) {
+      return 'bg-red-100 text-red-800';
+    }
+    if (isProcessingAnalysis(analysis.status)) {
+      return 'bg-blue-100 text-blue-800';
+    }
+    return 'bg-gray-100 text-gray-800';
+  };
+
+  const getAnalysisStatusLabel = (analysis: { status?: string | null; completed_at?: string | null }) => {
+    if (isCompletedAnalysis(analysis)) {
+      return '已完成';
+    }
+    if (isFailedAnalysis(analysis.status)) {
+      return '失败';
+    }
+    if (isProcessingAnalysis(analysis.status)) {
+      return '处理中';
+    }
+    return '等待中';
+  };
+
+  const getTemplateTitle = (templateId?: number | null) => {
+    if (!templateId) {
+      return '未使用模板';
+    }
+    const template = templates.find((item) => item.id === templateId);
+    return template?.title || '未使用模板';
+  };
 
   // 页面加载时获取数据
   useEffect(() => {
@@ -714,6 +778,43 @@ const VideoAnalysis: React.FC = () => {
     setSelectedHistoryId(analysis.id);
     await loadHistoryDetail(analysis.id);
   };
+
+  const tagFromHistoryItem = async (analysis: AnalysisHistoryItem) => {
+    await viewHistoryDetails(analysis);
+    if (isCompletedAnalysis(analysis)) {
+      showNotification('info', '已打开解析详情，请手动点击“生成候选标签”再执行解析结果打标');
+    }
+  };
+
+  const enterTaggingMode = () => {
+    setTaggingReturn({
+      step: currentStep,
+      showHistoryModal,
+      selectedHistoryId,
+    });
+    if (showHistoryModal) {
+      setShowHistoryModal(false);
+    }
+    setPageMode('tagging');
+    setCurrentStep(1);
+  };
+
+  const returnFromTagging = async () => {
+    if (!taggingReturn) {
+      setPageMode('analysis');
+      setCurrentStep(1);
+      return;
+    }
+
+    setPageMode('analysis');
+    setCurrentStep(taggingReturn.step);
+    if (taggingReturn.showHistoryModal && taggingReturn.selectedHistoryId) {
+      setShowHistoryModal(true);
+      setSelectedHistoryId(taggingReturn.selectedHistoryId);
+      await loadHistoryDetail(taggingReturn.selectedHistoryId);
+    }
+    setTaggingReturn(null);
+  };
   
   // 关闭历史记录模态框
   const closeHistoryModal = () => {
@@ -962,6 +1063,7 @@ const VideoAnalysis: React.FC = () => {
                 transmissionMethod={transmissionMethod}
                 setTransmissionMethod={setTransmissionMethod}
                 showNotification={showNotification}
+                onBackPrev={returnFromTagging}
                 onBack={() => {
                   setPageMode('analysis');
                   setCurrentStep(1);
@@ -1071,8 +1173,7 @@ const VideoAnalysis: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        setPageMode('tagging');
-                        setCurrentStep(1);
+                        enterTaggingMode();
                       }}
                       className="px-6 py-2 border border-purple-200 bg-white text-purple-700 rounded-lg hover:bg-purple-50 transition-colors"
                     >
@@ -1109,56 +1210,26 @@ const VideoAnalysis: React.FC = () => {
                     <div className="space-y-3">
                       {analysisHistory.map((analysis) => (
                         <div key={analysis.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-3 mb-2">
+                          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2">
+                            <div className="min-w-0">
+                              <div className="flex items-center space-x-3">
                                 <span className="font-medium text-gray-900">
                                   视频: {historyVideoTitleMap[analysis.video_file_id] || `#${analysis.video_file_id}`}
                                 </span>
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  analysis.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                  analysis.status === 'failed' ? 'bg-red-100 text-red-800' :
-                                  analysis.status === 'processing' ? 'bg-blue-100 text-blue-800' :
-                                  'bg-gray-100 text-gray-800'
-                                }`}>
-                                  {analysis.status === 'completed' ? '已完成' :
-                                   analysis.status === 'failed' ? '失败' :
-                                   analysis.status === 'processing' ? '处理中' : '等待中'}
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getAnalysisStatusBadgeClass(analysis)}`}>
+                                  {getAnalysisStatusLabel(analysis)}
                                 </span>
                               </div>
-                              {analysis.result_summary && (
-                                <p className="text-sm text-gray-600 mb-2">{analysis.result_summary}</p>
-                              )}
-                              <div className="flex items-center space-x-4 text-xs text-gray-500">
-                                <span>创建时间: {new Date(analysis.created_at).toLocaleString()}</span>
-                                {analysis.completed_at && (
-                                  <span>完成时间: {new Date(analysis.completed_at).toLocaleString()}</span>
-                                )}
-                                {analysis.processing_time !== undefined && analysis.processing_time !== null && (
-                                  <span>处理时间: {analysis.processing_time.toFixed(1)}秒</span>
-                                )}
-                                {(analysis.model_name || analysis.api_provider) && (
-                                  <span>模型: {[analysis.api_provider, analysis.model_name].filter(Boolean).join('/')}</span>
-                                )}
-                                {analysis.total_tokens !== undefined && analysis.total_tokens !== null && (
-                                  <span>
-                                    Tokens: {analysis.total_tokens}
-                                    {analysis.prompt_tokens !== undefined && analysis.prompt_tokens !== null && analysis.completion_tokens !== undefined && analysis.completion_tokens !== null
-                                      ? ` (${analysis.prompt_tokens}+${analysis.completion_tokens})`
-                                      : ''}
-                                  </span>
-                                )}
-                              </div>
                             </div>
-                            <div className="flex space-x-2">
+                            <div className="flex space-x-2 justify-end">
                               <button
-                                onClick={() => viewHistoryDetails(analysis)}
+                                onClick={() => tagFromHistoryItem(analysis)}
                                 className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
                               >
                                 <i className="fas fa-eye mr-1"></i>
-                                查看
+                                查看 / 打标
                               </button>
-                              {analysis.status === 'completed' && (
+                              {isCompletedAnalysis(analysis) && (
                                 <button
                                   onClick={() => exportHistoryResult(analysis.id)}
                                   className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
@@ -1174,6 +1245,30 @@ const VideoAnalysis: React.FC = () => {
                                 <i className="fas fa-trash-alt mr-1"></i>
                                 删除
                               </button>
+                            </div>
+                            {analysis.result_summary && (
+                              <p className="col-span-2 text-sm text-gray-600">{analysis.result_summary}</p>
+                            )}
+                            <div className="col-span-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+                              <span className="whitespace-nowrap">模板：{getTemplateTitle(analysis.template_id)}</span>
+                              <span className="whitespace-nowrap">创建时间: {new Date(analysis.created_at).toLocaleString()}</span>
+                              {analysis.completed_at && (
+                                <span className="whitespace-nowrap">完成时间: {new Date(analysis.completed_at).toLocaleString()}</span>
+                              )}
+                              {analysis.processing_time !== undefined && analysis.processing_time !== null && (
+                                <span className="whitespace-nowrap">处理时间: {analysis.processing_time.toFixed(1)}秒</span>
+                              )}
+                              {(analysis.model_name || analysis.api_provider) && (
+                                <span className="whitespace-nowrap">模型: {[analysis.api_provider, analysis.model_name].filter(Boolean).join('/')}</span>
+                              )}
+                              {analysis.total_tokens !== undefined && analysis.total_tokens !== null && (
+                                <span className="whitespace-nowrap">
+                                  Tokens: {analysis.total_tokens}
+                                  {analysis.prompt_tokens !== undefined && analysis.prompt_tokens !== null && analysis.completion_tokens !== undefined && analysis.completion_tokens !== null
+                                    ? ` (${analysis.prompt_tokens}+${analysis.completion_tokens})`
+                                    : ''}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1447,8 +1542,7 @@ const VideoAnalysis: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        setPageMode('tagging');
-                        setCurrentStep(1);
+                        enterTaggingMode();
                       }}
                       className="px-4 py-2 border border-purple-200 bg-white text-purple-700 rounded-lg hover:bg-purple-50 transition-colors"
                     >
@@ -1635,6 +1729,17 @@ const VideoAnalysis: React.FC = () => {
 
                 {/* 右侧：AI API调试信息 */}
                 <div className="lg:col-span-1">
+                  {currentAnalysis?.id && selectedVideo?.id && (
+                    <AnalysisDerivedTaggingPanel
+                      analysisId={currentAnalysis.id}
+                      videoFileId={selectedVideo.id}
+                        aiConfigs={aiConfigs}
+                        tagGroups={tagGroups}
+                        defaultAIConfigId={(currentAnalysis as any)?.ai_config_id as any}
+                        defaultTagGroupIds={(currentAnalysis as any)?.tag_group_ids as any}
+                      showNotification={showNotification}
+                    />
+                  )}
                   <div className="bg-white border border-gray-200 text-gray-800 rounded-lg overflow-hidden shadow-sm">
                     <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
                       <div className="flex items-center justify-between">
@@ -2290,30 +2395,39 @@ const VideoAnalysis: React.FC = () => {
                 {/* 基本信息 */}
                 <div className="mb-6">
                   <h4 className="text-lg font-medium mb-3">基本信息</h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div><span className="font-medium">视频ID:</span> {selectedHistoryItem.video_file_id}</div>
-                    <div><span className="font-medium">状态:</span> 
-                      <span className={`ml-2 px-2 py-1 rounded text-xs ${
-                        selectedHistoryItem.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        selectedHistoryItem.status === 'failed' ? 'bg-red-100 text-red-800' :
-                        'bg-blue-100 text-blue-800'
-                      }`}>
-                        {selectedHistoryItem.status === 'completed' ? '已完成' :
-                         selectedHistoryItem.status === 'failed' ? '失败' : '处理中'}
+                  <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm">
+                    <div className="whitespace-nowrap"><span className="font-medium">视频ID:</span> {selectedHistoryItem.video_file_id}</div>
+                    <div className="whitespace-nowrap"><span className="font-medium">状态:</span> 
+                      <span className={`ml-2 px-2 py-1 rounded text-xs ${getAnalysisStatusBadgeClass(selectedHistoryItem)}`}>
+                        {getAnalysisStatusLabel(selectedHistoryItem)}
                       </span>
                     </div>
-                    <div><span className="font-medium">创建时间:</span> {new Date(selectedHistoryItem.created_at).toLocaleString()}</div>
+                    <div className="whitespace-nowrap"><span className="font-medium">创建时间:</span> {new Date(selectedHistoryItem.created_at).toLocaleString()}</div>
                     {selectedHistoryItem.completed_at && (
-                      <div><span className="font-medium">完成时间:</span> {new Date(selectedHistoryItem.completed_at).toLocaleString()}</div>
+                      <div className="whitespace-nowrap"><span className="font-medium">完成时间:</span> {new Date(selectedHistoryItem.completed_at).toLocaleString()}</div>
                     )}
                     {selectedHistoryItem.processing_time && (
-                      <div><span className="font-medium">处理时间:</span> {selectedHistoryItem.processing_time.toFixed(2)}秒</div>
+                      <div className="whitespace-nowrap"><span className="font-medium">处理时间:</span> {selectedHistoryItem.processing_time.toFixed(2)}秒</div>
                     )}
                   </div>
                 </div>
+
+                <VideoTagsSummary videoFileId={selectedHistoryItem.video_file_id} />
+
+                {isCompletedAnalysis(selectedHistoryItem) && (
+                  <AnalysisDerivedTaggingPanel
+                    analysisId={selectedHistoryItem.id}
+                    videoFileId={selectedHistoryItem.video_file_id}
+                    aiConfigs={aiConfigs}
+                    tagGroups={tagGroups}
+                    defaultAIConfigId={(selectedHistoryItem as any)?.ai_config_id as any}
+                    defaultTagGroupIds={(selectedHistoryItem as any)?.tag_group_ids as any}
+                    showNotification={showNotification}
+                  />
+                )}
                 
                 {/* AI API 调试信息 */}
-                {selectedHistoryItem.status === 'completed' && (
+                {isCompletedAnalysis(selectedHistoryItem) && (
                   <div className="mb-6">
                     <h4 className="text-lg font-medium mb-3">AI API 调试信息</h4>
                     <div className="bg-white border border-gray-200 text-gray-800 rounded-lg overflow-hidden shadow-sm">

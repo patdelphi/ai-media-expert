@@ -5,19 +5,21 @@
 
 import time
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from app.api.deps import get_db
+from app.api.deps import get_current_user, get_db
 from app.core.app_logging import api_logger
 from app.models.uploaded_file import UploadedFile
 from app.models.prompt_template import PromptTemplate
 from app.models.tag_group import TagGroup
+from app.models.user import User
 from app.models.video import AIConfig
 from app.models.video_auto_tag import UploadedFileTag, VideoAutoTagTask
 from app.models.video_analysis import VideoAnalysis
+from app.services.analysis_tagging_service import analysis_tagging_service
 from app.schemas.video_analysis import (
     VideoAnalysisCreate,
     VideoAnalysisResponse,
@@ -25,6 +27,7 @@ from app.schemas.video_analysis import (
     AnalysisStartRequest,
     AnalysisStartResponse,
     AnalysisStreamChunk,
+    AnalysisTagCandidatesResponse,
     PromptTemplateResponse,
     TagGroupResponse,
     VideoFileInfo
@@ -32,6 +35,84 @@ from app.schemas.video_analysis import (
 from app.schemas.common import ResponseModel, PaginatedResponse, PaginationParams
 
 router = APIRouter()
+
+
+def _get_owned_analysis(analysis_id: int, current_user: User, db: Session) -> VideoAnalysis:
+    analysis = db.query(VideoAnalysis).filter(VideoAnalysis.id == analysis_id, VideoAnalysis.is_active == True).first()
+    if not analysis:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+    if current_user.role != "admin" and str(analysis.user_id) != str(current_user.id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission to access this analysis")
+    return analysis
+
+
+@router.post(
+    "/{analysis_id}/tag-candidates",
+    response_model=ResponseModel[AnalysisTagCandidatesResponse],
+)
+async def generate_analysis_tag_candidates(
+    analysis_id: int,
+    force: bool = False,
+    ai_config_id: Optional[int] = None,
+    tag_group_ids: Optional[List[int]] = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Any:
+    analysis = _get_owned_analysis(analysis_id=analysis_id, current_user=current_user, db=db)
+
+    if analysis.status != "completed" or not analysis.analysis_result:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analysis result is not ready")
+
+    metadata = analysis.result_metadata if isinstance(analysis.result_metadata, dict) else {}
+    cached = metadata.get("tag_candidates")
+    should_use_cache = force is False and ai_config_id is None and tag_group_ids is None
+    if should_use_cache and isinstance(cached, list) and cached:
+        return ResponseModel(
+            code=200,
+            message="Analysis tag candidates retrieved successfully",
+            data=AnalysisTagCandidatesResponse(
+                analysis_id=analysis.id,
+                video_file_id=analysis.video_file_id,
+                tag_candidates=cached,
+            ),
+        )
+
+    resolved_ai_config_id = ai_config_id or analysis.ai_config_id
+    ai_config = (
+        db.query(AIConfig)
+        .filter(AIConfig.id == resolved_ai_config_id, AIConfig.is_active == True)
+        .first()
+    )
+    if not ai_config:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="AI config not found or inactive")
+
+    try:
+        tag_candidates = await analysis_tagging_service.generate_tag_candidates(
+            db=db,
+            analysis=analysis,
+            ai_config=ai_config,
+            tag_group_ids=tag_group_ids,
+        )
+        metadata["tag_candidates"] = tag_candidates
+        analysis.result_metadata = metadata
+        db.commit()
+        db.refresh(analysis)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate tag candidates") from exc
+
+    return ResponseModel(
+        code=200,
+        message="Analysis tag candidates generated successfully",
+        data=AnalysisTagCandidatesResponse(
+            analysis_id=analysis.id,
+            video_file_id=analysis.video_file_id,
+            tag_candidates=tag_candidates,
+        ),
+    )
 
 
 def _build_auto_tag_context(video_file_id: int, db: Session) -> str:

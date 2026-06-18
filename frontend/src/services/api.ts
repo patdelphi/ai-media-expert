@@ -45,9 +45,10 @@ export class ApiService {
 
   constructor() {
     this.baseUrl = API_BASE_URL;
+    const defaultTimeoutMs = 120_000;
     this.api = axios.create({
       baseURL: this.baseUrl,
-      timeout: 30000,
+      timeout: defaultTimeoutMs,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -55,7 +56,7 @@ export class ApiService {
 
     this.refreshClient = axios.create({
       baseURL: this.baseUrl,
-      timeout: 30000,
+      timeout: defaultTimeoutMs,
       headers: {
         'Content-Type': 'application/json',
       },

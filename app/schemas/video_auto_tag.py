@@ -104,6 +104,7 @@ class UploadedFileTagResponse(BaseModel):
     tag_name: str = Field(alias="tag_name_snapshot")
     tag_name_snapshot: Optional[str] = None
     source: str
+    sources: List[str] = Field(default_factory=list, description="标签历史来源去重集合")
     confidence: float
     auto_tag_task_id: Optional[int] = None
     revision_id: Optional[int] = None
@@ -126,6 +127,7 @@ class UploadedFileTagRevisionOperation(BaseModel):
     tag_name: str = Field(description="标签名称")
     confidence: Optional[float] = Field(default=None, description="置信度")
     note: Optional[str] = Field(default=None, description="修订备注")
+    source: Optional[str] = Field(default=None, description="标签来源（可选）：ai_assisted 等")
 
 
 class UploadedFileTagRevisionCreateRequest(BaseModel):

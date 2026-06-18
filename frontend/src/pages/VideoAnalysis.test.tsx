@@ -1076,4 +1076,350 @@ describe('VideoAnalysis', () => {
     expect(screen.getByRole('button', { name: '视频解析' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '视频打标' })).toBeInTheDocument()
   })
+
+  it('解析历史列表点击“查看 / 打标”只打开详情，不自动生成候选', async () => {
+    apiServiceMock.get.mockImplementation(async (url: string) => {
+      if (url === '/video-analysis/videos') {
+        return {
+          code: 200,
+          message: 'ok',
+          data: {
+            items: [
+              {
+                id: 1,
+                original_filename: 'video-1.mp4',
+                saved_filename: 'saved-video-1.mp4',
+                title: '视频1',
+                file_size: 1024,
+                duration: 10,
+                width: 1080,
+                height: 1920,
+                format_name: 'mp4',
+                created_at: '2026-06-16T00:00:00.000Z',
+              },
+            ],
+            total: 1,
+            page: 1,
+            pages: 1,
+          },
+        }
+      }
+      if (url === '/video-analysis/templates') {
+        return { code: 200, message: 'ok', data: [] }
+      }
+      if (url === '/video-analysis/tag-groups') {
+        return { code: 200, message: 'ok', data: [] }
+      }
+      if (url === '/video-analysis/ai-configs') {
+        return { code: 200, message: 'ok', data: [] }
+      }
+      if (url === '/video-analysis/') {
+        return {
+          code: 200,
+          message: 'ok',
+          data: {
+            items: [
+              {
+                id: 10,
+                video_file_id: 1,
+                template_id: 1,
+                ai_config_id: 7,
+                status: 'completed',
+                progress: 100,
+                result_summary: 'summary',
+                processing_time: 1,
+                model_name: 'm1',
+                api_provider: 'custom',
+                total_tokens: 10,
+                prompt_tokens: 4,
+                completion_tokens: 6,
+                created_at: '2026-06-16T00:00:00.000Z',
+                completed_at: '2026-06-16T00:00:01.000Z',
+              },
+            ],
+            total: 1,
+            page: 1,
+            pages: 1,
+          },
+        }
+      }
+      if (url === '/video-analysis/videos/1') {
+        return { code: 200, message: 'ok', data: { id: 1, title: '视频1', original_filename: 'video-1.mp4' } }
+      }
+      if (url === '/video-analysis/10') {
+        return {
+          code: 200,
+          message: 'ok',
+          data: {
+            id: 10,
+            video_file_id: 1,
+            template_id: 1,
+            ai_config_id: 7,
+            prompt_content: 'prompt',
+            status: 'completed',
+            progress: 100,
+            analysis_result: 'result',
+            result_metadata: { tag_candidates: [{ tag_name: '新标签', confidence: 0.7, reason: 'r' }] },
+            created_at: '2026-06-16T00:00:00.000Z',
+            updated_at: '2026-06-16T00:00:00.000Z',
+          },
+        }
+      }
+      if (url === '/uploaded-files/1/tags') {
+        return {
+          code: 200,
+          message: 'ok',
+          data: [
+            {
+              id: 1,
+              video_file_id: 1,
+              tag_id: null,
+              tag_name: '品牌曝光',
+              tag_name_snapshot: '品牌曝光',
+              source: 'ai_auto',
+              confidence: 0.9,
+              auto_tag_task_id: null,
+              revision_id: null,
+              is_effective: true,
+              created_by: 'ai',
+              created_at: '2026-06-16T00:00:00.000Z',
+              updated_at: '2026-06-16T00:00:00.000Z',
+            },
+          ],
+        }
+      }
+
+      throw new Error(`unexpected url: ${url}`)
+    })
+
+    apiServiceMock.post.mockImplementation(async (url: string) => {
+      throw new Error(`unexpected post url: ${url}`)
+    })
+
+    render(
+      <MemoryRouter>
+        <VideoAnalysis />
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('选择要解析的视频')
+
+    fireEvent.click(await screen.findByRole('button', { name: '查看 / 打标' }))
+
+    await screen.findByText(/分析结果详情/)
+    await screen.findByText('当前标签')
+    await screen.findByText('品牌曝光')
+  })
+
+  it('解析历史列表显示模板名称，无模板时显示未使用模板', async () => {
+    apiServiceMock.get.mockImplementation(async (url: string) => {
+      if (url === '/video-analysis/videos') {
+        return {
+          code: 200,
+          message: 'ok',
+          data: {
+            items: [
+              {
+                id: 1,
+                original_filename: 'video-1.mp4',
+                saved_filename: 'saved-video-1.mp4',
+                title: '视频1',
+                file_size: 1024,
+                created_at: '2026-06-16T00:00:00.000Z',
+              },
+            ],
+            total: 1,
+            page: 1,
+            pages: 1,
+          },
+        }
+      }
+      if (url === '/video-analysis/templates') {
+        return {
+          code: 200,
+          message: 'ok',
+          data: [
+            {
+              id: 1,
+              title: '商品讲解模板',
+              content: 'tmpl',
+              is_active: true,
+              usage_count: 1,
+              created_at: '2026-06-16T00:00:00.000Z',
+              updated_at: '2026-06-16T00:00:00.000Z',
+            },
+          ],
+        }
+      }
+      if (url === '/video-analysis/tag-groups') {
+        return { code: 200, message: 'ok', data: [] }
+      }
+      if (url === '/video-analysis/ai-configs') {
+        return { code: 200, message: 'ok', data: [] }
+      }
+      if (url === '/video-analysis/') {
+        return {
+          code: 200,
+          message: 'ok',
+          data: {
+            items: [
+              {
+                id: 10,
+                video_file_id: 1,
+                template_id: 1,
+                ai_config_id: 7,
+                status: 'completed',
+                progress: 100,
+                result_summary: 'summary-a',
+                created_at: '2026-06-16T00:00:00.000Z',
+                completed_at: '2026-06-16T00:00:01.000Z',
+              },
+              {
+                id: 11,
+                video_file_id: 1,
+                template_id: null,
+                ai_config_id: 7,
+                status: 'completed',
+                progress: 100,
+                result_summary: 'summary-b',
+                created_at: '2026-06-16T00:00:02.000Z',
+                completed_at: '2026-06-16T00:00:03.000Z',
+              },
+            ],
+            total: 2,
+            page: 1,
+            pages: 1,
+          },
+        }
+      }
+      if (url === '/video-analysis/videos/1') {
+        return { code: 200, message: 'ok', data: { id: 1, title: '视频1', original_filename: 'video-1.mp4' } }
+      }
+      throw new Error(`unexpected url: ${url}`)
+    })
+
+    render(
+      <MemoryRouter>
+        <VideoAnalysis />
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('模板：商品讲解模板')
+    await screen.findByText('模板：未使用模板')
+  })
+
+  it('解析历史列表兼容旧完成态，status 为 success 时点击“查看 / 打标”也只打开详情', async () => {
+    apiServiceMock.get.mockImplementation(async (url: string) => {
+      if (url === '/video-analysis/videos') {
+        return {
+          code: 200,
+          message: 'ok',
+          data: {
+            items: [
+              {
+                id: 1,
+                original_filename: 'video-1.mp4',
+                saved_filename: 'saved-video-1.mp4',
+                title: '视频1',
+                file_size: 1024,
+                duration: 10,
+                width: 1080,
+                height: 1920,
+                format_name: 'mp4',
+                created_at: '2026-06-16T00:00:00.000Z',
+              },
+            ],
+            total: 1,
+            page: 1,
+            pages: 1,
+          },
+        }
+      }
+      if (url === '/video-analysis/templates') {
+        return { code: 200, message: 'ok', data: [] }
+      }
+      if (url === '/video-analysis/tag-groups') {
+        return { code: 200, message: 'ok', data: [] }
+      }
+      if (url === '/video-analysis/ai-configs') {
+        return { code: 200, message: 'ok', data: [] }
+      }
+      if (url === '/video-analysis/') {
+        return {
+          code: 200,
+          message: 'ok',
+          data: {
+            items: [
+              {
+                id: 11,
+                video_file_id: 1,
+                template_id: 1,
+                ai_config_id: 7,
+                status: 'success',
+                progress: 100,
+                result_summary: 'summary',
+                processing_time: 1,
+                model_name: 'm1',
+                api_provider: 'custom',
+                total_tokens: 10,
+                prompt_tokens: 4,
+                completion_tokens: 6,
+                created_at: '2026-06-16T00:00:00.000Z',
+                completed_at: '2026-06-16T00:00:01.000Z',
+              },
+            ],
+            total: 1,
+            page: 1,
+            pages: 1,
+          },
+        }
+      }
+      if (url === '/video-analysis/videos/1') {
+        return { code: 200, message: 'ok', data: { id: 1, title: '视频1', original_filename: 'video-1.mp4' } }
+      }
+      if (url === '/video-analysis/11') {
+        return {
+          code: 200,
+          message: 'ok',
+          data: {
+            id: 11,
+            video_file_id: 1,
+            template_id: 1,
+            ai_config_id: 7,
+            prompt_content: 'prompt',
+            status: 'success',
+            progress: 100,
+            analysis_result: 'result',
+            result_metadata: { tag_candidates: [{ tag_name: '新标签', confidence: 0.7, reason: 'r' }] },
+            created_at: '2026-06-16T00:00:00.000Z',
+            updated_at: '2026-06-16T00:00:00.000Z',
+            completed_at: '2026-06-16T00:00:01.000Z',
+          },
+        }
+      }
+      if (url === '/uploaded-files/1/tags') {
+        return { code: 200, message: 'ok', data: [] }
+      }
+
+      throw new Error(`unexpected url: ${url}`)
+    })
+
+    apiServiceMock.post.mockImplementation(async (url: string) => {
+      throw new Error(`unexpected post url: ${url}`)
+    })
+
+    render(
+      <MemoryRouter>
+        <VideoAnalysis />
+      </MemoryRouter>,
+    )
+
+    const tagButton = await screen.findByRole('button', { name: '查看 / 打标' })
+
+    fireEvent.click(tagButton)
+
+    await screen.findByText(/分析结果详情/)
+    await screen.findByText('解析结果打标')
+    await screen.findByText('当前标签')
+  })
 })

@@ -76,6 +76,7 @@ def _merge_history_tag_entry(
             "tag_name": normalized_tag_name,
             "tag_name_snapshot": normalized_tag_name,
             "source": source,
+            "_sources": {source} if source else set(),
             "confidence": float(confidence) if confidence is not None else 0.0,
             "auto_tag_task_id": auto_tag_task_id,
             "revision_id": revision_id,
@@ -91,6 +92,9 @@ def _merge_history_tag_entry(
         }
         tag_map[normalized_tag_name] = entry
         return
+
+    if source:
+        entry.setdefault("_sources", set()).add(source)
 
     if tag_id is not None and entry["tag_id"] is None:
         entry["tag_id"] = tag_id
@@ -144,44 +148,14 @@ def _build_history_tag_collection(video_file_id: int, db: Session) -> list[Uploa
             evidence_end_seconds=auto_item.evidence_end_seconds,
         )
 
-    revision_items = (
-        db.query(UploadedFileTagRevisionItem, UploadedFileTagRevision)
-        .join(UploadedFileTagRevision, UploadedFileTagRevisionItem.revision_id == UploadedFileTagRevision.id)
-        .filter(UploadedFileTagRevision.video_file_id == video_file_id)
-        .order_by(UploadedFileTagRevision.id.asc(), UploadedFileTagRevisionItem.id.asc())
-        .all()
-    )
-    for revision_item, revision in revision_items:
-        if revision_item.action == "remove":
-            continue
-        _merge_history_tag_entry(
-            tag_map,
-            video_file_id=video_file_id,
-            tag_name=revision_item.tag_name,
-            tag_id=revision_item.tag_id,
-            confidence=revision_item.confidence,
-            source="manual_override",
-            created_by=revision.created_by,
-            created_at=revision_item.created_at,
-            updated_at=revision_item.updated_at,
-            auto_tag_task_id=revision.base_task_id,
-            revision_id=revision.id,
-            reason=revision_item.note,
-            evidence_start_seconds=None,
-            evidence_end_seconds=None,
-        )
-
-    current_items = (
+    all_tag_items = (
         db.query(UploadedFileTag)
-        .filter(
-            UploadedFileTag.video_file_id == video_file_id,
-            UploadedFileTag.is_effective == True,
-        )
+        .filter(UploadedFileTag.video_file_id == video_file_id)
         .order_by(UploadedFileTag.id.asc())
         .all()
     )
-    effective_tag_names = {item.tag_name_snapshot for item in current_items}
-    for current_item in current_items:
+    effective_tag_names = {item.tag_name_snapshot for item in all_tag_items if item.is_effective}
+    for current_item in all_tag_items:
         _merge_history_tag_entry(
             tag_map,
             video_file_id=video_file_id,
@@ -207,6 +181,7 @@ def _build_history_tag_collection(video_file_id: int, db: Session) -> list[Uploa
         entry["is_effective"] = tag_name in effective_tag_names
         entry["created_at"] = entry["_first_seen_at"] or entry["created_at"] or utcnow()
         entry["updated_at"] = entry["_last_seen_at"] or entry["updated_at"] or entry["created_at"]
+        entry["sources"] = sorted(entry.get("_sources") or [])
         response_items.append(UploadedFileTagResponse.model_validate(entry))
 
     response_items.sort(
@@ -331,6 +306,13 @@ def create_uploaded_file_tag_revision(
             if operation.action == "remove":
                 current_map.pop(tag_name, None)
             else:
+                allowed_sources = {None, "ai_assisted"}
+                if operation.source not in allowed_sources:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Unsupported tag source: {operation.source}",
+                    )
+
                 if not tag_record:
                     tag_record = Tag(
                         name=tag_name,
@@ -351,7 +333,7 @@ def create_uploaded_file_tag_revision(
                     "reason": operation.note,
                     "evidence_start_seconds": None,
                     "evidence_end_seconds": None,
-                    "source": "manual_override",
+                    "source": operation.source or "manual_override",
                     "auto_tag_task_id": latest_task.id if latest_task else None,
                     "revision_id": revision.id,
                     "created_by": str(current_user.id),

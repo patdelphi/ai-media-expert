@@ -103,6 +103,24 @@ class VideoAnalysisListResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AnalysisTagCandidate(BaseModel):
+    """基于解析结果生成的候选标签。"""
+
+    tag_name: str
+    confidence: float = 0.0
+    reason: Optional[str] = None
+    evidence_start_seconds: Optional[float] = None
+    evidence_end_seconds: Optional[float] = None
+
+
+class AnalysisTagCandidatesResponse(BaseModel):
+    """解析结果候选标签响应。"""
+
+    analysis_id: int
+    video_file_id: int
+    tag_candidates: List[AnalysisTagCandidate] = Field(default_factory=list)
+
+
 
 
 
